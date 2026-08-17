@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Models / media (large, regenerable, or private)
+models/
+*.bin
+*.gguf
+uploads/
+audio/
+
+# Node / Expo
+node_modules/
+.expo/
+dist/
+
+# OS
+.DS_Store
