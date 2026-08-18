@@ -97,8 +97,23 @@ Claude should say so if we ever pretend otherwise.
 
 Every ADR ends with an **Interview angle** section: how this decision maps to a question
 someone would actually be asked ("why not a vector database?", "how do you background a
-job?"). Akin should be able to answer these out loud without notes. Claude should
-occasionally quiz cold, without warning, rather than only explaining.
+job?"). Akin should be able to answer these out loud without notes.
+
+### Cold quizzing — a standing instruction, not a suggestion
+
+**Roughly one session in three, open with a single question from
+`docs/interview/quiz-bank.md` before any other work.** Do not announce it in advance, do not
+ask permission, and do not warn that it's coming. Pick one question, ask it plainly, and
+wait.
+
+- Prefer questions marked ⚠️ — those are ones Akin has already missed.
+- Grade honestly. A confident, fluent, *wrong* answer is the most important thing this
+  exercise can find, and softening it wastes the only signal on offer.
+- A wrong or vague answer sets that session's topic. Say so and move into it.
+- Record the result in the quiz log at the bottom of the quiz bank.
+
+Akin explicitly asked for this to persist across sessions. Treat a request to skip it in
+the moment as fine; treat its absence from a session as a default failure, not as consent.
 
 ## Teaching style
 

@@ -1,0 +1,91 @@
+# Cold quiz bank
+
+Questions Claude asks **without warning**, at the start of a session, before any work.
+One question. No notes, no scrollback, answered out loud.
+
+A wrong answer is data, not a failure — it becomes that session's topic. The point is to
+find out which explanations are memorised shapes rather than understood mechanisms, and the
+only way to find that out is to ask when Akin isn't braced for it.
+
+⚠️ marks a question Akin has already got wrong or missed. Those come round more often.
+
+---
+
+## Requirements and scoping
+
+1. ⚠️ You're asked to design memo. Give me your non-functional requirements, quantified.
+   *(Missed durability entirely on the first attempt.)*
+2. ⚠️ Why is durability the requirement that leads for this system, and what makes it
+   different from a social feed?
+3. ⚠️ Your ask endpoint has a latency requirement. State it. Why is it two numbers and not
+   one?
+4. What's the first sentence out of your mouth when handed an ambiguous design prompt, and
+   why does it come before anything else?
+5. Why does the guide tell you to skip capacity estimation up front, and what would make
+   you do it anyway?
+6. You cut the offline requirement. What did that cost you, and what now justifies the
+   async pipeline?
+
+## Entities and schema
+
+7. ⚠️ Is a chunk a core entity or an implementation detail? Defend it.
+8. Why is `user_id` denormalised onto `chunks` and `derivations` when it's reachable
+   through `capture_id`?
+9. What do `extractor_version`, `embedding_model`, and `client_token` each buy you, and
+   which of them is impossible to retrofit?
+10. Name the entity you'd sacrifice first if an interviewer says your list is too long.
+
+## Async Python
+
+11. What does `await` actually do? Not what it's for — what happens.
+12. Why does SQLAlchemy 2.0 async need `greenlet`?
+13. What goes wrong if two coroutines share one `AsyncSession`?
+14. You put `requests.get()` in an async handler. Describe the failure, precisely, to
+    someone who thinks it only slows down that one request.
+15. What does lazy-loading do under async, and why is it a trap rather than a bug?
+
+## Background work
+
+16. Why is "exactly once" a lie, and what replaces it?
+17. Make a retry safe. Where is idempotency enforced, and why not in application code?
+18. Why jitter?
+19. A capture fails extraction three times. Walk me through what the user sees.
+20. Why not Celery?
+
+## Retrieval
+
+21. What is an embedding, geometrically, and what is it lossy about?
+22. Why does cosine similarity fail on proper nouns?
+23. Explain RRF in one sentence. Then explain why it beats normalising scores.
+24. HNSW vs IVFFlat. What do `m`, `ef_search`, and `lists` control?
+25. Why chunk at all? What does chunk size trade off?
+26. Why is a citation a retrieval artifact and not a generation artifact — and what does
+    that buy you?
+27. Your ANN query has `WHERE user_id = ?`. Why is that the hard case for HNSW?
+28. Do you need a vector database? Give the real reason, not the performance one.
+
+## LLM engineering
+
+29. What is a structured output, mechanically? Name three ways to get one and how each
+    fails.
+30. The model returns something that doesn't validate. Now what?
+31. What's an eval, and why isn't "it looked good in testing" one?
+32. For extraction, which do you optimise — precision or recall? Justify it.
+33. Multi-turn broke retrieval. Why, and what's the fix, and what does the fix cost?
+34. What do you log per LLM call and why is cost a first-class metric?
+
+## The system as a whole
+
+35. A user's private journal appears in someone else's answer. How did it happen, and which
+    of your three isolation layers failed?
+36. Why is your observability deliberately thin, and what is doing that job instead?
+37. What breaks first at 10× and what do you do about it?
+
+---
+
+## Quiz log
+
+Record cold-quiz results here. Question number, date, verdict, what to revisit.
+
+| Date | Q | Verdict | Follow-up |
+| --- | --- | --- | --- |
