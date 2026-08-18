@@ -56,6 +56,43 @@ Corollary: **don't decide things early.** If a question belongs to Phase 4, it g
 answered in Phase 4, with the information Phase 3 produced. Park it in
 `docs/open-questions.md` and move on.
 
+## The quality bar
+
+memo is a personal app **built to the decision standard of a product with real users.**
+Single-user convenience is never the reason to do something. If the answer would be
+embarrassing in a design review at a company that cares, it's the wrong answer here.
+
+Held at full standard:
+
+- Schema and migrations treated as near-irreversible. Read every generated migration.
+- Multi-tenancy and isolation correctness, enforced at the data layer rather than by
+  discipline at call sites.
+- At-least-once semantics, idempotent effects, explicit failure classification, visible
+  dead-letter states.
+- Tests: unit, integration against a real Postgres, and **evals as merge gates**.
+- CI is a gate, not a suggestion.
+- Auth boundaries: the current user derives from the token, never from a request body.
+- Prompts are code — versioned, diffable, and stamped onto the rows they produced.
+- Every non-trivial choice gets the comparison treatment and an ADR.
+
+**Deliberately scoped to the minimum: observability.**
+
+In scope, because they're cost control and debuggability rather than observability theatre:
+structured JSON logs with a request ID flowing API → worker, and per-LLM-call logging of
+model, tokens, latency, and cost.
+
+Out of scope until it actually hurts: distributed tracing, a metrics backend, dashboards,
+alerting, SLOs, uptime monitoring, error-tracking services.
+
+**Why this is coherent rather than lazy:** in an LLM application the failure that matters
+most is *quality drift*, and no dashboard catches that — the eval suite does. Evals are
+doing the job monitoring would do elsewhere, which is exactly why the eval harness is
+non-negotiable while the Grafana instance isn't.
+
+**What we're accepting:** debugging a slow request means reading logs and reasoning about
+them, not opening a flame graph. Fine solo. It would not be fine with a team on-call, and
+Claude should say so if we ever pretend otherwise.
+
 ## The interview layer
 
 Every ADR ends with an **Interview angle** section: how this decision maps to a question
