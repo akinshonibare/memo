@@ -122,3 +122,26 @@ retrieval quality — see [ADR 0005](decisions/0005-hybrid-retrieval-with-rrf.md
 retrieval, and streaming.
 
 Verify current pricing and model availability at decision time rather than from memory.
+
+---
+
+### Q10 — Is memo multi-user, or is multi-user only a design exercise?
+**Needed by:** before auth or any schema work · **raised:** 2026-08-17 (interview session 01)
+
+The brief scopes V1 as single-user with auth explicitly out. The system-design session is
+being run against a multi-user product at ~10k DAU.
+
+Both are coherent. Either the product changed and [00-brief.md](00-brief.md) needs an
+amendment, or the *design* deliberately runs ahead of the *build* so the schema doesn't
+paint us into a single-tenant corner. The second is a legitimate and common move — but it
+has to be stated, or V1 quietly ships a schema that can't grow.
+
+**Concrete thing it decides now:** whether `user_id` exists on `captures` from the first
+migration. Adding it later means backfilling and re-indexing every table including the
+vector index. Cheap now, expensive in three months — so this one shouldn't sit open long
+even if auth itself stays deferred.
+
+**Also puts pressure on** [ADR 0002](decisions/0002-pgvector-not-a-vector-database.md):
+filtered vector search was an edge case with one tenant. Multi-tenant, every query is
+filtered, and per-tenant partitioning is one of the stronger arguments for a dedicated
+vector DB.
