@@ -64,12 +64,22 @@ interesting answer than picking a number.
 ---
 
 ### Q5 — Primary key strategy
-**Needed by:** Phase 1
+**Resolved 2026-08-18 → [ADR 0011](decisions/0011-uuidv7-primary-keys.md)**
 
-`bigserial` · `uuid4` · `uuidv7`. Real trade-off: random UUIDs destroy B-tree index
-locality on insert; sequential integers leak volume and are guessable in URLs; uuidv7 is
-time-ordered and gets most of both. Decide before the first migration — changing it later
-is painful.
+`uuid` v7, column type `uuid`, generated in Python rather than by a column default. Postgres
+bumped 17 → 18 at the same time — not for native `uuidv7()` (the app generates the value) but
+because a major upgrade costs a deleted empty volume today and a scheduled outage later.
+
+The framing in the original question was half wrong and worth keeping as a note: **the index
+locality argument is real but does not apply at memo's scale.** Random-key write amplification
+— scattered page dirtying, ~50% fill, full-page WAL writes after each checkpoint — needs an
+index that doesn't fit in memory before it is measurable. At ~30k chunks it never will be. The
+decision was made on guessability under the [0010](decisions/0010-multi-tenant-schema-single-user-product.md)
+tenant boundary and on who is permitted to mint an identity.
+
+**Explicitly not collapsed:** the primary key and `client_token` stay separate columns. RLS
+does not conceal unique-index violations, so a client that mints the PK can probe for rows it
+cannot read.
 
 ---
 
@@ -142,7 +152,7 @@ filtered query shape that will actually be true.
 **Consequences:** [00-brief.md](00-brief.md) amended (2026-08-18) so the schema/product split
 is stated rather than looking like drift. [ADR 0002](decisions/0002-pgvector-not-a-vector-database.md)'s
 revisit trigger sharpened — filtered ANN is now the default query shape, not an edge case.
-Q5 (primary keys) is nudged toward uuidv7 but not decided.
+Q5 (primary keys) resolved the same day in its favour — see [ADR 0011](decisions/0011-uuidv7-primary-keys.md).
 
 **Still open, tracked in 0010 rather than here:** RLS is the enforcement mechanism but lands
 at [#6](https://github.com/akinshonibare/memo/issues/6), not [#7](https://github.com/akinshonibare/memo/issues/7)

@@ -90,3 +90,4 @@ Record cold-quiz results here. Question number, date, verdict, what to revisit.
 | Date | Q | Verdict | Follow-up |
 | --- | --- | --- | --- |
 | 2026-08-18 | 2 | **Miss (partial)** | Got "vital vs non-vital info". Missed the mechanism: irreplaceability (memo is the only copy; a feed item is redundant and regenerable), the availability-vs-durability inversion, and every design consequence (ack-before-process, keep raw forever, idempotency key, visible dead-letter). Re-ask. |
+| 2026-08-18 | 2 (re-ask) | **Partial** | Improved: trust, and loss being silent. Still missing the mechanism — *irreplaceability*, not noticeability (a dropped feed item is redundant; the user holds another copy). Missed the availability/durability inversion (prefer unavailable over lossy; the ack transfers custody). Named no design consequences. Re-ask once more after #13/#18/#19 land. |

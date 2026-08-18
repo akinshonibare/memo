@@ -62,6 +62,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0008](0008-one-primitive-many-views.md) | One capture primitive, derivations as views | load-bearing |
 | [0009](0009-uv-and-src-layout.md) | uv, `src/` layout, Python 3.12 pinned | active |
 | [0010](0010-multi-tenant-schema-single-user-product.md) | Multi-tenant schema under a single-user product | provisional |
+| [0011](0011-uuidv7-primary-keys.md) | uuidv7 primary keys, generated in the application | provisional |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes
