@@ -1,6 +1,6 @@
 # 0006 — Self-hosted faster-whisper, not hosted STT
 
-**Status:** ⚠️ **UNDER REVISION (2026-08-17) — the homelab is off the table.**
+**Status:** under revision — ⚠️ the homelab is off the table (2026-08-17)
 This ADR's core argument was "audio never leaves the machine." Without a homelab there is
 no such machine, and the privacy premise collapses. Do not cite this ADR until it is
 replaced. Superseding decision pending — see [../open-questions.md](../open-questions.md) Q8.

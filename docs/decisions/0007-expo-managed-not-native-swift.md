@@ -1,6 +1,6 @@
 # 0007 — Expo managed workflow, not native Swift
 
-**Status:** accepted for V1
+**Status:** provisional — scoped to V1
 **Date:** 2026-08-17
 
 ## Problem

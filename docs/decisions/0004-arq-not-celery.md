@@ -1,6 +1,6 @@
 # 0004 — arq, not Celery
 
-**Status:** accepted — **weakest decision in this set, flagged deliberately**
+**Status:** provisional — **weakest decision in this set, flagged deliberately**
 **Date:** 2026-08-17
 
 ## Problem

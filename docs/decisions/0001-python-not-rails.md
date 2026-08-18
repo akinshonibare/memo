@@ -1,6 +1,6 @@
 # 0001 — Python, not Rails or Node
 
-**Status:** accepted
+**Status:** provisional — but unlikely to move
 **Date:** 2026-08-17
 
 ## Problem

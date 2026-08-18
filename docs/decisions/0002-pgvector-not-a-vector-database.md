@@ -1,6 +1,6 @@
 # 0002 — Postgres + pgvector, not a dedicated vector database
 
-**Status:** accepted
+**Status:** provisional
 **Date:** 2026-08-17
 
 ## Problem
@@ -41,7 +41,12 @@ Any one of:
 - p95 retrieval latency (vector stage only, excluding LLM) exceeds ~200ms, **and** profiling
   blames the index rather than the query.
 - Chunk count passes ~2M.
-- We need multi-tenant isolation with per-tenant indexes.
+- Filtered `recall@k` at [#33](https://github.com/akinshonibare/memo/issues/33) degrades
+  materially versus unfiltered at the same `ef_search`. [0010](0010-multi-tenant-schema-single-user-product.md)
+  made `WHERE user_id = ?` the default query shape, so the "filtering is an edge case"
+  premise below is weaker than it was when this was written — and post-filtered HNSW is
+  exactly where that shows up first.
+- We need per-tenant indexes or hash partitioning of `chunks` to make that filter cheap.
 
 ## Interview angle
 

@@ -1,6 +1,6 @@
 # 0005 — Hybrid retrieval fused with reciprocal rank fusion, not pure vector search
 
-**Status:** accepted
+**Status:** provisional
 **Date:** 2026-08-17
 
 ## Problem

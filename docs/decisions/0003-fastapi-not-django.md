@@ -1,6 +1,6 @@
 # 0003 — FastAPI, not Django or Flask
 
-**Status:** accepted
+**Status:** provisional
 **Date:** 2026-08-17
 
 ## Problem

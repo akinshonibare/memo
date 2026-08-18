@@ -61,7 +61,9 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0007](0007-expo-managed-not-native-swift.md) | Expo managed workflow, not native Swift | provisional |
 | [0008](0008-one-primitive-many-views.md) | One capture primitive, derivations as views | load-bearing |
 | [0009](0009-uv-and-src-layout.md) | uv, `src/` layout, Python 3.12 pinned | active |
+| [0010](0010-multi-tenant-schema-single-user-product.md) | Multi-tenant schema under a single-user product | provisional |
 
-Only **0008** is genuinely hard to reverse. Everything else is a swap with a known cost,
-and each ADR names that cost. Decisions we haven't made yet live in
+Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
+DDL is expensive, but because reversing it means editing the retrieval path, where mistakes
+are silent. Everything else is a swap with a known cost, and each ADR names that cost. Decisions we haven't made yet live in
 [../open-questions.md](../open-questions.md).

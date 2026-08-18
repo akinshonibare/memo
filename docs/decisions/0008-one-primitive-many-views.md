@@ -1,6 +1,6 @@
 # 0008 — One capture primitive, everything else is a derivation
 
-**Status:** accepted — **load-bearing; breaking this breaks the project**
+**Status:** load-bearing — **breaking this breaks the project**
 **Date:** 2026-08-17
 
 ## Problem

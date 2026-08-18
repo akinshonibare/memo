@@ -96,4 +96,11 @@ health, weekly review, calendar sync, push notifications, sharing.
 
 ## Amendments
 
-_(none yet)_
+**2026-08-18 — the schema is multi-tenant; the product is not.**
+Per [ADR 0010](decisions/0010-multi-tenant-schema-single-user-product.md), every user-owned
+table carries `user_id` from the first migration and every retrieval query is filtered by it,
+while V1 ships as a single-user app with auth still out of scope. This is not drift and it is
+not a change of product scope — "single user, auth out of V1" above still stands. It is a
+deliberate decision to pay for the tenant boundary while it costs a convention, rather than
+later when it costs an edit to the retrieval path. If you are reading the schema and wondering
+when memo became multi-user: it didn't.
