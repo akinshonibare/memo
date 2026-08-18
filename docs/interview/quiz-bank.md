@@ -89,3 +89,4 @@ Record cold-quiz results here. Question number, date, verdict, what to revisit.
 
 | Date | Q | Verdict | Follow-up |
 | --- | --- | --- | --- |
+| 2026-08-18 | 2 | **Miss (partial)** | Got "vital vs non-vital info". Missed the mechanism: irreplaceability (memo is the only copy; a feed item is redundant and regenerable), the availability-vs-durability inversion, and every design consequence (ack-before-process, keep raw forever, idempotency key, visible dead-letter). Re-ask. |
