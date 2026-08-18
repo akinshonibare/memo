@@ -60,6 +60,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0006](0006-self-hosted-faster-whisper.md) | Self-hosted faster-whisper | ⚠️ under revision — no homelab |
 | [0007](0007-expo-managed-not-native-swift.md) | Expo managed workflow, not native Swift | provisional |
 | [0008](0008-one-primitive-many-views.md) | One capture primitive, derivations as views | load-bearing |
+| [0009](0009-uv-and-src-layout.md) | uv, `src/` layout, Python 3.12 pinned | active |
 
 Only **0008** is genuinely hard to reverse. Everything else is a swap with a known cost,
 and each ADR names that cost. Decisions we haven't made yet live in
