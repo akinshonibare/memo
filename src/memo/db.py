@@ -31,13 +31,30 @@ async def bind_user(session: AsyncSession, user_id: uuid.UUID) -> None:
 	)
 
 
+async def bind_system(session: AsyncSession) -> None:
+	"""Cross-tenant visibility for sweeps. Transaction-scoped, like bind_user."""
+	await session.execute(text("SELECT set_config('app.bypass_rls', 'on', true)"))
+
+
+async def commit_and_rebind(session: AsyncSession, user_id: uuid.UUID) -> None:
+	"""Commit, then bind the user again: the setting died with the transaction."""
+	await session.commit()
+	await bind_user(session, user_id)
+
+
 async def get_session(
 	request: Request, user_id: CurrentUser
 ) -> AsyncIterator[AsyncSession]:
 	factory: async_sessionmaker[AsyncSession] = request.app.state.session_factory
-	async with factory() as session, session.begin():
+	async with factory() as session:
 		await bind_user(session, user_id)
-		yield session
+		try:
+			yield session
+		except BaseException:
+			await session.rollback()
+			raise
+		else:
+			await session.commit()
 
 
 DbSession = Annotated[AsyncSession, Depends(get_session)]

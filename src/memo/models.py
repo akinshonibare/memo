@@ -2,9 +2,11 @@ import datetime as dt
 import uuid
 
 from sqlalchemy import (
+	BigInteger,
 	CheckConstraint,
 	DateTime,
 	ForeignKey,
+	ForeignKeyConstraint,
 	Index,
 	String,
 	Text,
@@ -18,6 +20,7 @@ from memo.ids import uuid7
 from memo.status import CaptureStatus
 
 CAPTURE_KINDS = ("text", "audio")
+JOB_RUN_STATUSES = ("running", "succeeded", "failed")
 
 
 def _in_list(values: tuple[str, ...]) -> str:
@@ -39,6 +42,25 @@ class User(Base):
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 
+class Recording(Base):
+	"""An audio asset in object storage. 1:1 with a capture once attached."""
+
+	__tablename__ = "recordings"
+	__mapper_args__ = {"eager_defaults": True}
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("users.id", ondelete="CASCADE")
+	)
+	storage_key: Mapped[str] = mapped_column(Text, unique=True)
+	mime: Mapped[str] = mapped_column(String(64))
+	bytes: Mapped[int | None] = mapped_column(BigInteger)
+	duration_ms: Mapped[int | None]
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+	__table_args__ = (UniqueConstraint("id", "user_id", name="uq_recordings_id_user"),)
+
+
 class Capture(Base):
 	__tablename__ = "captures"
 	__mapper_args__ = {"eager_defaults": True}
@@ -49,6 +71,7 @@ class Capture(Base):
 	)
 	kind: Mapped[str] = mapped_column(String(16))
 	text: Mapped[str | None] = mapped_column(Text)
+	recording_id: Mapped[uuid.UUID | None]
 	status: Mapped[str] = mapped_column(
 		String(16), default=CaptureStatus.PENDING.value, server_default="pending"
 	)
@@ -66,6 +89,12 @@ class Capture(Base):
 		),
 		# Target for the composite foreign keys on derivations and chunks (ADR 0010).
 		UniqueConstraint("id", "user_id", name="uq_captures_id_user"),
+		ForeignKeyConstraint(
+			["recording_id", "user_id"],
+			["recordings.id", "recordings.user_id"],
+			name="fk_captures_recording_same_user",
+			ondelete="SET NULL",
+		),
 		CheckConstraint(
 			f"kind IN ({_in_list(CAPTURE_KINDS)})", name="ck_captures_kind"
 		),
@@ -82,3 +111,42 @@ Index(
 	Capture.user_id,
 	postgresql_where=text("status = 'failed'"),
 )
+Index(
+	"uq_captures_recording",
+	Capture.recording_id,
+	unique=True,
+	postgresql_where=text("recording_id IS NOT NULL"),
+)
+Index("ix_recordings_user_created", Recording.user_id, Recording.created_at)
+
+
+class JobRun(Base):
+	"""The idempotency ledger: one row per (capture, stage, version) ever attempted."""
+
+	__tablename__ = "job_runs"
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	capture_id: Mapped[uuid.UUID]
+	user_id: Mapped[uuid.UUID]
+	stage: Mapped[str] = mapped_column(String(32))
+	version: Mapped[str] = mapped_column(String(64))
+	status: Mapped[str] = mapped_column(String(16))
+	attempt: Mapped[int] = mapped_column(default=1, server_default="1")
+	started_at: Mapped[dt.datetime]
+	finished_at: Mapped[dt.datetime | None]
+	error: Mapped[str | None] = mapped_column(Text)
+
+	__table_args__ = (
+		UniqueConstraint(
+			"capture_id", "stage", "version", name="uq_job_runs_capture_stage_version"
+		),
+		CheckConstraint(
+			f"status IN ({_in_list(JOB_RUN_STATUSES)})", name="ck_job_runs_status"
+		),
+		ForeignKeyConstraint(
+			["capture_id", "user_id"],
+			["captures.id", "captures.user_id"],
+			name="fk_job_runs_capture_same_user",
+			ondelete="CASCADE",
+		),
+	)
