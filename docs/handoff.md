@@ -47,7 +47,8 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    JSON, once a runaway to `max_tokens`); root cause and fix in ADR 0015's later finding
    (`extract-v1.1`). Known misses are listed in `evals/extraction/README.md`. Still open:
    replace the synthetic golden cases with real captures (every edit/add from item 3 is one),
-   and a semantic title matcher for paraphrased ideas.
+   Semantic matcher done (`matches.json`, recorded model verdicts, so CI stays offline);
+   `evals.extraction.harvest` turns an app export into candidate cases for Akin to review.
 5. **First PITR restore drill.** _Deferred_ to [#57](https://github.com/akinshonibare/memo/issues/57)
    (needs the Railway dashboard; Claude can run the verification half).
 6. **Ask should see what you confirmed.** _Done_ ([ADR 0021](decisions/0021-ask-reads-derivations-live.md)):

@@ -1,0 +1,528 @@
+{
+  "examples": {
+    "g01": {
+      "fingerprint": "16a328f305065780",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g02": {
+      "fingerprint": "f6b117d1c9976578",
+      "pairs": {
+        "event": [
+          [
+            0,
+            0
+          ]
+        ],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g03": {
+      "fingerprint": "1f5ea3262e493265",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g04": {
+      "fingerprint": "0efcdeab2de46e1b",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g05": {
+      "fingerprint": "40f74ecc441cf310",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g06": {
+      "fingerprint": "3a8244566c2c4d81",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      }
+    },
+    "g07": {
+      "fingerprint": "1f5ea3262e493265",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g08": {
+      "fingerprint": "1f5ea3262e493265",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g09": {
+      "fingerprint": "1f5ea3262e493265",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g10": {
+      "fingerprint": "9823a2a983d52819",
+      "pairs": {
+        "event": [
+          [
+            0,
+            0
+          ]
+        ],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g11": {
+      "fingerprint": "0a9f076ff89c7d59",
+      "pairs": {
+        "event": [
+          [
+            0,
+            0
+          ]
+        ],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g12": {
+      "fingerprint": "012dc36f6b4af992",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g13": {
+      "fingerprint": "785868ea2e490abd",
+      "pairs": {
+        "event": [
+          [
+            0,
+            0
+          ]
+        ],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g14": {
+      "fingerprint": "a2ecb334c4c9c94e",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g15": {
+      "fingerprint": "886a92c42444aebc",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g16": {
+      "fingerprint": "209d7b477bb4cd51",
+      "pairs": {
+        "event": [
+          [
+            0,
+            0
+          ]
+        ],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g17": {
+      "fingerprint": "1f5ea3262e493265",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g18": {
+      "fingerprint": "2ee4e1473e7034e2",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g19": {
+      "fingerprint": "edae0eb354ea420f",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g20": {
+      "fingerprint": "fb6e3ac1de19ac69",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      }
+    },
+    "g21": {
+      "fingerprint": "1f5ea3262e493265",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g22": {
+      "fingerprint": "fae2cc8b9bae4fa6",
+      "pairs": {
+        "event": [
+          [
+            0,
+            0
+          ]
+        ],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g23": {
+      "fingerprint": "df28ec5831610cc4",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g24": {
+      "fingerprint": "f49854d27a2594e1",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g25": {
+      "fingerprint": "1f5ea3262e493265",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g26": {
+      "fingerprint": "db60a419faad99ef",
+      "pairs": {
+        "event": [
+          [
+            0,
+            0
+          ]
+        ],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g27": {
+      "fingerprint": "aeffdda8b3082b65",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g28": {
+      "fingerprint": "8e361db24a0f9906",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g29": {
+      "fingerprint": "f8b6e660b2d4efb8",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      }
+    },
+    "g30": {
+      "fingerprint": "8fe74fbaae44c708",
+      "pairs": {
+        "event": [
+          [
+            0,
+            0
+          ]
+        ],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g31": {
+      "fingerprint": "f62c4237f33a383f",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g32": {
+      "fingerprint": "699648d6d2ec2776",
+      "pairs": {
+        "event": [
+          [
+            0,
+            0
+          ]
+        ],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g33": {
+      "fingerprint": "3970c11ebe029377",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g34": {
+      "fingerprint": "f98d8932c174dcf7",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g35": {
+      "fingerprint": "e0780e197128976a",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g36": {
+      "fingerprint": "e6d9ed2c409737fc",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g37": {
+      "fingerprint": "2d650a8500aca617",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g38": {
+      "fingerprint": "5dfea877a6377489",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g39": {
+      "fingerprint": "be79d0afdb2ca5d0",
+      "pairs": {
+        "event": [
+          [
+            0,
+            0
+          ]
+        ],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g40": {
+      "fingerprint": "78c5c820294b1640",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ],
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            2
+          ]
+        ]
+      }
+    }
+  },
+  "matcher": "match-v1"
+}

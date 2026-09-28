@@ -65,7 +65,13 @@ class Counts:
 		self.fn += other.fn
 
 
-def score_example(expected: Extraction, predicted: Extraction) -> dict[str, Counts]:
+def score_example(
+	expected: Extraction,
+	predicted: Extraction,
+	pairs: dict[str, list[tuple[int, int]]] | None = None,
+) -> dict[str, Counts]:
+	"""Per-kind tp/fp/fn. With `pairs` (a recorded semantic match, evals.extraction.
+	matching) the pairing is taken as given; without, titles are matched lexically."""
 	by_kind: dict[str, Counts] = {kind: Counts() for kind in KINDS}
 	exp: dict[str, list[str]] = {k: [] for k in KINDS}
 	pred: dict[str, list[str]] = {k: [] for k in KINDS}
@@ -75,6 +81,12 @@ def score_example(expected: Extraction, predicted: Extraction) -> dict[str, Coun
 		pred[kind].append(item.title)
 
 	for kind in KINDS:
+		if pairs is not None:
+			matched = len(pairs.get(kind, []))
+			by_kind[kind].tp += matched
+			by_kind[kind].fp += len(pred[kind]) - matched
+			by_kind[kind].fn += len(exp[kind]) - matched
+			continue
 		remaining = list(exp[kind])
 		for title in pred[kind]:
 			hit = next((e for e in remaining if titles_match(title, e)), None)
@@ -93,6 +105,7 @@ class Report:
 		default_factory=lambda: {kind: Counts() for kind in KINDS}
 	)
 	examples: int = 0
+	semantic: int = 0  # examples scored by a recorded semantic match
 	misses: list[str] = field(default_factory=list)
 
 	def add(self, example_id: str, scores: dict[str, Counts]) -> None:
