@@ -23,11 +23,13 @@ from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketDisconnect
 
 from memo.auth import CurrentUser, websocket_user
+from memo.db import DbSession
+from memo.models import User
 from memo.routers.limits import limit_voice
 from memo.services.live_stt import LiveTranscriber, minute_cost, relay
 from memo.services.ratelimit import check
 from memo.services.retry import RetryableError, TerminalError
-from memo.services.speech import MAX_CHARS, Speaker
+from memo.services.speech import MAX_CHARS, VOICES, Speaker
 from memo.services.transcription import Transcriber
 
 router = APIRouter(prefix="/voice", tags=["voice"])
@@ -58,6 +60,8 @@ class TranscriptOut(BaseModel):
 
 class SpeakIn(BaseModel):
 	text: str = Field(min_length=1, max_length=MAX_CHARS)
+	# Only for previewing a voice in Settings; answers use the saved choice.
+	voice: str | None = None
 
 
 def _upstream(exc: RetryableError | TerminalError) -> HTTPException:
@@ -103,11 +107,16 @@ async def transcribe_question(
 )
 async def speak(
 	body: SpeakIn,
+	session: DbSession,
 	user_id: CurrentUser,
 	speaker: Annotated[Speaker, Depends(get_speaker)],
 ) -> Response:
+	if body.voice is not None and body.voice not in VOICES:
+		raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown voice")
+	user = await session.get(User, user_id)
+	voice = body.voice or (user.voice if user is not None else None)
 	try:
-		audio = await speaker.speak(body.text)
+		audio = await speaker.speak(body.text, voice=voice)
 	except (RetryableError, TerminalError) as exc:
 		raise _upstream(exc) from exc
 	return Response(content=audio, media_type="audio/mpeg")

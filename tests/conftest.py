@@ -115,8 +115,8 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 		)
 		await conn.execute(
 			text(
-				"UPDATE users SET timezone = 'UTC', apple_sub = NULL, email = NULL "
-				"WHERE id = :seed"
+				"UPDATE users SET timezone = 'UTC', apple_sub = NULL, email = NULL, "
+				"display_name = NULL, voice = NULL WHERE id = :seed"
 			),
 			{"seed": str(SEED_USER_ID)},
 		)

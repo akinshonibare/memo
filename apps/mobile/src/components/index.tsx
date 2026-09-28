@@ -74,6 +74,35 @@ export function Pill({
   );
 }
 
+// Initials on a tinted disc; a person glyph until a name is set.
+export function Avatar({ name, size = 40, onPress }: { name: string | null; size?: number; onPress?: () => void }) {
+  const initials = (name ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      hitSlop={8}
+      accessibilityLabel="Profile"
+      style={({ pressed }) => [
+        styles.avatar,
+        { width: size, height: size, borderRadius: size / 2 },
+        pressed && styles.pressed,
+      ]}
+    >
+      {initials ? (
+        <Text style={[styles.avatarText, { fontSize: size * 0.38 }]}>{initials}</Text>
+      ) : (
+        <Ionicons name="person" size={size * 0.46} color={colors.muted} />
+      )}
+    </Pressable>
+  );
+}
+
 // Native "…" menu with one destructive action. iOS gets the action sheet.
 export function confirmDelete(title: string, onDelete: () => void) {
   if (Platform.OS === "ios") {
@@ -115,6 +144,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   light: { backgroundColor: colors.text },
+  avatar: { backgroundColor: colors.surfaceAlt, alignItems: "center", justifyContent: "center" },
+  avatarText: { color: colors.text, fontWeight: "600", letterSpacing: 0.5 },
   pressed: { opacity: 0.55 },
   pill: {
     flexDirection: "row",

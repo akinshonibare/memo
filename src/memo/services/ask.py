@@ -399,6 +399,8 @@ async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event,
 		)
 
 		notes, today, zone = await _notes(session, user_id, result.hits)
+		person = await session.get(User, user_id)
+		name = person.display_name if person is not None else None
 		messages: list[MessageParam] = [
 			{"role": role, "content": txt}  # type: ignore[typeddict-item]
 			for role, txt in history
@@ -406,7 +408,9 @@ async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event,
 		messages.append(
 			{
 				"role": "user",
-				"content": answer_v2.user_turn(question, notes, today=today, zone=zone),
+				"content": answer_v2.user_turn(
+					question, notes, today=today, zone=zone, name=name
+				),
 			}
 		)
 		first_token_at: float | None = None

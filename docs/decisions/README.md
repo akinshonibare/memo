@@ -77,6 +77,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0023](0023-no-daily-morning-push.md) | No daily morning push; push waits for V4's quality bar | provisional |
 | [0024](0024-photos-become-text-then-flow-through.md) | A photo becomes text, then flows through the pipeline | active |
 | [0025](0025-voice-conversation-own-pipeline-in-two-steps.md) | Voice conversation: our own pipeline, in two steps | active |
+| [0026](0026-profile-name-voice-and-account-deletion.md) | Profile: assistant's name for you, voice, account deletion | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

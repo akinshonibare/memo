@@ -50,6 +50,11 @@ class User(Base):
 	timezone: Mapped[str] = mapped_column(
 		String(64), default="UTC", server_default="UTC"
 	)
+	# What the assistant calls the person; None means "you". Seeded from Apple's
+	# full name on first sign-in, the only time Apple sends it.
+	display_name: Mapped[str | None] = mapped_column(String(60))
+	# An Aura-2 model for spoken answers; None means the server default.
+	voice: Mapped[str | None] = mapped_column(String(64))
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 

@@ -81,7 +81,18 @@ export class ApiError extends Error {
   }
 }
 
-export type Me = { id: string; timezone: string };
+export type Me = {
+  id: string;
+  timezone: string;
+  name: string | null; // what the assistant calls you; null means "you"
+  email: string | null; // from Apple, possibly a private relay address
+  voice: string | null; // Aura-2 voice for spoken answers; null = default
+  created_at: string;
+};
+
+export type Voice = { id: string; label: string };
+
+export type Usage = { window_days: number; total_cost_usd: string };
 
 export class Api {
   // Called once when the server says the session is gone (401): the app signs out.
@@ -138,10 +149,28 @@ export class Api {
   // The morning view and date extraction run in this zone, so it comes from the
   // device rather than a server-side config value.
   setTimezone(timezone: string) {
-    return this.request<Me>("/v1/me", {
-      method: "PATCH",
-      body: JSON.stringify({ timezone }),
-    });
+    return this.updateProfile({ timezone });
+  }
+
+  updateProfile(patch: { name?: string; voice?: string | null; timezone?: string }) {
+    return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  listVoices() {
+    return this.request<Voice[]>("/v1/me/voices");
+  }
+
+  getUsage(days: number) {
+    return this.request<Usage>(`/v1/usage?days=${days}`);
+  }
+
+  logoutEverywhere() {
+    return this.request<void>("/v1/auth/logout-all", { method: "POST" });
+  }
+
+  // App Store guideline 5.1.1(v): an account made in the app can be deleted in it.
+  deleteAccount(userId: string) {
+    return this.request<void>(`/v1/me?confirm=${encodeURIComponent(userId)}`, { method: "DELETE" });
   }
 
   // --- morning ------------------------------------------------------------------
@@ -308,11 +337,12 @@ export class Api {
   }
 
   // One sentence of an answer as speech, saved to a cache file the player can open.
-  async speak(text: string): Promise<string> {
+  // `voice` only for previewing one in Profile; answers use the saved choice.
+  async speak(text: string, voice?: string): Promise<string> {
     const response = await fetch(`${this.config.baseUrl}/v1/voice/speak`, {
       method: "POST",
       headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(voice ? { text, voice } : { text }),
     });
     if (!response.ok) throw new ApiError(response.status, (await response.text()).slice(0, 300));
     const uri = `${FileSystem.cacheDirectory}speech-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`;

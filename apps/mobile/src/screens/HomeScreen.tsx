@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type Capture } from "../api";
-import { AskBar, IconCircle, confirmDelete } from "../components";
+import { AskBar, Avatar, IconCircle, confirmDelete } from "../components";
 import { ACTIVE_STATUSES, formatClock, formatStamp, headline, statusLabel } from "../format";
 import { pickPhoto } from "../photo";
 import { playUrl, stopPlayback, usePlayingId } from "../playback";
@@ -32,6 +32,7 @@ export function HomeScreen({
   onRecord,
   onCompose,
   onSettings,
+  name,
 }: {
   api: Api;
   refreshKey: number;
@@ -41,6 +42,7 @@ export function HomeScreen({
   onRecord: () => void;
   onCompose: () => void;
   onSettings: () => void;
+  name: string | null;
 }) {
   const insets = useSafeAreaInsets();
   const [captures, setCaptures] = useState<Capture[]>([]);
@@ -134,7 +136,7 @@ export function HomeScreen({
   return (
     <View style={ui.screen}>
       <View style={[styles.topBar, ui.pad]}>
-        <IconCircle name="settings-outline" onPress={onSettings} />
+        <Avatar name={name} size={44} onPress={onSettings} />
         <View style={{ flex: 1 }} />
         <IconCircle name="calendar-outline" onPress={onPlanner} />
       </View>

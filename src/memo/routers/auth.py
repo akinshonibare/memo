@@ -77,6 +77,10 @@ async def login_with_apple(
 	async with factory() as session:
 		await bind_system(session)
 		user = await _user_for(session, identity, settings)
+		# Apple sends the name only on the first authorization ever; keep it as the
+		# name the assistant uses unless the person has already chosen one.
+		if body.full_name and not user.display_name:
+			user.display_name = " ".join(body.full_name.split())[:60] or None
 		token = await sessions.create(
 			session,
 			user.id,
@@ -86,6 +90,12 @@ async def login_with_apple(
 		out = LoginOut(token=token, user=MeOut.model_validate(user))
 		await session.commit()
 	return out
+
+
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_everywhere(session: DbSession, user_id: CurrentUser) -> None:
+	"""Revokes every session this user has, this device's included: for a lost phone."""
+	await sessions.revoke_all(session, user_id)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

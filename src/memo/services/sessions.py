@@ -58,6 +58,15 @@ async def resolve(session: AsyncSession, raw: str) -> uuid.UUID | None:
 	return row.user_id
 
 
+async def revoke_all(session: AsyncSession, user_id: uuid.UUID) -> int:
+	result = await session.execute(
+		update(Session)
+		.where(Session.user_id == user_id, Session.revoked_at.is_(None))
+		.values(revoked_at=dt.datetime.now(dt.UTC))
+	)
+	return int(result.rowcount)  # type: ignore[attr-defined]
+
+
 async def revoke(session: AsyncSession, raw: str) -> bool:
 	result = await session.execute(
 		update(Session)

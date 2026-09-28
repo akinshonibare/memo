@@ -72,9 +72,14 @@ export function LoginScreen({
         style={[styles.apple, busy && { opacity: 0.5 }]}
         onPress={busy ? () => {} : signIn}
       />
-      <Pressable onPress={onChangeServer} hitSlop={8} style={styles.server}>
-        <Text style={styles.serverText}>{host}</Text>
-      </Pressable>
+      {/* Where the app points is a developer concern; production builds don't show it. */}
+      {__DEV__ ? (
+        <Pressable onPress={onChangeServer} hitSlop={8} style={styles.server}>
+          <Text style={styles.serverText}>{host}</Text>
+        </Pressable>
+      ) : (
+        <View style={styles.server} />
+      )}
     </View>
   );
 }
