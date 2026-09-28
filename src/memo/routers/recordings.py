@@ -8,7 +8,7 @@ from memo.config import Settings, get_settings
 from memo.db import DbSession
 from memo.ids import uuid7
 from memo.models import Recording
-from memo.schemas.recordings import ALLOWED_AUDIO_MIME, RecordingCreate, RecordingOut
+from memo.schemas.recordings import ALLOWED_MIME, RecordingCreate, RecordingOut
 from memo.services.storage import ObjectStore
 
 router = APIRouter(prefix="/recordings", tags=["recordings"])
@@ -27,10 +27,10 @@ async def create_recording(
 	settings: Annotated[Settings, Depends(get_settings)],
 	store: Annotated[ObjectStore, Depends(get_object_store)],
 ) -> RecordingOut:
-	extension = ALLOWED_AUDIO_MIME.get(body.mime)
+	extension = ALLOWED_MIME.get(body.mime)
 	if extension is None:
 		raise HTTPException(
-			status.HTTP_422_UNPROCESSABLE_CONTENT, f"unsupported audio type {body.mime}"
+			status.HTTP_422_UNPROCESSABLE_CONTENT, f"unsupported media type {body.mime}"
 		)
 	recording_id = uuid7()
 	recording = Recording(

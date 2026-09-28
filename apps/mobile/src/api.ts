@@ -4,10 +4,10 @@ import type { Config } from "./config";
 
 export type Capture = {
   id: string;
-  kind: "text" | "audio";
+  kind: "text" | "audio" | "image";
   text: string | null;
   recording_id: string | null;
-  status: "pending" | "transcribing" | "extracting" | "embedding" | "ready" | "failed";
+  status: "pending" | "transcribing" | "describing" | "extracting" | "embedding" | "ready" | "failed";
   failure_reason: string | null;
   attempt_count: number;
   created_at: string;
@@ -197,6 +197,28 @@ export class Api {
     });
   }
 
+  // A photo (ADR 0024): resized JPEG, uploaded like a recording, described on the server.
+  async createImageCapture(fileUri: string) {
+    const presigned = await this.request<{ recording_id: string; upload_url: string }>(
+      "/v1/recordings",
+      { method: "POST", body: JSON.stringify({ mime: "image/jpeg" }) },
+    );
+    const upload = await FileSystem.uploadAsync(presigned.upload_url, fileUri, {
+      httpMethod: "PUT",
+      headers: { "Content-Type": "image/jpeg" },
+    });
+    if (upload.status < 200 || upload.status >= 300) {
+      throw new ApiError(upload.status, "upload to storage failed");
+    }
+    return this.request<Capture>("/v1/captures", {
+      method: "POST",
+      body: JSON.stringify({
+        recording_id: presigned.recording_id,
+        client_token: Crypto.randomUUID(),
+      }),
+    });
+  }
+
   listCaptures(limit = 50) {
     return this.request<{ items: Capture[]; next_cursor: string | null }>(
       `/v1/captures?limit=${limit}`,
@@ -215,10 +237,15 @@ export class Api {
     return this.request<void>(`/v1/captures/${id}`, { method: "DELETE" });
   }
 
-  getAudio(id: string) {
+  // The recording or photo behind a capture: a short-lived URL straight to the bucket.
+  getMedia(id: string) {
     return this.request<{ url: string; expires_at: string; mime: string; duration_ms: number | null }>(
-      `/v1/captures/${id}/audio`,
+      `/v1/captures/${id}/media`,
     );
+  }
+
+  getAudio(id: string) {
+    return this.getMedia(id);
   }
 
   // --- derivations --------------------------------------------------------------

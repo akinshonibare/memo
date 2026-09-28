@@ -1,7 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import {
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -12,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type Capture } from "../api";
 import { AskBar, IconCircle, confirmDelete } from "../components";
 import { ACTIVE_STATUSES, formatClock, formatStamp, headline, statusLabel } from "../format";
+import { pickPhoto } from "../photo";
 import { playUrl, stopPlayback, usePlayingId } from "../playback";
 import { colors, ui } from "../ui";
 import { TodaySection, useMorning } from "./TodaySection";
@@ -81,6 +86,39 @@ export function HomeScreen({
       setError(`Couldn't play: ${String(e)}`);
     }
   };
+  // "+" holds the quieter ways to capture: writing, and photos (ADR 0024). Record keeps
+  // its own big button because it is the one used without looking.
+  const [uploading, setUploading] = useState(false);
+  const addPhoto = async (source: "camera" | "library") => {
+    try {
+      const uri = await pickPhoto(source);
+      if (!uri) return;
+      setUploading(true);
+      await api.createImageCapture(uri);
+      await refresh();
+    } catch (e) {
+      setError(`Couldn't add the photo: ${String(e)}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+  const add = () => {
+    const options = ["Write a note", "Take a photo", "Choose a photo", "Cancel"];
+    const choose = (i: number) => {
+      if (i === 0) onCompose();
+      if (i === 1) addPhoto("camera");
+      if (i === 2) addPhoto("library");
+    };
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 3 }, choose);
+      return;
+    }
+    Alert.alert("Add", undefined, [
+      ...options.slice(0, 3).map((text, i) => ({ text, onPress: () => choose(i) })),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
+  };
+
   const more = (c: Capture) =>
     confirmDelete("Delete this note? Its todos, events and ideas are kept.", async () => {
       if (playingId === c.id) stopPlayback();
@@ -149,7 +187,13 @@ export function HomeScreen({
         style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) }]}
       >
         <AskBar onPress={onAsk} />
-        <IconCircle name="create-outline" size={56} onPress={onCompose} />
+        {uploading ? (
+          <View style={styles.uploading}>
+            <ActivityIndicator color={colors.text} />
+          </View>
+        ) : (
+          <IconCircle name="add" size={56} onPress={add} />
+        )}
         <Pressable
           onPress={onRecord}
           style={({ pressed }) => [
@@ -203,6 +247,12 @@ function Row({
                 {capture.duration_ms != null ? formatClock(capture.duration_ms) : "Play"}
               </Text>
             </Pressable>
+          )}
+          {capture.kind === "image" && (
+            <View style={styles.chip}>
+              <Ionicons name="image-outline" size={15} color={colors.text} />
+              <Text style={styles.chipText}>Photo</Text>
+            </View>
           )}
           {status && (
             <View style={[styles.chip, failed && styles.chipDanger]}>
@@ -275,4 +325,12 @@ const styles = StyleSheet.create({
     borderColor: "#3a1a19",
   },
   recordPressed: { transform: [{ scale: 0.94 }] },
+  uploading: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

@@ -36,6 +36,7 @@ async def process_capture_task(
 			extractor=ctx["extractor"],
 			embedder=ctx["embedder"],
 			max_attempts=ctx["settings"].max_attempts,
+			describer=ctx["describer"],
 		)
 		outcome = await process_capture(
 			pipeline, uuid.UUID(capture_id), uuid.UUID(user_id)

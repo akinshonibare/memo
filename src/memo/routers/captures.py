@@ -117,7 +117,8 @@ async def create_capture(
 			raise HTTPException(
 				status.HTTP_409_CONFLICT, "recording has not been uploaded yet"
 			)
-		values.update(kind="audio", recording_id=recording.id)
+		kind = "image" if recording.mime.startswith("image/") else "audio"
+		values.update(kind=kind, recording_id=recording.id)
 	else:
 		values.update(kind="text", text=body.text)
 
@@ -199,16 +200,18 @@ async def get_capture(
 	)
 
 
-@router.get("/{capture_id}/audio", response_model=AudioOut)
-async def get_capture_audio(
+@router.get("/{capture_id}/media", response_model=AudioOut)
+@router.get("/{capture_id}/audio", response_model=AudioOut, include_in_schema=False)
+async def get_capture_media(
 	capture_id: uuid.UUID,
 	session: DbSession,
 	user_id: CurrentUser,
 	settings: Annotated[Settings, Depends(get_settings)],
 	store: Annotated[ObjectStore, Depends(get_object_store)],
 ) -> AudioOut:
-	"""A time-limited playback URL for the capture's recording. Bytes come from the
-	bucket, never through the API."""
+	"""A time-limited URL for the capture's recording or photo. Bytes come from the
+	bucket, never through the API. `/audio` is the pre-photo path installed builds
+	still call."""
 	capture = await _owned_capture(session, capture_id, user_id)
 	if capture.recording_id is None:
 		raise HTTPException(status.HTTP_404_NOT_FOUND, "capture has no recording")
