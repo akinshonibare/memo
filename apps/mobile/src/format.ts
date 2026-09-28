@@ -31,6 +31,41 @@ export function formatDue(isoDate: string): string {
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
+// A time of day on its own: "12:00".
+export function formatTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+// A calendar date with no time attached: "Monday, September 28".
+export function formatDay(isoDate: string, withYear = false): string {
+  const d = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return isoDate;
+  return d.toLocaleDateString(undefined, {
+    weekday: withYear ? undefined : "long",
+    month: "long",
+    day: "numeric",
+    year: withYear ? "numeric" : undefined,
+  });
+}
+
+const pad = (n: number) => String(Math.abs(n)).padStart(2, "0");
+
+// A calendar date for the API, from the device's local day: "2026-10-06".
+export function toIsoDate(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// An instant for the API with the device's offset kept, as extraction writes them:
+// "2026-10-06T12:00:00-04:00", not the UTC "…T16:00:00.000Z" toISOString gives.
+export function toLocalIso(d: Date): string {
+  const offset = -d.getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return `${toIsoDate(d)}T${time}${sign}${pad(Math.trunc(offset / 60))}:${pad(offset % 60)}`;
+}
+
 export function formatClock(ms: number): string {
   const total = Math.floor(ms / 1000);
   const m = Math.floor(total / 60);

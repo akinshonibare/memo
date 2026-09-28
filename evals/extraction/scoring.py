@@ -20,8 +20,19 @@ _WORD = re.compile(r"[a-z0-9']+")
 _STOP = {"the", "a", "an", "to", "and", "of", "for", "on", "in", "at", "with", "about"}
 
 
+def _stem(word: str) -> str:
+	"""Crude suffix stripping, so "scores"/"score" and "enqueuing"/"enqueue" count
+	as one word. Deliberately not a real stemmer: it only has to beat exact match on
+	short titles, and every rule here was checked against the whole golden set for
+	new false matches (none)."""
+	for suffix in ("ing", "ed", "es", "s", "e"):
+		if len(word) > len(suffix) + 3 and word.endswith(suffix):
+			return word[: -len(suffix)]
+	return word
+
+
 def _tokens(text: str) -> set[str]:
-	return {w for w in _WORD.findall(text.lower()) if w not in _STOP}
+	return {_stem(w) for w in _WORD.findall(text.lower()) if w not in _STOP}
 
 
 def titles_match(a: str, b: str) -> bool:

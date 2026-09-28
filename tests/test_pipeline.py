@@ -351,7 +351,7 @@ async def test_extraction_writes_derivations_and_llm_calls(
 	assert float(calls[0][2]) == pytest.approx(0.0035)
 	shown = (await client.get(f"/v1/captures/{capture_id}")).json()
 	assert [d["kind"] for d in shown["derivations"]] == ["todo", "idea"]
-	assert shown["derivations"][0]["extractor_version"] == "extract-v1/fake"
+	assert shown["derivations"][0]["extractor_version"] == "extract-v1.1/fake"
 	assert shown["derivations"][0]["confidence"] == 0.9
 
 

@@ -44,6 +44,29 @@ export type Message = {
   citations: Citation[];
 };
 
+// GET /v1/morning (issue #38): built overnight at 04:00 local, on demand the first time.
+export type MorningView = {
+  local_date: string;
+  timezone: string;
+  todos: { id: string; capture_id: string; title: string; due: string | null; notes: string | null }[];
+  events: {
+    id: string;
+    capture_id: string;
+    title: string;
+    starts_at: string;
+    ends_at: string | null;
+    location: string | null;
+  }[];
+  resurfaced_idea: {
+    id: string;
+    capture_id: string;
+    title: string;
+    summary: string;
+    captured_on: string;
+  } | null;
+  built_at: string;
+};
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -115,6 +138,26 @@ export class Api {
       method: "PATCH",
       body: JSON.stringify({ timezone }),
     });
+  }
+
+  // --- morning ------------------------------------------------------------------
+
+  getMorning() {
+    return this.request<MorningView>("/v1/morning");
+  }
+
+  // --- your data (issue #49) --------------------------------------------------------
+
+  exportEverything() {
+    return this.request<unknown>("/v1/me/export");
+  }
+
+  // The server makes you name your own user id, so a stray call can't do this.
+  deleteEverything(userId: string) {
+    return this.request<{ deleted: Record<string, number> }>(
+      `/v1/me/data?confirm=${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+    );
   }
 
   // --- captures -----------------------------------------------------------------

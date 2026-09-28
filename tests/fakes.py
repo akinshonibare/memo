@@ -134,7 +134,7 @@ class FakeRedis:
 
 class FakeExtractor:
 	model = "fake"
-	version = "extract-v1/fake"
+	version = "extract-v1.1/fake"
 
 	def __init__(
 		self,

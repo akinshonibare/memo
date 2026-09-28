@@ -1,5 +1,10 @@
 """The morning view: today's todos and events, plus one resurfaced idea (issue #38).
 
+Only the idea is a snapshot (ADR 0020). Picking it has a side effect - a resurfacing row
+- and it must stay the same all day, so it is chosen once and pinned on the stored view.
+Todos and events are read live on every request, so a review, an edit, or a delete
+after the 04:00 build shows up immediately instead of tomorrow.
+
 Push-side retrieval is what creates attachment (brief), and it is rationed on purpose:
 one idea, never five. No guilt mechanics - nothing here is labelled overdue or counted
 against the user; a todo whose day has passed is simply still on the list.
@@ -68,10 +73,6 @@ def tz_or_utc(name: str) -> ZoneInfo:
 		return ZoneInfo(name)
 	except (KeyError, ValueError):
 		return ZoneInfo("UTC")
-
-
-def local_date(now: dt.datetime, timezone: str) -> dt.date:
-	return now.astimezone(tz_or_utc(timezone)).date()
 
 
 def is_build_hour(now: dt.datetime, timezone: str) -> bool:
@@ -157,16 +158,9 @@ def _event(d: Derivation) -> EventItem:
 	)
 
 
-async def build_morning_view(
-	session: AsyncSession, user_id: uuid.UUID, *, now: dt.datetime | None = None
-) -> MorningViewOut:
-	"""Build (or rebuild) today's view. A rebuild keeps the idea already shown today."""
-	now = now or dt.datetime.now(dt.UTC)
-	user = await session.get(User, user_id)
-	timezone = user.timezone if user is not None else "UTC"
-	zone = tz_or_utc(timezone)
-	today = now.astimezone(zone).date()
-
+async def _todays_items(
+	session: AsyncSession, user_id: uuid.UUID, *, today: dt.date, zone: ZoneInfo
+) -> tuple[list[TodoItem], list[EventItem]]:
 	live = select(Derivation).where(
 		Derivation.user_id == user_id, Derivation.status != "rejected"
 	)
@@ -184,6 +178,20 @@ async def build_morning_view(
 		== today
 	]
 	events.sort(key=lambda e: e.starts_at)
+	return todos, events
+
+
+async def build_morning_view(
+	session: AsyncSession, user_id: uuid.UUID, *, now: dt.datetime | None = None
+) -> MorningViewOut:
+	"""Build (or rebuild) today's view. A rebuild keeps the idea already shown today."""
+	now = now or dt.datetime.now(dt.UTC)
+	user = await session.get(User, user_id)
+	timezone = user.timezone if user is not None else "UTC"
+	zone = tz_or_utc(timezone)
+	today = now.astimezone(zone).date()
+
+	todos, events = await _todays_items(session, user_id, today=today, zone=zone)
 
 	existing = await session.scalar(
 		select(MorningView).where(
@@ -242,12 +250,34 @@ async def build_morning_view(
 async def todays_view(
 	session: AsyncSession, user_id: uuid.UUID, *, now: dt.datetime | None = None
 ) -> MorningViewOut | None:
+	"""Today's pinned idea with live todos and events, or None before the first build.
+
+	A pure read: nothing is written, so refetching on every foreground is cheap."""
 	now = now or dt.datetime.now(dt.UTC)
 	user = await session.get(User, user_id)
-	today = local_date(now, user.timezone if user else "UTC")
+	timezone = user.timezone if user is not None else "UTC"
+	zone = tz_or_utc(timezone)
+	today = now.astimezone(zone).date()
 	existing = await session.scalar(
 		select(MorningView).where(
 			MorningView.user_id == user_id, MorningView.local_date == today
 		)
 	)
-	return MorningViewOut.model_validate(existing.payload) if existing else None
+	if existing is None:
+		return None
+	pinned = MorningViewOut.model_validate(existing.payload)
+	idea = pinned.resurfaced_idea
+	if idea is not None:
+		# Pinned is not frozen: an idea rejected or deleted since 04:00 leaves the view.
+		source = await session.get(Derivation, idea.id)
+		if source is None or source.status == "rejected":
+			idea = None
+	todos, events = await _todays_items(session, user_id, today=today, zone=zone)
+	return pinned.model_copy(
+		update={
+			"timezone": timezone,
+			"todos": todos,
+			"events": events,
+			"resurfaced_idea": idea,
+		}
+	)

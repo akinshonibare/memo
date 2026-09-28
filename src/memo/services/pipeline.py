@@ -186,6 +186,11 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 def _derivation_text(derivation: Derivation) -> str:
 	payload = derivation.payload
 	parts = [f"{derivation.kind}: {payload.get('title', '')}"]
+	# The resolved date is what a question like "what's on 6 October" matches on.
+	if payload.get("due"):
+		parts.append(f"due {payload['due']}")
+	if payload.get("starts_at"):
+		parts.append(f"starts {payload['starts_at']}")
 	for key in ("summary", "notes", "location"):
 		if payload.get(key):
 			parts.append(str(payload[key]))

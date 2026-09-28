@@ -71,6 +71,8 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0017](0017-length-dependent-chunking.md) | Length-dependent chunking | active |
 | [0018](0018-static-bearer-token-for-v1.md) | Static bearer token gates V1; identity from a dependency | superseded by 0019 |
 | [0019](0019-sign-in-with-apple-and-server-sessions.md) | Sign in with Apple; server-issued sessions, hashed | active |
+| [0020](0020-morning-view-pins-the-idea-reads-items-live.md) | Morning view pins the idea, reads todos and events live | active |
+| [0021](0021-ask-reads-derivations-live.md) | Ask reads retrieved notes' derivations live; knows today | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

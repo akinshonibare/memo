@@ -8,6 +8,11 @@ def test_title_matching_survives_rephrasing_but_not_different_tasks() -> None:
 	assert titles_match("Buy milk", "buy some milk")
 	assert not titles_match("Call Tunde", "Call the dentist")
 	assert not titles_match("Buy milk", "Return the library books")
+	# Word forms are one word (stemming); the golden set's g28 needed this.
+	assert titles_match(
+		"RRF beats weighted fusion because it never normalises scores",
+		"Why RRF beats weighted score fusion",
+	)
 
 
 def test_scores_count_hits_misses_and_inventions_per_kind() -> None:

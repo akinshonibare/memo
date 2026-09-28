@@ -61,7 +61,14 @@ class AnthropicExtractionProvider:
 		# the API enforces is exactly the model we validate with. Private import on
 		# purpose: parse() would validate inside the SDK and lose the raw text.
 		self._output_config: OutputConfigParam = {
-			"format": {"type": "json_schema", "schema": transform_schema(Extraction)},
+			"format": {
+				"type": "json_schema",
+				# Serialization mode: every field required, so the grammar leaves the
+				# model no field it can skip and then try to write inside a string.
+				"schema": transform_schema(
+					Extraction.model_json_schema(mode="serialization")
+				),
+			},
 			"effort": "low",
 		}
 

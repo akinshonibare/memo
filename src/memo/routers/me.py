@@ -188,8 +188,8 @@ async def delete_everything(
 	confirm: Annotated[str | None, Query()] = None,
 	store: Annotated[ObjectStore, Depends(get_object_store)] = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
-	"""Hard delete of everything the user owns; the account row stays (V1 has one
-	user and a static token - account deletion proper arrives with real auth).
+	"""Hard delete of everything the user owns; the account row and its sessions stay,
+	so the app remains signed in to an empty account (account deletion is separate).
 
 	Hard rather than soft: an orphaned embedding still answers questions, so a
 	soft-deleted chunk would have to be filtered out of every retrieval path forever.
@@ -209,10 +209,12 @@ async def delete_everything(
 	for key in keys:
 		await store.delete(key)
 	counts: dict[str, Any] = {"recording_objects": len(keys)}
+	# Conversations first: their citations reference capture chunks without a cascade
+	# (#55), so removing captures while a citation still points at one is an FK error.
 	for table in (
+		"conversations",
 		"captures",
 		"recordings",
-		"conversations",
 		"morning_views",
 		"llm_calls",
 	):

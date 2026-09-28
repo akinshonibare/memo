@@ -26,6 +26,7 @@ from memo.services.extraction import (
 	Extractor,
 	ExtractorLike,
 )
+from memo.services.retry import TerminalError
 
 GOLDEN = Path(__file__).with_name("golden.jsonl")
 
@@ -70,6 +71,12 @@ async def run(
 				predicted, recorded[example.id] = result.extraction, result.raw
 			except ExtractionFailed as exc:
 				predicted, recorded[example.id] = Extraction(), exc.raw
+			except TerminalError as exc:
+				# A truncation or refusal is a miss to be scored, not a crash: the
+				# gate exists to measure exactly these (a runaway output once took
+				# g05 to max_tokens on every other run).
+				print(f"{example.id}: {exc}", file=sys.stderr)
+				predicted, recorded[example.id] = Extraction(), ""
 		report.add(example.id, score_example(example.expected, predicted))
 	if record_to is not None:
 		record_to.write_text(json.dumps(recorded, indent=2))

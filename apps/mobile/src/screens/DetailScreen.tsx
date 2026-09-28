@@ -1,11 +1,32 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActionSheetIOS, ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type CaptureDetail, type Derivation } from "../api";
 import { AskBar, IconCircle, Pill, confirmDelete } from "../components";
 import { ACTIVE_STATUSES, formatClock, formatDue, formatStamp, formatWhen, headline, statusLabel } from "../format";
 import { playUrl, stopPlayback, usePlayingId } from "../playback";
 import { colors, ui } from "../ui";
+import { DerivationSheet } from "./DerivationSheet";
+
+const KINDS: Derivation["kind"][] = ["todo", "event", "idea"];
+
+// Pick what to add. iOS gets the native action sheet.
+function chooseKind(onPick: (kind: Derivation["kind"]) => void) {
+  const labels = ["A todo", "An event", "An idea"];
+  if (Platform.OS === "ios") {
+    ActionSheetIOS.showActionSheetWithOptions(
+      { title: "What did it miss?", options: [...labels, "Cancel"], cancelButtonIndex: 3 },
+      (index) => {
+        if (index < 3) onPick(KINDS[index]);
+      },
+    );
+    return;
+  }
+  Alert.alert("What did it miss?", undefined, [
+    ...labels.map((text, i) => ({ text, onPress: () => onPick(KINDS[i]) })),
+    { text: "Cancel", style: "cancel" as const },
+  ]);
+}
 
 const POLL_MS = 3000;
 
@@ -29,6 +50,9 @@ export function DetailScreen({
   const [capture, setCapture] = useState<CaptureDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [editing, setEditing] = useState<
+    { kind: Derivation["kind"]; existing?: Derivation } | null
+  >(null);
 
   const load = useCallback(async () => {
     try {
@@ -155,7 +179,13 @@ export function DetailScreen({
           <View style={styles.section}>
             <Text style={ui.label}>To review</Text>
             {pending.map((d) => (
-              <DerivationCard key={d.id} d={d} busy={busy === d.id} onReview={review} />
+              <DerivationCard
+                key={d.id}
+                d={d}
+                busy={busy === d.id}
+                onReview={review}
+                onEdit={() => setEditing({ kind: d.kind, existing: d })}
+              />
             ))}
           </View>
         )}
@@ -163,17 +193,45 @@ export function DetailScreen({
           <View style={styles.section}>
             <Text style={ui.label}>Extracted</Text>
             {settled.map((d) => (
-              <DerivationCard key={d.id} d={d} busy={false} onReview={review} />
+              <DerivationCard
+                key={d.id}
+                d={d}
+                busy={false}
+                onReview={review}
+                onEdit={() => setEditing({ kind: d.kind, existing: d })}
+              />
             ))}
           </View>
         )}
         {capture?.status === "ready" && capture.derivations.length === 0 && (
           <Text style={[ui.bodyMuted, { marginTop: 28 }]}>Nothing to extract from this one.</Text>
         )}
+        {capture?.status === "ready" && (
+          <View style={styles.add}>
+            <Pill
+              label="Add what it missed"
+              icon="add"
+              onPress={() => chooseKind((kind) => setEditing({ kind }))}
+            />
+          </View>
+        )}
       </ScrollView>
       <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <AskBar onPress={onAsk} />
       </View>
+      {capture && editing && (
+        <DerivationSheet
+          api={api}
+          captureId={capture.id}
+          kind={editing.kind}
+          existing={editing.existing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            load();
+            onChanged();
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -182,10 +240,12 @@ function DerivationCard({
   d,
   busy,
   onReview,
+  onEdit,
 }: {
   d: Derivation;
   busy: boolean;
   onReview: (d: Derivation, status: "confirmed" | "rejected") => void;
+  onEdit: () => void;
 }) {
   const p = d.payload;
   const when =
@@ -199,9 +259,18 @@ function DerivationCard({
       ? d.confidence != null
         ? `${Math.round(d.confidence * 100)}% sure`
         : null
-      : d.status.replace("_", " ");
+      : d.status === "user_created"
+        ? "added by you"
+        : d.status;
+  // A settled card is tapped to edit it; a rejected one is left alone. A card awaiting
+  // review gets Edit alongside Confirm and Reject (saving an edit also confirms it).
+  const editable = d.status === "confirmed" || d.status === "user_created";
   return (
-    <View style={styles.card}>
+    <Pressable
+      onPress={editable ? onEdit : undefined}
+      disabled={!editable}
+      style={({ pressed }) => [styles.card, pressed && { opacity: 0.7 }]}
+    >
       <Text style={ui.meta}>
         {d.kind}
         {statusText ? ` · ${statusText}` : ""}
@@ -213,10 +282,11 @@ function DerivationCard({
       {d.status === "pending_review" && (
         <View style={styles.actions}>
           <Pill label="Confirm" tone="light" grow busy={busy} onPress={() => onReview(d, "confirmed")} />
+          <Pill label="Edit" grow disabled={busy} onPress={onEdit} />
           <Pill label="Reject" grow disabled={busy} onPress={() => onReview(d, "rejected")} />
         </View>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -238,6 +308,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   actions: { flexDirection: "row", gap: 10, marginTop: 14 },
+  add: { flexDirection: "row", marginTop: 20 },
   bottom: {
     position: "absolute",
     left: 20,

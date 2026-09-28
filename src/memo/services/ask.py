@@ -14,6 +14,7 @@ from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from dataclasses import dataclass
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 import anthropic
 import structlog
@@ -25,11 +26,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from memo.config import Settings
 from memo.db import commit_and_rebind
 from memo.ids import uuid7
-from memo.models import LLMCallRow, Message, MessageCitation
-from memo.prompts import answer_v1, rewrite_v1
+from memo.models import Derivation, LLMCallRow, Message, MessageCitation, User
+from memo.prompts import answer_v2, rewrite_v1
 from memo.services.embeddings import Embedder
 from memo.services.extraction import RawCompletion
 from memo.services.llm import LLMCall
+from memo.services.morning import tz_or_utc
 from memo.services.retrieval import Hit, search
 from memo.services.retry import RetryableError, TerminalError
 
@@ -283,6 +285,39 @@ async def rewrite_query(
 	return rewritten
 
 
+async def _notes(
+	session: AsyncSession, user_id: uuid.UUID, hits: list[Hit]
+) -> tuple[list[answer_v2.Note], dt.date, ZoneInfo]:
+	"""The retrieved notes, each with what was extracted from it (ADR 0021).
+
+	Derivations are read here, live, rather than trusted from their embedded chunks:
+	a chunk is written once when the capture is processed, so it knows nothing of a
+	later confirmation, edit, or addition. Rejected ones are left out."""
+	user = await session.get(User, user_id)
+	zone = tz_or_utc(user.timezone if user is not None else "UTC")
+	capture_ids = {h.capture_id for h in hits}
+	extracted: dict[uuid.UUID, list[str]] = {}
+	if capture_ids:
+		rows = await session.scalars(
+			select(Derivation)
+			.where(
+				Derivation.user_id == user_id,
+				Derivation.capture_id.in_(capture_ids),
+				Derivation.status != "rejected",
+			)
+			.order_by(Derivation.created_at, Derivation.id)
+		)
+		for d in rows:
+			extracted.setdefault(d.capture_id, []).append(
+				answer_v2.extracted_line(d.kind, d.payload, d.status, zone)
+			)
+	notes = [
+		answer_v2.Note(i, h.created_at, h.text, extracted.get(h.capture_id, []))
+		for i, h in enumerate(hits, start=1)
+	]
+	return notes, dt.datetime.now(zone).date(), zone
+
+
 async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event, None]:
 	"""Drive one pending assistant message to done, yielding SSE events as it goes."""
 	session = ctx.session
@@ -334,18 +369,21 @@ async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event,
 			},
 		)
 
-		notes = [(i, h.created_at, h.text) for i, h in enumerate(result.hits, start=1)]
+		notes, today, zone = await _notes(session, user_id, result.hits)
 		messages: list[MessageParam] = [
 			{"role": role, "content": txt}  # type: ignore[typeddict-item]
 			for role, txt in history
 		]
 		messages.append(
-			{"role": "user", "content": answer_v1.user_turn(question, notes)}
+			{
+				"role": "user",
+				"content": answer_v2.user_turn(question, notes, today=today, zone=zone),
+			}
 		)
 		first_token_at: float | None = None
 		async with aclosing(
 			ctx.answer_provider.stream(
-				system=answer_v1.SYSTEM_PROMPT, messages=messages
+				system=answer_v2.SYSTEM_PROMPT, messages=messages
 			)
 		) as tokens:
 			async for delta in tokens:
