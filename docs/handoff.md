@@ -48,9 +48,8 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    (`extract-v1.1`). Known misses are listed in `evals/extraction/README.md`. Still open:
    replace the synthetic golden cases with real captures (every edit/add from item 3 is one),
    and a semantic title matcher for paraphrased ideas.
-5. **First PITR restore drill.** Dashboard only: Postgres → Backups → restore to a sibling,
-   then `scripts/restore_drill.sh` against it, and write the RTO into
-   [runbooks/backups-and-restore.md](runbooks/backups-and-restore.md). Nobody has done it.
+5. **First PITR restore drill.** _Deferred_ to [#57](https://github.com/akinshonibare/memo/issues/57)
+   (needs the Railway dashboard; Claude can run the verification half).
 6. **Ask should see what you confirmed.** _Done_ ([ADR 0021](decisions/0021-ask-reads-derivations-live.md)):
    `answer-v2` attaches each retrieved note's live derivations (date, review status) and
    states today's date; derivation chunks now carry their dates; rejecting retires a chunk.
@@ -63,6 +62,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
 
 ## Filed for later
 
+- [#57](https://github.com/akinshonibare/memo/issues/57): the first PITR restore drill.
 - [#55](https://github.com/akinshonibare/memo/issues/55): deleting a note that an answer
   cited fails with an FK violation.
 - [#56](https://github.com/akinshonibare/memo/issues/56): deleting a note should keep its
