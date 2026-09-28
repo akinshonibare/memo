@@ -75,12 +75,15 @@ export function AskSheet({
     if (!visible) silence();
   }, [visible, silence]);
 
+  // "New chat": leave this conversation (it stays saved on the server) and start clean.
   const reset = () => {
     silence();
     source.current?.close();
     setConversationId(null);
     setTurns([]);
     setBusy(false);
+    setText("");
+    setHint(null);
   };
 
   const ensureConversation = useCallback(async () => {
@@ -193,6 +196,11 @@ export function AskSheet({
     live.resume();
   };
 
+  const newChat = () => {
+    liveStop();
+    reset();
+  };
+
   const startListening = async () => {
     pressedAt.current = Date.now();
     released.current = false;
@@ -243,13 +251,27 @@ export function AskSheet({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[styles.sheet, { paddingBottom: keyboard }]}>
         <View style={styles.header}>
-          <IconCircle name="add" onPress={reset} />
+          <View style={styles.headerSide}>
+            {turns.length > 0 && (
+              <Pressable
+                onPress={newChat}
+                hitSlop={8}
+                accessibilityLabel="Start a new chat"
+                style={({ pressed }) => [styles.newChat, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="create-outline" size={17} color={colors.text} />
+                <Text style={styles.newChatText}>New chat</Text>
+              </Pressable>
+            )}
+          </View>
           <Text style={styles.headerTitle}>Ask</Text>
-          {speaking ? (
-            <IconCircle name="volume-high" tone="light" onPress={silence} />
-          ) : (
-            <IconCircle name="close" onPress={onClose} />
-          )}
+          <View style={[styles.headerSide, { alignItems: "flex-end" }]}>
+            {speaking ? (
+              <IconCircle name="volume-high" tone="light" onPress={silence} />
+            ) : (
+              <IconCircle name="close" onPress={onClose} />
+            )}
+          </View>
         </View>
         <FlatList
           ref={list}
@@ -408,6 +430,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
   },
   headerTitle: { color: colors.text, fontSize: 17, fontWeight: "600" },
+  headerSide: { width: 110, alignItems: "flex-start" },
+  newChat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.surface,
+  },
+  newChatText: { color: colors.text, fontSize: 14, fontWeight: "600" },
   list: { padding: 16, paddingBottom: 24, flexGrow: 1 },
   emptyWrap: { flex: 1, justifyContent: "flex-end", paddingBottom: 24, paddingHorizontal: 24 },
   userBubble: {
