@@ -89,6 +89,8 @@ async def admin_engine(settings: Settings) -> AsyncIterator[AsyncEngine]:
 async def clean_tables(admin_engine: AsyncEngine) -> None:
 	async with admin_engine.begin() as conn:
 		for table in (
+			"resurfacings",
+			"morning_views",
 			"message_citations",
 			"messages",
 			"conversations",
@@ -102,6 +104,10 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 			await conn.execute(text(f"DELETE FROM {table}"))
 		await conn.execute(
 			text("DELETE FROM users WHERE id <> :seed"), {"seed": str(SEED_USER_ID)}
+		)
+		await conn.execute(
+			text("UPDATE users SET timezone = 'UTC' WHERE id = :seed"),
+			{"seed": str(SEED_USER_ID)},
 		)
 
 

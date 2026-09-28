@@ -8,6 +8,7 @@ from sqlalchemy import (
 	BigInteger,
 	CheckConstraint,
 	Computed,
+	Date,
 	DateTime,
 	Float,
 	ForeignKey,
@@ -295,6 +296,54 @@ class Message(Base):
 
 
 Index("ix_messages_conversation_created", Message.conversation_id, Message.created_at)
+
+
+class MorningView(Base):
+	"""Built ahead of time, once per local date. The payload is the API response."""
+
+	__tablename__ = "morning_views"
+	__mapper_args__ = {"eager_defaults": True}
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("users.id", ondelete="CASCADE")
+	)
+	local_date: Mapped[dt.date] = mapped_column(Date)
+	payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
+	built_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+	__table_args__ = (
+		UniqueConstraint("user_id", "local_date", name="uq_morning_views_user_date"),
+	)
+
+
+class Resurfacing(Base):
+	"""What was shown when, so one idea is not resurfaced again for a while."""
+
+	__tablename__ = "resurfacings"
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID]
+	derivation_id: Mapped[uuid.UUID]
+	shown_on: Mapped[dt.date] = mapped_column(Date)
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+	__table_args__ = (
+		ForeignKeyConstraint(
+			["derivation_id", "user_id"],
+			["derivations.id", "derivations.user_id"],
+			name="fk_resurfacings_derivation_same_user",
+			ondelete="CASCADE",
+		),
+	)
+
+
+Index(
+	"ix_resurfacings_user_derivation_shown",
+	Resurfacing.user_id,
+	Resurfacing.derivation_id,
+	Resurfacing.shown_on,
+)
 
 
 class MessageCitation(Base):

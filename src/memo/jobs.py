@@ -8,8 +8,9 @@ import structlog
 from arq import Retry
 from sqlalchemy import select, text
 
-from memo.db import bind_system
+from memo.db import bind_system, bind_user
 from memo.models import Capture, Recording
+from memo.services.morning import build_morning_view, is_build_hour
 from memo.services.pipeline import PipelineContext, process_capture
 from memo.services.queue import PROCESS_CAPTURE
 
@@ -68,6 +69,33 @@ async def sweep_unclaimed_recordings_task(ctx: dict[str, Any]) -> int:
 		await session.commit()
 	log.info("sweep.unclaimed_recordings", removed=removed)
 	return removed
+
+
+async def build_morning_views_task(
+	ctx: dict[str, Any], *, now: dt.datetime | None = None
+) -> int:
+	"""Hourly: build the view for every user whose local clock is in the build hour.
+
+	"Nightly" is harder than it sounds: users are in different timezones and the
+	clock moves twice a year. Asking per user "is it 4am where you are, right now?"
+	every hour is what makes that a non-problem - a DST shift just changes which UTC
+	hour the answer is yes.
+	"""
+	now = now or dt.datetime.now(dt.UTC)
+	async with ctx["session_factory"]() as session:
+		await bind_system(session)
+		users = (await session.execute(text("SELECT id, timezone FROM users"))).all()
+	built = 0
+	for user_id, timezone in users:
+		if not is_build_hour(now, timezone):
+			continue
+		async with ctx["session_factory"]() as session:
+			await bind_user(session, user_id)
+			await build_morning_view(session, user_id, now=now)
+			await session.commit()
+		built += 1
+	log.info("morning.sweep", users=len(users), built=built)
+	return built
 
 
 async def requeue_stale_captures_task(ctx: dict[str, Any]) -> int:

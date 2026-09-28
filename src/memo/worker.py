@@ -13,6 +13,7 @@ from arq.connections import RedisSettings
 from memo.config import get_settings
 from memo.db import make_engine, make_session_factory
 from memo.jobs import (
+	build_morning_views_task,
 	process_capture_task,
 	requeue_stale_captures_task,
 	sweep_unclaimed_recordings_task,
@@ -56,10 +57,13 @@ class WorkerSettings:
 		process_capture_task,
 		sweep_unclaimed_recordings_task,
 		requeue_stale_captures_task,
+		build_morning_views_task,
 	]
 	cron_jobs = [
 		cron(sweep_unclaimed_recordings_task, minute=7),
 		cron(requeue_stale_captures_task, minute={3, 18, 33, 48}),
+		# Hourly; each user is built in the hour that is 04:00 on their own clock.
+		cron(build_morning_views_task, minute=5),
 	]
 	on_startup = startup
 	on_shutdown = shutdown
