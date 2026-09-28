@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from zoneinfo import ZoneInfo
 
-ANSWER_VERSION = "answer-v2"
+# v2.1: a done todo is marked "done" in its status (the Planner's checkbox).
+ANSWER_VERSION = "answer-v2.1"
 
 SYSTEM_PROMPT = """\
 You answer questions about one person's private journal, for that person. The only
@@ -54,7 +55,12 @@ def _when(iso: str, zone: ZoneInfo) -> str:
 
 
 def extracted_line(
-	kind: str, payload: dict[str, Any], status: str, zone: ZoneInfo
+	kind: str,
+	payload: dict[str, Any],
+	status: str,
+	zone: ZoneInfo,
+	*,
+	done: bool = False,
 ) -> str:
 	"""One derivation as the model sees it: `event: Dentist · Tue 6 Oct 2026, 12:00`."""
 	parts = [f"{kind}: {payload.get('title', '')}"]
@@ -68,7 +74,8 @@ def extracted_line(
 	for key in ("summary", "notes"):
 		if payload.get(key):
 			parts.append(str(payload[key]))
-	return f"{' · '.join(parts)} ({_STATUS.get(status, status)})"
+	label = _STATUS.get(status, status)
+	return f"{' · '.join(parts)} ({label}{', done' if done else ''})"
 
 
 def notes_block(notes: list[Note], zone: ZoneInfo) -> str:

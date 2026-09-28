@@ -319,7 +319,9 @@ async def _notes(
 			.order_by(Derivation.created_at, Derivation.id)
 		)
 		for d in rows:
-			line = answer_v2.extracted_line(d.kind, d.payload, d.status, zone)
+			line = answer_v2.extracted_line(
+				d.kind, d.payload, d.status, zone, done=d.completed_at is not None
+			)
 			by_id[d.id] = line
 			if d.capture_id is not None:
 				by_capture.setdefault(d.capture_id, []).append(line)

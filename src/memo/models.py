@@ -201,6 +201,9 @@ class Derivation(Base):
 	extractor_version: Mapped[str] = mapped_column(String(64))
 	confidence: Mapped[float | None] = mapped_column(Float)
 	reviewed_at: Mapped[dt.datetime | None]
+	# Todos only. Separate from status: status is the review (is this real?), this is
+	# what happened next. A confirmed todo that is done is still confirmed.
+	completed_at: Mapped[dt.datetime | None]
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 	updated_at: Mapped[dt.datetime] = mapped_column(
 		server_default=func.now(), onupdate=func.now()

@@ -63,6 +63,15 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    [#55](https://github.com/akinshonibare/memo/issues/55)); fixed by deleting
    conversations before captures.
 
+## Since the list
+
+- **Planner** (replaces the Items screen): week strip + day list, events by time, todos
+  with checkboxes (`derivations.completed_at`, migration 0009), undated todos under
+  Anytime, ideas on their own screen. Items can be added with no note behind them
+  (`POST /v1/derivations`). Settings regrouped; the type scale is one step smaller.
+- **Next, needing the comparison treatment first:** full voice conversation with Ask, and
+  image capture (the brief's V2 vision extraction).
+
 ## Filed for later
 
 - [#57](https://github.com/akinshonibare/memo/issues/57): the first PITR restore drill.

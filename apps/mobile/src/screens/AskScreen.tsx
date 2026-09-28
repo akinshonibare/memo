@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: colors.surfaceAlt,
   },
-  headerTitle: { color: colors.text, fontSize: 19, fontWeight: "700" },
+  headerTitle: { color: colors.text, fontSize: 17, fontWeight: "600" },
   list: { padding: 16, paddingBottom: 24, flexGrow: 1 },
   emptyWrap: { flex: 1, justifyContent: "flex-end", paddingBottom: 24, paddingHorizontal: 24 },
   userBubble: {
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     marginBottom: 16,
   },
-  userText: { color: colors.text, fontSize: 18, lineHeight: 24 },
+  userText: { color: colors.text, fontSize: 16, lineHeight: 22 },
   assistant: { marginBottom: 20 },
   sources: {
     flexDirection: "row",
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginTop: 14,
   },
-  sourcesText: { color: colors.text, fontSize: 15, fontWeight: "700" },
+  sourcesText: { color: colors.text, fontSize: 14, fontWeight: "600" },
   citation: {
     marginTop: 10,
     padding: 12,
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
     gap: 4,
   },
-  citationText: { color: colors.text, fontSize: 15, lineHeight: 21 },
+  citationText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   composer: {
     flexDirection: "row",
     alignItems: "center",
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     color: colors.text,
-    fontSize: 18,
+    fontSize: 16,
     paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 999,

@@ -23,6 +23,8 @@ export type Derivation = {
   status: "pending_review" | "confirmed" | "rejected" | "user_created";
   extractor_version: string;
   confidence: number | null;
+  completed_at: string | null; // todos only: when it was ticked off
+  created_at: string;
 };
 
 export type CaptureDetail = Capture & { derivations: Derivation[] };
@@ -236,7 +238,18 @@ export class Api {
     return items;
   }
 
-  reviewDerivation(id: string, body: { status?: "confirmed" | "rejected"; payload?: object }) {
+  // Added straight into the Planner, with no note behind it.
+  createDerivation(kind: Derivation["kind"], payload: object) {
+    return this.request<Derivation>("/v1/derivations", {
+      method: "POST",
+      body: JSON.stringify({ kind, payload }),
+    });
+  }
+
+  reviewDerivation(
+    id: string,
+    body: { status?: "confirmed" | "rejected"; payload?: object; completed?: boolean },
+  ) {
     return this.request<Derivation>(`/v1/derivations/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),

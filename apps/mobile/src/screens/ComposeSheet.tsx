@@ -68,8 +68,8 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     color: colors.text,
-    fontSize: 20,
-    lineHeight: 28,
+    fontSize: 17,
+    lineHeight: 24,
     textAlignVertical: "top",
   },
   actions: { flexDirection: "row", justifyContent: "flex-end", paddingTop: 12 },

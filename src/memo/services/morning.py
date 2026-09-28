@@ -161,8 +161,11 @@ def _event(d: Derivation) -> EventItem:
 async def _todays_items(
 	session: AsyncSession, user_id: uuid.UUID, *, today: dt.date, zone: ZoneInfo
 ) -> tuple[list[TodoItem], list[EventItem]]:
+	# Done todos leave the list; nothing done is shown or counted (no guilt, no score).
 	live = select(Derivation).where(
-		Derivation.user_id == user_id, Derivation.status != "rejected"
+		Derivation.user_id == user_id,
+		Derivation.status != "rejected",
+		Derivation.completed_at.is_(None),
 	)
 	todos = [
 		_todo(d)

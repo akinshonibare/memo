@@ -22,7 +22,7 @@ export function HomeScreen({
   api,
   refreshKey,
   onOpen,
-  onItems,
+  onPlanner,
   onAsk,
   onRecord,
   onCompose,
@@ -31,7 +31,7 @@ export function HomeScreen({
   api: Api;
   refreshKey: number;
   onOpen: (id: string) => void;
-  onItems: () => void;
+  onPlanner: () => void;
   onAsk: () => void;
   onRecord: () => void;
   onCompose: () => void;
@@ -98,7 +98,7 @@ export function HomeScreen({
       <View style={[styles.topBar, ui.pad]}>
         <IconCircle name="settings-outline" onPress={onSettings} />
         <View style={{ flex: 1 }} />
-        <IconCircle name="checkbox-outline" onPress={onItems} />
+        <IconCircle name="calendar-outline" onPress={onPlanner} />
       </View>
       <Text style={[ui.h1, ui.pad]}>memo</Text>
       <View style={[styles.search, { marginHorizontal: 20 }]}>
@@ -235,10 +235,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: 18,
     paddingHorizontal: 16,
-    height: 50,
+    height: 44,
     marginBottom: 8,
   },
-  searchInput: { flex: 1, color: colors.text, fontSize: 18 },
+  searchInput: { flex: 1, color: colors.text, fontSize: 16 },
   row: { paddingHorizontal: 20, paddingVertical: 18, gap: 2 },
   rowActions: {
     flexDirection: "row",
@@ -253,10 +253,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: 999,
     paddingHorizontal: 14,
-    height: 40,
+    height: 34,
   },
   chipDanger: { backgroundColor: "#2a1214" },
-  chipText: { color: colors.text, fontSize: 16, fontWeight: "700" },
+  chipText: { color: colors.text, fontSize: 14, fontWeight: "600" },
   bottom: {
     position: "absolute",
     left: 20,
