@@ -1,22 +1,28 @@
 import datetime as dt
 import uuid
+from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
 	BigInteger,
 	CheckConstraint,
 	DateTime,
+	Float,
 	ForeignKey,
 	ForeignKeyConstraint,
 	Index,
+	Numeric,
 	String,
 	Text,
 	UniqueConstraint,
 	func,
 	text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from memo.ids import uuid7
+from memo.schemas.derivations import DERIVATION_STATUSES, KINDS
 from memo.status import CaptureStatus
 
 CAPTURE_KINDS = ("text", "audio")
@@ -76,6 +82,8 @@ class Capture(Base):
 		String(16), default=CaptureStatus.PENDING.value, server_default="pending"
 	)
 	failure_reason: Mapped[str | None] = mapped_column(Text)
+	# Raw model output, kept only when extraction failed validation terminally.
+	extraction_raw: Mapped[str | None] = mapped_column(Text)
 	attempt_count: Mapped[int] = mapped_column(default=0, server_default="0")
 	client_token: Mapped[str] = mapped_column(String(128))
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
@@ -150,3 +158,77 @@ class JobRun(Base):
 			ondelete="CASCADE",
 		),
 	)
+
+
+class Derivation(Base):
+	"""A typed extraction pointing back at its capture (ADR 0008). Polymorphic on
+	`kind`; the payload's shape is enforced by the Pydantic model for that kind."""
+
+	__tablename__ = "derivations"
+	__mapper_args__ = {"eager_defaults": True}
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID]
+	capture_id: Mapped[uuid.UUID]
+	kind: Mapped[str] = mapped_column(String(16))
+	payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
+	status: Mapped[str] = mapped_column(String(16))
+	extractor_version: Mapped[str] = mapped_column(String(64))
+	confidence: Mapped[float | None] = mapped_column(Float)
+	reviewed_at: Mapped[dt.datetime | None]
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+	updated_at: Mapped[dt.datetime] = mapped_column(
+		server_default=func.now(), onupdate=func.now()
+	)
+
+	__table_args__ = (
+		UniqueConstraint("id", "user_id", name="uq_derivations_id_user"),
+		CheckConstraint(f"kind IN ({_in_list(KINDS)})", name="ck_derivations_kind"),
+		CheckConstraint(
+			f"status IN ({_in_list(DERIVATION_STATUSES)})",
+			name="ck_derivations_status",
+		),
+		ForeignKeyConstraint(
+			["capture_id", "user_id"],
+			["captures.id", "captures.user_id"],
+			name="fk_derivations_capture_same_user",
+			ondelete="CASCADE",
+		),
+	)
+
+
+Index(
+	"ix_derivations_user_kind_status",
+	Derivation.user_id,
+	Derivation.kind,
+	Derivation.status,
+)
+Index("ix_derivations_user_created", Derivation.user_id, Derivation.created_at.desc())
+Index("ix_derivations_capture", Derivation.capture_id)
+Index("ix_derivations_payload", Derivation.payload, postgresql_using="gin")
+
+
+class LLMCallRow(Base):
+	"""One row per model call: what it cost, attributed to a user and a stage."""
+
+	__tablename__ = "llm_calls"
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("users.id", ondelete="CASCADE")
+	)
+	capture_id: Mapped[uuid.UUID | None]
+	stage: Mapped[str] = mapped_column(String(16))
+	provider: Mapped[str] = mapped_column(String(32))
+	model: Mapped[str] = mapped_column(String(64))
+	input_tokens: Mapped[int]
+	output_tokens: Mapped[int]
+	cache_read_tokens: Mapped[int] = mapped_column(default=0, server_default="0")
+	cache_write_tokens: Mapped[int] = mapped_column(default=0, server_default="0")
+	latency_ms: Mapped[int]
+	cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6))
+	request_id: Mapped[str | None] = mapped_column(String(64))
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+Index("ix_llm_calls_user_created", LLMCallRow.user_id, LLMCallRow.created_at)
