@@ -1,0 +1,105 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  APP_ENV: test
+  DATABASE_URL: postgresql+asyncpg://memo_app:app-password@localhost:5432/memo
+  DATABASE_ADMIN_URL: postgresql+asyncpg://memo:password@localhost:5432/memo
+  APP_DB_PASSWORD: app-password
+  API_TOKEN: ci-token
+  REDIS_URL: redis://localhost:6379/0
+  S3_ENDPOINT: http://localhost:9000
+  S3_BUCKET: memo-recordings
+  S3_ACCESS_KEY_ID: rustfsadmin
+  S3_SECRET_ACCESS_KEY: rustfsadmin
+  S3_REGION: auto
+  S3_ADDRESSING_STYLE: path
+
+jobs:
+  checks:
+    name: ruff, mypy, tests
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: memo
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: memo
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U memo -d memo"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      s3:
+        image: rustfs/rustfs:latest
+        env:
+          RUSTFS_ACCESS_KEY: rustfsadmin
+          RUSTFS_SECRET_KEY: rustfsadmin
+        ports: ["9000:9000"]
+        options: >-
+          --health-cmd "curl -sf http://localhost:9000/health"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install
+      - run: uv sync --frozen
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run mypy
+      - name: migrations are reversible
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+      - run: uv run pytest -q
+
+  evals:
+    name: evals (merge gate)
+    runs-on: ubuntu-latest
+    needs: checks
+    services:
+      db:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: memo
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: memo
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U memo -d memo"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install
+      - run: uv sync --frozen
+      - run: uv run alembic upgrade head
+      - name: faithfulness judge calibration
+        run: uv run python -m evals.faithfulness.run
+      - name: retrieval recall@k (offline embedder)
+        run: uv run python -m evals.retrieval.run --fake
+      - name: extraction precision/recall (recorded outputs)
+        # A recording is produced by a live run (needs ANTHROPIC_API_KEY):
+        #   uv run python -m evals.extraction.run --record evals/extraction/recorded.json
+        # Until one is committed this step reports that the gate is not yet armed.
+        run: |
+          if [ -f evals/extraction/recorded.json ]; then
+            uv run python -m evals.extraction.run --replay evals/extraction/recorded.json
+          else
+            echo "::warning::evals/extraction/recorded.json missing - extraction gate not armed"
+          fi
