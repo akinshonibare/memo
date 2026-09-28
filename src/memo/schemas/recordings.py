@@ -16,13 +16,22 @@ ALLOWED_AUDIO_MIME: dict[str, str] = {
 	"audio/ogg": "ogg",
 }
 
+# Photos (ADR 0024). HEIC is not here on purpose: Claude vision doesn't read it, so
+# the app converts to JPEG before upload.
+ALLOWED_IMAGE_MIME: dict[str, str] = {
+	"image/jpeg": "jpg",
+	"image/png": "png",
+	"image/webp": "webp",
+}
+ALLOWED_MIME: dict[str, str] = {**ALLOWED_AUDIO_MIME, **ALLOWED_IMAGE_MIME}
+
 MAX_RECORDING_BYTES = 100 * 1024 * 1024
 
 
 class RecordingCreate(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
-	mime: str = Field(pattern=r"^audio/[A-Za-z0-9.+-]+$")
+	mime: str = Field(pattern=r"^(audio|image)/[A-Za-z0-9.+-]+$")
 	bytes: int | None = Field(default=None, ge=1, le=MAX_RECORDING_BYTES)
 	duration_ms: int | None = Field(default=None, ge=1)
 

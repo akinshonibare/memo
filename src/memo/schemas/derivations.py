@@ -138,6 +138,7 @@ class DerivationOut(BaseModel):
 	extractor_version: str
 	confidence: float | None
 	reviewed_at: dt.datetime | None
+	completed_at: dt.datetime | None
 	created_at: dt.datetime
 
 
@@ -147,22 +148,25 @@ class DerivationPage(BaseModel):
 
 
 class DerivationPatch(BaseModel):
-	"""Confirm, reject, or edit. An edit with no status is a confirmation."""
+	"""Confirm, reject, edit, or tick off. An edit or a tick with no status confirms
+	something still awaiting review: acting on an item says it was real."""
 
 	model_config = ConfigDict(extra="forbid")
 
 	status: Literal["confirmed", "rejected"] | None = None
 	payload: dict[str, Any] | None = None
+	completed: bool | None = None  # todos only
 
 	@model_validator(mode="after")
 	def _something_to_do(self) -> "DerivationPatch":
-		if self.status is None and self.payload is None:
-			raise ValueError("provide status, payload, or both")
+		if self.status is None and self.payload is None and self.completed is None:
+			raise ValueError("provide status, payload, completed, or a combination")
 		return self
 
 
 class DerivationCreate(BaseModel):
-	"""One the extractor missed - a recall failure, recorded as such."""
+	"""Added by hand: to a note (the extractor missed it - a recall failure, recorded
+	as such), or on its own from the Planner (no note, so no recall signal)."""
 
 	model_config = ConfigDict(extra="forbid")
 

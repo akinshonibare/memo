@@ -1,13 +1,14 @@
 import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 import type { Config } from "./config";
+import { toBase64 } from "./voice";
 
 export type Capture = {
   id: string;
-  kind: "text" | "audio";
+  kind: "text" | "audio" | "image";
   text: string | null;
   recording_id: string | null;
-  status: "pending" | "transcribing" | "extracting" | "embedding" | "ready" | "failed";
+  status: "pending" | "transcribing" | "describing" | "extracting" | "embedding" | "ready" | "failed";
   failure_reason: string | null;
   attempt_count: number;
   created_at: string;
@@ -23,6 +24,8 @@ export type Derivation = {
   status: "pending_review" | "confirmed" | "rejected" | "user_created";
   extractor_version: string;
   confidence: number | null;
+  completed_at: string | null; // todos only: when it was ticked off
+  created_at: string;
 };
 
 export type CaptureDetail = Capture & { derivations: Derivation[] };
@@ -195,6 +198,28 @@ export class Api {
     });
   }
 
+  // A photo (ADR 0024): resized JPEG, uploaded like a recording, described on the server.
+  async createImageCapture(fileUri: string) {
+    const presigned = await this.request<{ recording_id: string; upload_url: string }>(
+      "/v1/recordings",
+      { method: "POST", body: JSON.stringify({ mime: "image/jpeg" }) },
+    );
+    const upload = await FileSystem.uploadAsync(presigned.upload_url, fileUri, {
+      httpMethod: "PUT",
+      headers: { "Content-Type": "image/jpeg" },
+    });
+    if (upload.status < 200 || upload.status >= 300) {
+      throw new ApiError(upload.status, "upload to storage failed");
+    }
+    return this.request<Capture>("/v1/captures", {
+      method: "POST",
+      body: JSON.stringify({
+        recording_id: presigned.recording_id,
+        client_token: Crypto.randomUUID(),
+      }),
+    });
+  }
+
   listCaptures(limit = 50) {
     return this.request<{ items: Capture[]; next_cursor: string | null }>(
       `/v1/captures?limit=${limit}`,
@@ -213,10 +238,15 @@ export class Api {
     return this.request<void>(`/v1/captures/${id}`, { method: "DELETE" });
   }
 
-  getAudio(id: string) {
+  // The recording or photo behind a capture: a short-lived URL straight to the bucket.
+  getMedia(id: string) {
     return this.request<{ url: string; expires_at: string; mime: string; duration_ms: number | null }>(
-      `/v1/captures/${id}/audio`,
+      `/v1/captures/${id}/media`,
     );
+  }
+
+  getAudio(id: string) {
+    return this.getMedia(id);
   }
 
   // --- derivations --------------------------------------------------------------
@@ -236,7 +266,18 @@ export class Api {
     return items;
   }
 
-  reviewDerivation(id: string, body: { status?: "confirmed" | "rejected"; payload?: object }) {
+  // Added straight into the Planner, with no note behind it.
+  createDerivation(kind: Derivation["kind"], payload: object) {
+    return this.request<Derivation>("/v1/derivations", {
+      method: "POST",
+      body: JSON.stringify({ kind, payload }),
+    });
+  }
+
+  reviewDerivation(
+    id: string,
+    body: { status?: "confirmed" | "rejected"; payload?: object; completed?: boolean },
+  ) {
     return this.request<Derivation>(`/v1/derivations/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),
@@ -248,6 +289,37 @@ export class Api {
       method: "POST",
       body: JSON.stringify({ kind, payload }),
     });
+  }
+
+  // --- voice (ADR 0025) ---------------------------------------------------------
+
+  // A spoken question, as text. The clip goes to the API and is never stored.
+  async transcribeQuestion(fileUri: string, mime = "audio/m4a"): Promise<string> {
+    const response = await FileSystem.uploadAsync(`${this.config.baseUrl}/v1/voice/transcribe`, fileUri, {
+      httpMethod: "POST",
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: { Authorization: `Bearer ${this.token}`, "Content-Type": mime },
+    });
+    if (response.status === 401) this.onUnauthorized?.();
+    if (response.status < 200 || response.status >= 300) {
+      throw new ApiError(response.status, response.body.slice(0, 300));
+    }
+    return (JSON.parse(response.body) as { text: string }).text;
+  }
+
+  // One sentence of an answer as speech, saved to a cache file the player can open.
+  async speak(text: string): Promise<string> {
+    const response = await fetch(`${this.config.baseUrl}/v1/voice/speak`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!response.ok) throw new ApiError(response.status, (await response.text()).slice(0, 300));
+    const uri = `${FileSystem.cacheDirectory}speech-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`;
+    await FileSystem.writeAsStringAsync(uri, toBase64(await response.arrayBuffer()), {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return uri;
   }
 
   // --- ask ----------------------------------------------------------------------
@@ -273,5 +345,9 @@ export class Api {
 
   get token() {
     return this.config.token ?? "";
+  }
+
+  get baseUrl() {
+    return this.config.baseUrl;
   }
 }

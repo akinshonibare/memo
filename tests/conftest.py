@@ -25,6 +25,8 @@ from tests.fakes import (
 	FakeQueue,
 	FakeRedis,
 	FakeRewriteProvider,
+	FakeSpeaker,
+	FakeTranscriber,
 )
 
 TEST_DB = "memo_test"
@@ -135,6 +137,8 @@ async def app(settings: Settings) -> AsyncIterator[FastAPI]:
 		application.state.answer_provider = FakeAnswerProvider()
 		application.state.rewrite_provider = FakeRewriteProvider()
 		application.state.identity_verifier = FakeIdentityVerifier()
+		application.state.transcriber = FakeTranscriber("what is on tomorrow")
+		application.state.speaker = FakeSpeaker()
 		yield application
 
 

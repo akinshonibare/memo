@@ -12,7 +12,7 @@ import datetime as dt
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import structlog
 from sqlalchemy import delete, select, text
@@ -38,6 +38,7 @@ from memo.services.llm import LLMCall
 from memo.services.retry import RetryableError, TerminalError, backoff_delay
 from memo.services.storage import ObjectStore
 from memo.services.transcription import Transcriber
+from memo.services.vision import Describer, UnconfiguredDescriber
 from memo.status import CaptureStatus, transition
 
 log = structlog.get_logger("memo.pipeline")
@@ -45,9 +46,11 @@ log = structlog.get_logger("memo.pipeline")
 # A `running` row older than this is a crashed worker's, and may be reclaimed.
 STALE_RUN = dt.timedelta(minutes=15)
 
+# Transcribing and describing are alternatives (audio vs photo), never both.
 _ORDER = [
 	CaptureStatus.PENDING,
 	CaptureStatus.TRANSCRIBING,
+	CaptureStatus.DESCRIBING,
 	CaptureStatus.EXTRACTING,
 	CaptureStatus.EMBEDDING,
 	CaptureStatus.READY,
@@ -62,6 +65,7 @@ class PipelineContext:
 	extractor: ExtractorLike
 	embedder: Embedder
 	max_attempts: int = 5
+	describer: Describer = field(default_factory=UnconfiguredDescriber)
 
 
 @dataclass(frozen=True)
@@ -105,6 +109,32 @@ async def _transcribe(ctx: PipelineContext, capture: Capture) -> None:
 		model=transcript.model,
 		audio_bytes=len(audio),
 		audio_ms=transcript.duration_ms,
+		stage_ms=round((time.perf_counter() - started) * 1000),
+	)
+
+
+async def _describe(ctx: PipelineContext, capture: Capture) -> None:
+	"""A photo becomes text (ADR 0024), into the same field a transcript fills, so the
+	stages after this one cannot tell a photo from a voice note."""
+	photo = await ctx.session.scalar(
+		select(Recording).where(
+			Recording.id == capture.recording_id, Recording.user_id == capture.user_id
+		)
+	)
+	if photo is None:
+		raise TerminalError("image capture has no upload row")
+	if not await ctx.object_store.exists(photo.storage_key):
+		raise TerminalError(f"image bytes missing at {photo.storage_key}")
+	started = time.perf_counter()
+	image = await ctx.object_store.get(photo.storage_key)
+	result = await ctx.describer.describe(image, photo.mime)
+	await _record_calls(ctx, capture, [result.call])
+	capture.text = result.text
+	log.info(
+		"stage.describe",
+		capture_id=str(capture.id),
+		version=ctx.describer.version,
+		image_bytes=len(image),
 		stage_ms=round((time.perf_counter() - started) * 1000),
 	)
 
@@ -266,6 +296,13 @@ STAGES: tuple[Stage, ...] = (
 		version=lambda ctx: ctx.transcriber.model,
 		run=_transcribe,
 		applies=lambda c: c.kind == "audio",
+	),
+	Stage(
+		name="describe",
+		status=CaptureStatus.DESCRIBING,
+		version=lambda ctx: ctx.describer.version,
+		run=_describe,
+		applies=lambda c: c.kind == "image",
 	),
 	Stage(
 		name="extract",

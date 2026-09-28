@@ -14,6 +14,7 @@ from memo.services.embeddings import EmbedResult
 from memo.services.extraction import ExtractResult, RawCompletion
 from memo.services.llm import LLMCall
 from memo.services.transcription import Transcript
+from memo.services.vision import DescribeResult
 
 
 def fake_llm_call(stage: str = "extract") -> LLMCall:
@@ -181,6 +182,39 @@ class FakeObjectStore:
 	async def delete(self, key: str) -> None:
 		self.objects.pop(key, None)
 		self.deleted.append(key)
+
+
+class FakeDescriber:
+	version = "describe-v1/fake"
+
+	def __init__(
+		self,
+		text: str = (
+			"Photo: A flyer for a jazz night.\n\nText in the photo:\nFri 2 Oct 8pm"
+		),
+		*,
+		fail_with: Exception | None = None,
+	) -> None:
+		self.text = text
+		self.fail_with = fail_with
+		self.seen: list[tuple[int, str]] = []
+
+	async def describe(self, image: bytes, mime: str) -> DescribeResult:
+		self.seen.append((len(image), mime))
+		if self.fail_with is not None:
+			raise self.fail_with
+		return DescribeResult(text=self.text, call=fake_llm_call("describe"))
+
+
+class FakeSpeaker:
+	model = "fake-tts"
+
+	def __init__(self) -> None:
+		self.said: list[str] = []
+
+	async def speak(self, text: str) -> bytes:
+		self.said.append(text)
+		return b"ID3fake-mp3"
 
 
 class FakeTranscriber:

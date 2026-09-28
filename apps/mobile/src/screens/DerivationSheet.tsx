@@ -17,13 +17,18 @@ export function DerivationSheet({
   captureId,
   kind,
   existing,
+  initialDate,
+  onOpenNote,
   onClose,
   onSaved,
 }: {
   api: Api;
-  captureId: string | null; // only needed to add; null when editing a kept item
+  // To add to a note. null adds a standalone item (the Planner), or edits one.
+  captureId: string | null;
   kind: Kind;
   existing?: Derivation;
+  initialDate?: Date; // the Planner's selected day, for a new todo or event
+  onOpenNote?: (captureId: string) => void;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -33,8 +38,10 @@ export function DerivationSheet({
   const [title, setTitle] = useState(str("title"));
   const [body, setBody] = useState(kind === "idea" ? str("summary") : str("notes"));
   const [location, setLocation] = useState(str("location"));
-  const [due, setDue] = useState<Date | null>(str("due") ? new Date(`${str("due")}T00:00:00`) : null);
-  const [startsAt, setStartsAt] = useState<Date>(() => initialStart(str("starts_at")));
+  const [due, setDue] = useState<Date | null>(
+    str("due") ? new Date(`${str("due")}T00:00:00`) : existing ? null : (initialDate ?? null),
+  );
+  const [startsAt, setStartsAt] = useState<Date>(() => initialStart(str("starts_at"), initialDate));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const keyboard = useKeyboardHeight();
@@ -59,6 +66,7 @@ export function DerivationSheet({
     try {
       if (existing) await api.reviewDerivation(existing.id, { payload: payload() });
       else if (captureId) await api.addDerivation(captureId, kind, payload());
+      else await api.createDerivation(kind, payload());
       onSaved();
       onClose();
     } catch (e) {
@@ -66,6 +74,22 @@ export function DerivationSheet({
       setBusy(false);
     }
   };
+
+  // There is no delete for an item: rejecting it removes it everywhere it shows (Today,
+  // the Planner, Ask) and keeps the "this was wrong" signal for the evals.
+  const remove = async () => {
+    if (!existing || busy) return;
+    setBusy(true);
+    try {
+      await api.reviewDerivation(existing.id, { status: "rejected" });
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(describe(e));
+      setBusy(false);
+    }
+  };
+  const noteId = existing?.capture_id ?? null;
 
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -157,6 +181,17 @@ export function DerivationSheet({
         </ScrollView>
         {error && <Text style={[ui.danger, { marginBottom: 12 }]}>{error}</Text>}
         <View style={styles.actions}>
+          {existing && <Pill label="Remove" tone="danger" onPress={remove} disabled={busy} />}
+          {noteId && onOpenNote && (
+            <Pill
+              label="Open note"
+              onPress={() => {
+                onClose();
+                onOpenNote(noteId);
+              }}
+            />
+          )}
+          <View style={{ flex: 1 }} />
           <Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!canSave} />
         </View>
       </View>
@@ -172,11 +207,12 @@ function startOfToday(): Date {
 
 // A new event defaults to the next whole hour, which is almost never right but is
 // always a plausible starting point for the picker.
-function initialStart(iso: string): Date {
+function initialStart(iso: string, day?: Date): Date {
   const parsed = iso ? new Date(iso) : null;
   if (parsed && !Number.isNaN(parsed.getTime())) return parsed;
-  const d = new Date();
-  d.setHours(d.getHours() + 1, 0, 0, 0);
+  const now = new Date();
+  const d = day ? new Date(day) : new Date(now);
+  d.setHours(now.getHours() + 1, 0, 0, 0);
   return d;
 }
 
@@ -208,7 +244,7 @@ const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   heading: { marginTop: 12, marginBottom: 20 },
   input: {
-    fontSize: 17,
+    fontSize: 16,
     color: colors.text,
     paddingHorizontal: 18,
     paddingVertical: 14,
@@ -218,5 +254,5 @@ const styles = StyleSheet.create({
   },
   multiline: { minHeight: 110, textAlignVertical: "top" },
   row: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
-  actions: { flexDirection: "row", justifyContent: "flex-end", paddingTop: 12 },
+  actions: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 12 },
 });

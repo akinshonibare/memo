@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActionSheetIOS, ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  ActionSheetIOS,
+  ActivityIndicator,
+  Alert,
+  Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type CaptureDetail, type Derivation } from "../api";
 import { AskBar, IconCircle, Pill, confirmDelete } from "../components";
@@ -62,6 +73,23 @@ export function DetailScreen({
       setError(String(e));
     }
   }, [api, id]);
+
+  // The photo comes straight from the bucket on a short-lived URL; fetched once per note.
+  const [photo, setPhoto] = useState<{ url: string; ratio: number } | null>(null);
+  const isImage = capture?.kind === "image";
+  useEffect(() => {
+    if (!isImage) return;
+    let live = true;
+    api
+      .getMedia(id)
+      .then(({ url }) =>
+        Image.getSize(url, (w, h) => live && setPhoto({ url, ratio: w / h }), () => live && setPhoto({ url, ratio: 4 / 3 })),
+      )
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [api, id, isImage]);
 
   const active = capture ? ACTIVE_STATUSES.has(capture.status) : true;
   useEffect(() => {
@@ -147,6 +175,14 @@ export function DetailScreen({
         contentContainerStyle={[ui.pad, { paddingBottom: 140 + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
       >
+        {photo && (
+          <Image
+            source={{ uri: photo.url }}
+            style={[styles.photo, { aspectRatio: Math.max(photo.ratio, 0.6) }]}
+            resizeMode="cover"
+            accessibilityLabel="The photo this note came from"
+          />
+        )}
         {capture && (
           <>
             <Text style={ui.meta}>
@@ -293,6 +329,7 @@ function DerivationCard({
 const styles = StyleSheet.create({
   topBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 4, marginBottom: 20 },
   processing: { alignItems: "center", paddingVertical: 56 },
+  photo: { width: "100%", borderRadius: 16, marginBottom: 16, backgroundColor: colors.surface },
   failure: {
     marginTop: 24,
     padding: 16,

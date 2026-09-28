@@ -130,5 +130,5 @@ const styles = StyleSheet.create({
   meter: { flexDirection: "row", alignItems: "center", gap: 5 },
   dot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.faint },
   dotLive: { backgroundColor: colors.green },
-  clock: { color: colors.text, fontSize: 17, fontWeight: "700", marginLeft: 10, fontVariant: ["tabular-nums"] },
+  clock: { color: colors.text, fontSize: 15, fontWeight: "600", marginLeft: 10, fontVariant: ["tabular-nums"] },
 });

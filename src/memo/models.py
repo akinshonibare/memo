@@ -28,7 +28,7 @@ from memo.ids import uuid7
 from memo.schemas.derivations import DERIVATION_STATUSES, KINDS
 from memo.status import CaptureStatus
 
-CAPTURE_KINDS = ("text", "audio")
+CAPTURE_KINDS = ("text", "audio", "image")
 JOB_RUN_STATUSES = ("running", "succeeded", "failed")
 
 
@@ -72,7 +72,9 @@ class Session(Base):
 
 
 class Recording(Base):
-	"""An audio asset in object storage. 1:1 with a capture once attached."""
+	"""An uploaded media asset in object storage - audio, or since ADR 0024 a photo.
+	The name predates photos; it is kept because the API contract installed apps use
+	says `recording_id`. 1:1 with a capture once attached."""
 
 	__tablename__ = "recordings"
 	__mapper_args__ = {"eager_defaults": True}
@@ -201,6 +203,9 @@ class Derivation(Base):
 	extractor_version: Mapped[str] = mapped_column(String(64))
 	confidence: Mapped[float | None] = mapped_column(Float)
 	reviewed_at: Mapped[dt.datetime | None]
+	# Todos only. Separate from status: status is the review (is this real?), this is
+	# what happened next. A confirmed todo that is done is still confirmed.
+	completed_at: Mapped[dt.datetime | None]
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 	updated_at: Mapped[dt.datetime] = mapped_column(
 		server_default=func.now(), onupdate=func.now()

@@ -79,8 +79,13 @@ const SHORT = 90;
 // sentence or line) and the rest; voice notes without a transcript yet get a neutral
 // title rather than an empty one.
 export function headline(c: Pick<Capture, "kind" | "text">): { title: string; rest: string | null } {
-  const text = (c.text ?? "").trim();
-  if (!text) return { title: c.kind === "audio" ? "Voice note" : "Untitled", rest: null };
+  // A photo's text is its description, stored as "Photo: …"; the row shows a photo
+  // marker instead, so the prefix would only repeat it.
+  const raw = (c.text ?? "").trim();
+  const text = c.kind === "image" ? raw.replace(/^Photo:\s*/, "") : raw;
+  if (!text) {
+    return { title: c.kind === "audio" ? "Voice note" : c.kind === "image" ? "Photo" : "Untitled", rest: null };
+  }
   if (text.length <= SHORT) return { title: text, rest: null };
   const first = text.split(/\n|(?<=[.!?])\s/)[0] ?? text;
   if (first.length <= 64 && first.length < text.length) {
@@ -99,6 +104,8 @@ export function statusLabel(status: Capture["status"]): string | null {
       return "Queued";
     case "transcribing":
       return "Transcribing…";
+    case "describing":
+      return "Reading the photo…";
     case "extracting":
       return "Extracting…";
     case "embedding":
@@ -113,6 +120,7 @@ export function statusLabel(status: Capture["status"]): string | null {
 export const ACTIVE_STATUSES = new Set<Capture["status"]>([
   "pending",
   "transcribing",
+  "describing",
   "extracting",
   "embedding",
 ]);

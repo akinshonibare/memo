@@ -46,3 +46,6 @@ def _limiter(
 limit_ask = _limiter("ask", "closed")
 # Fail open: a capture is the one thing memo must never refuse for its own reasons.
 limit_capture = _limiter("capture", "open")
+# Fail closed: every voice call is a paid Deepgram call. A spoken answer is one speak
+# call per sentence, so the limit is sized for sentences, not questions.
+limit_voice = _limiter("voice", "closed")

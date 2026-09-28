@@ -126,6 +126,6 @@ const styles = StyleSheet.create({
   idea: { paddingVertical: 16, gap: 2 },
   item: { flexDirection: "row", alignItems: "flex-start", paddingVertical: 10 },
   icon: { marginRight: 12, marginTop: 2 },
-  itemTitle: { color: colors.text, fontSize: 18, fontWeight: "600" },
+  itemTitle: { color: colors.text, fontSize: 16, fontWeight: "500" },
   pressed: { opacity: 0.6 },
 });

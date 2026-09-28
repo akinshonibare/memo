@@ -8,12 +8,14 @@ from sqlalchemy import and_, or_, select, update
 
 from memo.auth import CurrentUser
 from memo.db import DbSession, commit_and_rebind
+from memo.ids import uuid7
 from memo.models import Chunk, Derivation
 from memo.pagination import decode_cursor, encode_cursor
 from memo.routers.captures import get_queue
 from memo.schemas.derivations import (
 	DERIVATION_STATUSES,
 	KINDS,
+	DerivationCreate,
 	DerivationOut,
 	DerivationPage,
 	DerivationPatch,
@@ -68,6 +70,39 @@ async def list_derivations(
 	)
 
 
+@router.post("", status_code=status.HTTP_201_CREATED, response_model=DerivationOut)
+async def create_derivation(
+	body: DerivationCreate,
+	session: DbSession,
+	user_id: CurrentUser,
+	queue: Annotated[Queue, Depends(get_queue)],
+) -> Derivation:
+	"""A todo, event or idea added straight into the Planner, with no note behind it.
+	`user_created` like one added to a note, but capture_id is NULL, so the eval
+	harvester (which needs source text) never mistakes it for a missed extraction."""
+	try:
+		payload = validate_payload(body.kind, body.payload)
+	except ValidationError as exc:
+		raise HTTPException(
+			status.HTTP_422_UNPROCESSABLE_CONTENT, validation_detail(exc)
+		) from exc
+	derivation = Derivation(
+		id=uuid7(),
+		user_id=user_id,
+		capture_id=None,
+		kind=body.kind,
+		payload=payload,
+		status="user_created",
+		extractor_version="user",
+		confidence=None,
+		reviewed_at=dt.datetime.now(dt.UTC),
+	)
+	session.add(derivation)
+	await commit_and_rebind(session, user_id)
+	await enqueue_reembed(queue, derivation)
+	return derivation
+
+
 @router.patch("/{derivation_id}", response_model=DerivationOut)
 async def review_derivation(
 	derivation_id: uuid.UUID,
@@ -84,6 +119,12 @@ async def review_derivation(
 	)
 	if derivation is None:
 		raise HTTPException(status.HTTP_404_NOT_FOUND)
+	if body.completed is not None:
+		if derivation.kind != "todo":
+			raise HTTPException(
+				status.HTTP_422_UNPROCESSABLE_CONTENT, "only a todo can be completed"
+			)
+		derivation.completed_at = dt.datetime.now(dt.UTC) if body.completed else None
 
 	if body.payload is not None:
 		try:

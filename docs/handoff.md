@@ -16,7 +16,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   record and write, detail with review, delete, playback, Ask sheet, Settings.
 - **Quality gates**: 122 tests against real Postgres, ruff, mypy strict, migrations cycled,
   evals for extraction (recorded), retrieval and faithfulness. CI runs on every PR.
-- **Decisions**: ADRs 0001–0023 in [decisions/](decisions/). 0006 and 0018 are superseded.
+- **Decisions**: ADRs 0001–0025 in [decisions/](decisions/). 0006 and 0018 are superseded.
 
 ## Not done, in the order it should happen
 
@@ -62,6 +62,19 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    everything. Delete-everything was failing for anyone who had used Ask (citation FK,
    [#55](https://github.com/akinshonibare/memo/issues/55)); fixed by deleting
    conversations before captures.
+
+## Since the list
+
+- **Planner** (replaces the Items screen): week strip + day list, events by time, todos
+  with checkboxes (`derivations.completed_at`, migration 0009), undated todos under
+  Anytime, ideas on their own screen. Items can be added with no note behind them
+  (`POST /v1/derivations`). Settings regrouped; the type scale is one step smaller.
+- **Photos** ([ADR 0024](decisions/0024-photos-become-text-then-flow-through.md)): + on Home →
+  take or choose a photo; Claude vision describes it into text, then the ordinary pipeline.
+- **Voice conversation** ([ADR 0025](decisions/0025-voice-conversation-own-pipeline-in-two-steps.md)):
+  hold the mic in Ask to talk (step 1), or the headset button for hands-free (step 2, live
+  WebSocket + Deepgram endpointing, half-duplex). Open: talk-over barge-in needs a native
+  voice-processing module; keyterm prompting for names.
 
 ## Filed for later
 

@@ -40,7 +40,14 @@
       "expo-secure-store",
       "expo-font",
       "expo-apple-authentication",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "memo reads the photos you choose so it can describe them and pull out todos, events and ideas.",
+          "cameraPermission": "memo takes photos you choose to capture as notes."
+        }
+      ]
     ],
     "backgroundColor": "#000000",
     "extra": {

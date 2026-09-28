@@ -55,6 +55,7 @@ class Settings(BaseSettings):
 	# Deepgram Nova-3 (ADR 0013). Unset means audio captures fail visibly, not silently.
 	deepgram_api_key: SecretStr | None = None
 	deepgram_model: str = "nova-3"
+	tts_model: str = "aura-2-thalia-en"
 
 	# Extraction (ADR 0014/0015). Unset means every capture fails at the extract stage.
 	anthropic_api_key: SecretStr | None = None
@@ -79,6 +80,7 @@ class Settings(BaseSettings):
 	# Per-user, per-minute (issue #48). Ask fails closed, capture fails open.
 	rate_ask_per_minute: int = 10
 	rate_capture_per_minute: int = 60
+	rate_voice_per_minute: int = 90
 
 
 @lru_cache
