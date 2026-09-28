@@ -128,6 +128,13 @@ async def test_adding_a_missed_derivation_is_recorded_as_user_created(
 	detail = (await client.get(f"/v1/captures/{capture_id}")).json()
 	assert [d["id"] for d in detail["derivations"]] == [body["id"]]
 
+	edited = await client.patch(
+		f"/v1/derivations/{body['id']}",
+		json={"payload": {"title": "Email Sarah the signed invoice"}},
+	)
+	assert edited.status_code == 200
+	assert edited.json()["status"] == "user_created", "an edit keeps the recall signal"
+
 	invalid = await client.post(
 		f"/v1/captures/{capture_id}/derivations",
 		json={"kind": "event", "payload": {"title": "no time"}},

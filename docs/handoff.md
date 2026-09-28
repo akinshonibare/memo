@@ -34,9 +34,13 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    Today); fixed by [ADR 0020](decisions/0020-morning-view-pins-the-idea-reads-items-live.md):
    the idea is pinned at 04:00, todos and events are read live. Then decide whether a push
    notification is worth an APNs setup.
-3. **Edit and add derivations from the app.** The server has `PATCH /v1/derivations/{id}`
-   with a payload and `POST /v1/captures/{id}/derivations`; the app only confirms or rejects.
-   The "the extractor missed one" path is the recall signal the evals need.
+3. **Edit and add derivations from the app.** _Done in the app:_ a card awaiting review
+   has Confirm / Edit / Reject, a confirmed or added one is tapped to edit, and a ready note
+   has "Add what it missed" (todo, event, or idea). Adds `@react-native-community/datetimepicker`,
+   a native module, so it needs a new EAS build. Server fix alongside: a payload-only
+   PATCH used to flip `user_created` to `confirmed`, erasing the recall signal; an edit
+   now confirms only what was `pending_review`. Still open: nothing reads the signal yet;
+   the eval intake from real corrections is part of item 4.
 4. **Arm the extraction gate with real data.** Record a live run
    (`uv run python -m evals.extraction.run --record evals/extraction/recorded.json`) so CI
    measures Opus against the golden set instead of a replay. Replace the synthetic golden

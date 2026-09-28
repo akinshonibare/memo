@@ -50,6 +50,22 @@ export function formatDay(isoDate: string, withYear = false): string {
   });
 }
 
+const pad = (n: number) => String(Math.abs(n)).padStart(2, "0");
+
+// A calendar date for the API, from the device's local day: "2026-10-06".
+export function toIsoDate(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// An instant for the API with the device's offset kept, as extraction writes them:
+// "2026-10-06T12:00:00-04:00", not the UTC "…T16:00:00.000Z" toISOString gives.
+export function toLocalIso(d: Date): string {
+  const offset = -d.getTimezoneOffset();
+  const sign = offset >= 0 ? "+" : "-";
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return `${toIsoDate(d)}T${time}${sign}${pad(Math.trunc(offset / 60))}:${pad(offset % 60)}`;
+}
+
 export function formatClock(ms: number): string {
   const total = Math.floor(ms / 1000);
   const m = Math.floor(total / 60);

@@ -88,9 +88,12 @@ async def review_derivation(
 			raise HTTPException(
 				status.HTTP_422_UNPROCESSABLE_CONTENT, validation_detail(exc)
 			) from exc
-	derivation.status = body.status or (
-		"confirmed" if body.payload is not None else derivation.status
-	)
+	# An edit is a confirmation only of something awaiting review. One the user added
+	# stays `user_created` (the recall signal), one already confirmed stays confirmed.
+	if body.status is not None:
+		derivation.status = body.status
+	elif derivation.status == "pending_review":
+		derivation.status = "confirmed"
 	derivation.reviewed_at = dt.datetime.now(dt.UTC)
 	await session.flush()
 	return derivation

@@ -39,7 +39,8 @@
       "expo-audio",
       "expo-secure-store",
       "expo-font",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "@react-native-community/datetimepicker"
     ],
     "backgroundColor": "#000000",
     "extra": {
