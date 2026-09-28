@@ -3,11 +3,14 @@ import hashlib
 import math
 import re
 import uuid
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
+
+from anthropic.types import MessageParam
 
 from memo.schemas.derivations import Extraction
 from memo.services.embeddings import EmbedResult
-from memo.services.extraction import ExtractResult
+from memo.services.extraction import ExtractResult, RawCompletion
 from memo.services.llm import LLMCall
 from memo.services.transcription import Transcript
 
@@ -53,6 +56,63 @@ class FakeEmbedder:
 
 	async def embed_query(self, text: str) -> list[float]:
 		return self._vector(text)
+
+
+class FakeAnswerProvider:
+	"""Streams scripted tokens; records whether the stream was closed early."""
+
+	model = "fake-answer"
+
+	def __init__(
+		self,
+		tokens: list[str] | None = None,
+		*,
+		fail_with: Exception | None = None,
+	) -> None:
+		self.tokens = tokens or ["Your ", "notes ", "say ", "[1] ", "call Tunde."]
+		self.fail_with = fail_with
+		self.closed_early = False
+		self.calls = 0
+		self.last_messages: list[MessageParam] = []
+
+	async def stream(
+		self, *, system: str, messages: list[MessageParam]
+	) -> AsyncGenerator[str, None]:
+		self.calls += 1
+		self.last_messages = list(messages)
+		try:
+			for token in self.tokens:
+				if self.fail_with is not None:
+					raise self.fail_with
+				yield token
+		except GeneratorExit:
+			self.closed_early = True
+			raise
+
+	def usage(self) -> LLMCall:
+		return fake_llm_call("answer")
+
+
+class FakeRewriteProvider:
+	model = "fake-rewrite"
+
+	def __init__(self, rewritten: str = "call Tunde pricing") -> None:
+		self.rewritten = rewritten
+		self.calls = 0
+
+	async def complete(
+		self, *, system: str, messages: list[MessageParam]
+	) -> RawCompletion:
+		self.calls += 1
+		return RawCompletion(
+			text=self.rewritten,
+			model=self.model,
+			input_tokens=120,
+			output_tokens=12,
+			cache_read_tokens=0,
+			cache_write_tokens=0,
+			latency_ms=40,
+		)
 
 
 class FakeExtractor:

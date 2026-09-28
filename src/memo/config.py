@@ -61,6 +61,12 @@ class Settings(BaseSettings):
 	embedding_dim: int = 1024
 	hnsw_ef_search: int = 100
 
+	# Ask. The rewrite is an easy task on the TTFT critical path, so a small model.
+	answer_model: str = "claude-opus-5"
+	rewrite_model: str = "claude-haiku-4-5"
+	ask_top_k: int = 8
+	ask_history_turns: int = 6
+
 
 @lru_cache
 def get_settings() -> Settings:
