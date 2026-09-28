@@ -16,7 +16,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   record and write, detail with review, delete, playback, Ask sheet, Settings.
 - **Quality gates**: 122 tests against real Postgres, ruff, mypy strict, migrations cycled,
   evals for extraction (recorded), retrieval and faithfulness. CI runs on every PR.
-- **Decisions**: ADRs 0001–0021 in [decisions/](decisions/). 0006 and 0018 are superseded.
+- **Decisions**: ADRs 0001–0022 in [decisions/](decisions/). 0006 and 0018 are superseded.
 
 ## Not done, in the order it should happen
 
@@ -58,15 +58,12 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    Settings has Export (JSON through the share sheet, via `expo-sharing`) and Delete
    everything. Delete-everything was failing for anyone who had used Ask (citation FK,
    [#55](https://github.com/akinshonibare/memo/issues/55)); fixed by deleting
-   conversations before captures. Single-note delete still hits #55.
+   conversations before captures.
 
 ## Filed for later
 
 - [#57](https://github.com/akinshonibare/memo/issues/57): the first PITR restore drill.
-- [#55](https://github.com/akinshonibare/memo/issues/55): deleting a note that an answer
-  cited fails with an FK violation.
-- [#56](https://github.com/akinshonibare/memo/issues/56): deleting a note should keep its
-  extracted todos, events and ideas. Do with #55; one ADR.
+- ~~#55, #56~~: done in ADR 0022 (deleting a note keeps its derivations; citations cascade).
 
 ## Rules that still apply
 

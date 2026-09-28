@@ -91,6 +91,8 @@ class Export(BaseModel):
 	exported_at: dt.datetime
 	user_id: uuid.UUID
 	captures: list[CaptureExport]
+	# Derivations kept after their note was deleted (ADR 0022).
+	derivations_without_note: list[DerivationOut]
 	recordings: list[RecordingExport]
 	conversations: list[ConversationExport]
 
@@ -119,8 +121,13 @@ async def export_everything(
 		)
 	).all()
 	by_capture: dict[uuid.UUID, list[DerivationOut]] = {}
+	unattached: list[DerivationOut] = []
 	for d in derivations:
-		by_capture.setdefault(d.capture_id, []).append(DerivationOut.model_validate(d))
+		out = DerivationOut.model_validate(d)
+		if d.capture_id is None:
+			unattached.append(out)
+		else:
+			by_capture.setdefault(d.capture_id, []).append(out)
 
 	recordings = []
 	for r in (
@@ -176,6 +183,7 @@ async def export_everything(
 			)
 			for c in captures
 		],
+		derivations_without_note=unattached,
 		recordings=recordings,
 		conversations=conversations,
 	)
@@ -209,10 +217,13 @@ async def delete_everything(
 	for key in keys:
 		await store.delete(key)
 	counts: dict[str, Any] = {"recording_objects": len(keys)}
-	# Conversations first: their citations reference capture chunks without a cascade
-	# (#55), so removing captures while a citation still points at one is an FK error.
+	# Chunks and derivations explicitly, before captures: deleting a capture keeps its
+	# derivations (ADR 0022), which is right for one note and wrong for "everything".
+	# Chunks go first because a text chunk cannot outlive its capture (the CHECK).
 	for table in (
 		"conversations",
+		"chunks",
+		"derivations",
 		"captures",
 		"recordings",
 		"morning_views",

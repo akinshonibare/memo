@@ -217,7 +217,7 @@ async def test_rebuilding_the_same_day_keeps_the_same_idea_and_never_repeats_it_
 	assert shown == 2
 
 
-async def test_reads_after_the_build_see_reviews_additions_and_deletes(
+async def test_reads_after_the_build_see_reviews_and_additions(
 	app: FastAPI, client: AsyncClient, admin_engine: AsyncEngine, session: AsyncSession
 ) -> None:
 	# ADR 0020: the idea is pinned at 04:00, todos and events are read live.
@@ -238,7 +238,7 @@ async def test_reads_after_the_build_see_reviews_additions_and_deletes(
 		admin_engine,
 		idea_cap,
 		kind="idea",
-		payload={"title": "Deleted later", "summary": "x"},
+		payload={"title": "Rejected later", "summary": "x"},
 		created_at=old,
 	)
 	built = await build_morning_view(session, SEED_USER_ID, now=NOW)
@@ -255,7 +255,7 @@ async def test_reads_after_the_build_see_reviews_additions_and_deletes(
 		created_at=NOW + dt.timedelta(hours=8),
 		status="user_created",
 	)
-	assert (await client.delete(f"/v1/captures/{idea_cap}")).status_code == 204
+	await client.patch(f"/v1/derivations/{idea}", json={"status": "rejected"})
 
 	async with app.state.session_factory() as fresh:
 		await bind_user(fresh, SEED_USER_ID)

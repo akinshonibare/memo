@@ -5,7 +5,7 @@ from typing import Annotated, Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import ValidationError
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -13,7 +13,7 @@ from memo.auth import CurrentUser
 from memo.config import Settings, get_settings
 from memo.db import DbSession, commit_and_rebind
 from memo.ids import uuid7
-from memo.models import Capture, Derivation, Recording
+from memo.models import Capture, Chunk, Derivation, Recording
 from memo.pagination import decode_cursor, encode_cursor
 from memo.routers.limits import limit_capture
 from memo.routers.recordings import get_object_store
@@ -234,10 +234,30 @@ async def delete_capture(
 	user_id: CurrentUser,
 	store: Annotated[ObjectStore, Depends(get_object_store)],
 ) -> None:
-	"""Hard delete. Derivations, chunks and citations cascade in the database; the
-	recording's bytes are removed from the bucket first, while the row still knows
-	its key. An orphaned chunk would keep answering questions, so nothing is soft."""
+	"""Delete the note, keep what the user got out of it (ADR 0022).
+
+	Gone: the text, the recording (bytes removed from the bucket first, while the row
+	still knows its key), every text chunk, and the derivations the user rejected.
+	Kept, with capture_id set to NULL by the foreign key: the todos, events and ideas
+	that weren't rejected, and their chunks, so Ask and Today still see them.
+	Citations of deleted chunks cascade with them. Nothing is soft-deleted: a text
+	chunk left behind would keep answering questions about a note that is gone, and
+	ck_chunks_has_owner makes that impossible rather than merely avoided."""
 	capture = await _owned_capture(session, capture_id, user_id)
+	await session.execute(
+		delete(Chunk).where(
+			Chunk.capture_id == capture.id,
+			Chunk.user_id == user_id,
+			Chunk.derivation_id.is_(None),
+		)
+	)
+	await session.execute(
+		delete(Derivation).where(
+			Derivation.capture_id == capture.id,
+			Derivation.user_id == user_id,
+			Derivation.status == "rejected",
+		)
+	)
 	if capture.recording_id is not None:
 		recording = await session.scalar(
 			select(Recording).where(

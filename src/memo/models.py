@@ -192,7 +192,9 @@ class Derivation(Base):
 
 	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
 	user_id: Mapped[uuid.UUID]
-	capture_id: Mapped[uuid.UUID]
+	# NULL once the note it came from is deleted: the note goes, what the user got
+	# out of it stays (ADR 0022).
+	capture_id: Mapped[uuid.UUID | None]
 	kind: Mapped[str] = mapped_column(String(16))
 	payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
 	status: Mapped[str] = mapped_column(String(16))
@@ -215,7 +217,8 @@ class Derivation(Base):
 			["capture_id", "user_id"],
 			["captures.id", "captures.user_id"],
 			name="fk_derivations_capture_same_user",
-			ondelete="CASCADE",
+			# Really ON DELETE SET NULL (capture_id), set in migration 0008: the
+			# column-list form keeps user_id, and SQLAlchemy can't express it.
 		),
 	)
 
@@ -388,6 +391,7 @@ class MessageCitation(Base):
 			["chunk_id", "user_id"],
 			["chunks.id", "chunks.user_id"],
 			name="fk_message_citations_chunk_same_user",
+			ondelete="CASCADE",
 		),
 	)
 
@@ -403,7 +407,9 @@ class Chunk(Base):
 
 	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
 	user_id: Mapped[uuid.UUID]
-	capture_id: Mapped[uuid.UUID]
+	# NULL only on a derivation chunk whose note was deleted (ADR 0022); a text
+	# chunk always has its capture (ck_chunks_has_owner).
+	capture_id: Mapped[uuid.UUID | None]
 	derivation_id: Mapped[uuid.UUID | None]
 	ordinal: Mapped[int]
 	text: Mapped[str] = mapped_column(Text)
@@ -424,7 +430,11 @@ class Chunk(Base):
 			["capture_id", "user_id"],
 			["captures.id", "captures.user_id"],
 			name="fk_chunks_capture_same_user",
-			ondelete="CASCADE",
+			# Really ON DELETE SET NULL (capture_id): see Derivation.
+		),
+		CheckConstraint(
+			"capture_id IS NOT NULL OR derivation_id IS NOT NULL",
+			name="ck_chunks_has_owner",
 		),
 		ForeignKeyConstraint(
 			["derivation_id", "user_id"],

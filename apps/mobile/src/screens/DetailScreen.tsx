@@ -115,7 +115,7 @@ export function DetailScreen({
     }
   };
   const remove = () =>
-    confirmDelete("Delete this note? Everything extracted from it goes too.", async () => {
+    confirmDelete("Delete this note? Its todos, events and ideas are kept.", async () => {
       if (!capture) return;
       if (playingId === capture.id) stopPlayback();
       try {

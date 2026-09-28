@@ -177,13 +177,23 @@ async def run(embedder: Embedder) -> dict[str, Recall]:
 						)
 					).all()
 					chunk_to_capture.update({r[0]: r[1] for r in rows})
+
+				# Recall is over captures; a derivation whose note was deleted has
+				# none (ADR 0022) and can't count toward one. The corpus has none.
+				def captures(ids: list[uuid.UUID | None]) -> list[uuid.UUID]:
+					return [c for c in ids if c is not None]
+
 				modes["vector"].add(
-					[chunk_to_capture[c] for c in result.vector_ranked], expected
+					captures([chunk_to_capture[c] for c in result.vector_ranked]),
+					expected,
 				)
 				modes["keyword"].add(
-					[chunk_to_capture[c] for c in result.keyword_ranked], expected
+					captures([chunk_to_capture[c] for c in result.keyword_ranked]),
+					expected,
 				)
-				modes["fused"].add([h.capture_id for h in result.hits], expected)
+				modes["fused"].add(
+					captures([h.capture_id for h in result.hits]), expected
+				)
 		return modes
 	finally:
 		async with admin.begin() as conn:

@@ -1,4 +1,5 @@
-"""Deleting a note removes everything it produced; playback comes from the bucket."""
+"""Deleting a note removes the note and its audio; playback comes from the bucket.
+What happens to its extracted items is in test_capture_delete_keeps_derivations."""
 
 import uuid
 

@@ -22,6 +22,7 @@ export function HomeScreen({
   api,
   refreshKey,
   onOpen,
+  onItems,
   onAsk,
   onRecord,
   onCompose,
@@ -30,6 +31,7 @@ export function HomeScreen({
   api: Api;
   refreshKey: number;
   onOpen: (id: string) => void;
+  onItems: () => void;
   onAsk: () => void;
   onRecord: () => void;
   onCompose: () => void;
@@ -80,7 +82,7 @@ export function HomeScreen({
     }
   };
   const more = (c: Capture) =>
-    confirmDelete("Delete this note? Everything extracted from it goes too.", async () => {
+    confirmDelete("Delete this note? Its todos, events and ideas are kept.", async () => {
       if (playingId === c.id) stopPlayback();
       setCaptures((prev) => prev.filter((x) => x.id !== c.id));
       try {
@@ -95,6 +97,8 @@ export function HomeScreen({
     <View style={ui.screen}>
       <View style={[styles.topBar, ui.pad]}>
         <IconCircle name="settings-outline" onPress={onSettings} />
+        <View style={{ flex: 1 }} />
+        <IconCircle name="checkbox-outline" onPress={onItems} />
       </View>
       <Text style={[ui.h1, ui.pad]}>memo</Text>
       <View style={[styles.search, { marginHorizontal: 20 }]}>
