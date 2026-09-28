@@ -14,7 +14,13 @@ from memo.schemas.derivations import Extraction
 from memo.services.extraction import ExtractionFailed
 from memo.services.pipeline import PipelineContext, process_capture
 from memo.services.retry import RetryableError, TerminalError
-from tests.fakes import FakeExtractor, FakeObjectStore, FakeTranscriber, fake_llm_call
+from tests.fakes import (
+	FakeEmbedder,
+	FakeExtractor,
+	FakeObjectStore,
+	FakeTranscriber,
+	fake_llm_call,
+)
 
 
 @pytest.fixture
@@ -38,6 +44,7 @@ def _ctx(
 	*,
 	transcriber: FakeTranscriber | None = None,
 	extractor: FakeExtractor | None = None,
+	embedder: FakeEmbedder | None = None,
 	max_attempts: int = 5,
 ) -> PipelineContext:
 	return PipelineContext(
@@ -45,6 +52,7 @@ def _ctx(
 		transcriber=transcriber or FakeTranscriber(),
 		object_store=store,
 		extractor=extractor or FakeExtractor(),
+		embedder=embedder or FakeEmbedder(),
 		max_attempts=max_attempts,
 	)
 

@@ -18,6 +18,7 @@ from memo.jobs import (
 	sweep_unclaimed_recordings_task,
 )
 from memo.logging import configure_logging
+from memo.services.embeddings import make_embedder
 from memo.services.extraction import make_extractor
 from memo.services.storage import S3ObjectStore
 from memo.services.transcription import make_transcriber
@@ -38,6 +39,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 		object_store=S3ObjectStore.from_settings(settings),
 		transcriber=make_transcriber(settings, http),
 		extractor=make_extractor(settings),
+		embedder=make_embedder(settings, http),
 	)
 
 

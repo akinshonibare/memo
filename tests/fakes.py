@@ -1,8 +1,12 @@
 import datetime as dt
+import hashlib
+import math
+import re
 import uuid
 from dataclasses import dataclass, field
 
 from memo.schemas.derivations import Extraction
+from memo.services.embeddings import EmbedResult
 from memo.services.extraction import ExtractResult
 from memo.services.llm import LLMCall
 from memo.services.transcription import Transcript
@@ -17,6 +21,38 @@ def fake_llm_call(stage: str = "extract") -> LLMCall:
 		output_tokens=60,
 		latency_ms=10,
 	)
+
+
+class FakeEmbedder:
+	"""Deterministic bag-of-words vectors: cosine similarity tracks token overlap, so
+	the vector branch behaves like a fuzzy lexical search. Enough to test plumbing,
+	ranking and fusion without a network."""
+
+	model = "fake-bow"
+	dim = 1024
+
+	def __init__(self, *, fail_with: Exception | None = None) -> None:
+		self.fail_with = fail_with
+		self.calls = 0
+
+	def _vector(self, text: str) -> list[float]:
+		vector = [0.0] * self.dim
+		for token in re.findall(r"[a-z0-9']+", text.lower()):
+			vector[int(hashlib.md5(token.encode()).hexdigest(), 16) % self.dim] += 1.0
+		norm = math.sqrt(sum(v * v for v in vector)) or 1.0
+		return [v / norm for v in vector]
+
+	async def embed_documents(self, texts: list[str]) -> EmbedResult:
+		self.calls += 1
+		if self.fail_with is not None:
+			raise self.fail_with
+		return EmbedResult(
+			vectors=[self._vector(t) for t in texts],
+			total_tokens=sum(len(t) // 4 for t in texts),
+		)
+
+	async def embed_query(self, text: str) -> list[float]:
+		return self._vector(text)
 
 
 class FakeExtractor:

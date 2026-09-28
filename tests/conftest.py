@@ -83,7 +83,14 @@ async def admin_engine(settings: Settings) -> AsyncIterator[AsyncEngine]:
 @pytest.fixture(autouse=True)
 async def clean_tables(admin_engine: AsyncEngine) -> None:
 	async with admin_engine.begin() as conn:
-		for table in ("llm_calls", "job_runs", "derivations", "captures", "recordings"):
+		for table in (
+			"chunks",
+			"llm_calls",
+			"job_runs",
+			"derivations",
+			"captures",
+			"recordings",
+		):
 			await conn.execute(text(f"DELETE FROM {table}"))
 		await conn.execute(
 			text("DELETE FROM users WHERE id <> :seed"), {"seed": str(SEED_USER_ID)}

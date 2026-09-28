@@ -1,6 +1,6 @@
 # 0017 — Length-dependent chunking: short captures are one chunk, long ones split on structure
 
-**Status:** provisional — becomes `active` when [#31](https://github.com/akinshonibare/memo/issues/31) lands
+**Status:** active — since [#31](https://github.com/akinshonibare/memo/issues/31) (2026-09-28)
 **Date:** 2026-09-27
 **Closes:** Q4, [#29](https://github.com/akinshonibare/memo/issues/29)
 

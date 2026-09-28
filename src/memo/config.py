@@ -55,6 +55,12 @@ class Settings(BaseSettings):
 	anthropic_api_key: SecretStr | None = None
 	extraction_model: str = "claude-opus-5"
 
+	# Embeddings (ADR 0016). Changing the model or dim is a full re-embed.
+	voyage_api_key: SecretStr | None = None
+	embedding_model: str = "voyage-4"
+	embedding_dim: int = 1024
+	hnsw_ef_search: int = 100
+
 
 @lru_cache
 def get_settings() -> Settings:

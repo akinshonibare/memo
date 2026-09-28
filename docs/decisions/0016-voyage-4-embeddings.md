@@ -1,6 +1,6 @@
 # 0016 — `voyage-4` at 1024 dimensions for every embedded row
 
-**Status:** provisional — becomes `active` when [#31](https://github.com/akinshonibare/memo/issues/31) lands
+**Status:** active — since [#31](https://github.com/akinshonibare/memo/issues/31) (2026-09-28)
 **Date:** 2026-09-27
 **Closes:** Q3, [#28](https://github.com/akinshonibare/memo/issues/28)
 

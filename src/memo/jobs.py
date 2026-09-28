@@ -31,6 +31,7 @@ async def process_capture_task(
 			transcriber=ctx["transcriber"],
 			object_store=ctx["object_store"],
 			extractor=ctx["extractor"],
+			embedder=ctx["embedder"],
 			max_attempts=ctx["settings"].max_attempts,
 		)
 		outcome = await process_capture(

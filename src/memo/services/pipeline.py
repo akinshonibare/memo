@@ -21,7 +21,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.db import bind_user, commit_and_rebind
 from memo.ids import uuid7
-from memo.models import Capture, Derivation, JobRun, LLMCallRow, Recording, User
+from memo.models import (
+	Capture,
+	Chunk,
+	Derivation,
+	JobRun,
+	LLMCallRow,
+	Recording,
+	User,
+)
+from memo.services.chunking import CHUNKER_VERSION, chunk_text
+from memo.services.embeddings import Embedder
 from memo.services.extraction import ExtractionFailed, ExtractorLike
 from memo.services.llm import LLMCall
 from memo.services.retry import RetryableError, TerminalError, backoff_delay
@@ -34,6 +44,14 @@ log = structlog.get_logger("memo.pipeline")
 # A `running` row older than this is a crashed worker's, and may be reclaimed.
 STALE_RUN = dt.timedelta(minutes=15)
 
+_ORDER = [
+	CaptureStatus.PENDING,
+	CaptureStatus.TRANSCRIBING,
+	CaptureStatus.EXTRACTING,
+	CaptureStatus.EMBEDDING,
+	CaptureStatus.READY,
+]
+
 
 @dataclass
 class PipelineContext:
@@ -41,6 +59,7 @@ class PipelineContext:
 	transcriber: Transcriber
 	object_store: ObjectStore
 	extractor: ExtractorLike
+	embedder: Embedder
 	max_attempts: int = 5
 
 
@@ -164,10 +183,88 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 	)
 
 
-async def _not_yet(ctx: PipelineContext, capture: Capture) -> None:
-	# Embedding (Stage 4) slots in here; until then the capture passes through so
-	# the status machine stays the final shape.
-	pass
+def _derivation_text(derivation: Derivation) -> str:
+	payload = derivation.payload
+	parts = [f"{derivation.kind}: {payload.get('title', '')}"]
+	for key in ("summary", "notes", "location"):
+		if payload.get(key):
+			parts.append(str(payload[key]))
+	return ". ".join(parts)
+
+
+async def _embed(ctx: PipelineContext, capture: Capture) -> None:
+	"""Dual granularity: capture chunks for recall, derivation rows for precision."""
+	source = capture.text or ""
+	pieces = chunk_text(source)
+	derivations = (
+		await ctx.session.scalars(
+			select(Derivation)
+			.where(
+				Derivation.capture_id == capture.id,
+				Derivation.user_id == capture.user_id,
+				Derivation.status != "rejected",
+			)
+			.order_by(Derivation.created_at, Derivation.id)
+		)
+	).all()
+	texts = [p.text for p in pieces] + [_derivation_text(d) for d in derivations]
+	if not texts:
+		raise TerminalError("nothing to embed: the capture has no text")
+
+	result = await ctx.embedder.embed_documents(texts)
+
+	# Supersede rather than delete: message_citations point at chunk ids, and a
+	# citation must keep resolving to the text the answer was grounded in.
+	now = dt.datetime.now(dt.UTC)
+	await ctx.session.execute(
+		text(
+			"UPDATE chunks SET superseded_at = :now "
+			"WHERE capture_id = :capture_id AND user_id = :user_id "
+			"AND superseded_at IS NULL"
+		),
+		{"now": now, "capture_id": capture.id, "user_id": capture.user_id},
+	)
+	vectors = iter(result.vectors)
+	for piece in pieces:
+		ctx.session.add(
+			Chunk(
+				id=uuid7(),
+				user_id=capture.user_id,
+				capture_id=capture.id,
+				derivation_id=None,
+				ordinal=piece.ordinal,
+				text=piece.text,
+				char_start=piece.char_start,
+				char_end=piece.char_end,
+				embedding=next(vectors),
+				embedding_model=ctx.embedder.model,
+				embedding_dim=ctx.embedder.dim,
+			)
+		)
+	for offset, derivation in enumerate(derivations, start=len(pieces)):
+		ctx.session.add(
+			Chunk(
+				id=uuid7(),
+				user_id=capture.user_id,
+				capture_id=capture.id,
+				derivation_id=derivation.id,
+				ordinal=offset,
+				text=_derivation_text(derivation),
+				char_start=0,
+				char_end=0,
+				embedding=next(vectors),
+				embedding_model=ctx.embedder.model,
+				embedding_dim=ctx.embedder.dim,
+			)
+		)
+	log.info(
+		"stage.embed",
+		capture_id=str(capture.id),
+		model=ctx.embedder.model,
+		chunks=len(pieces),
+		derivation_chunks=len(derivations),
+		tokens=result.total_tokens,
+	)
 
 
 STAGES: tuple[Stage, ...] = (
@@ -188,8 +285,8 @@ STAGES: tuple[Stage, ...] = (
 	Stage(
 		name="embed",
 		status=CaptureStatus.EMBEDDING,
-		version=lambda ctx: "noop",
-		run=_not_yet,
+		version=lambda ctx: f"{CHUNKER_VERSION}/{ctx.embedder.model}",
+		run=_embed,
 		applies=lambda c: True,
 	),
 )
@@ -268,9 +365,9 @@ async def process_capture(
 		if not stage.applies(capture):
 			continue
 		version = stage.version(ctx)
-		# Status advances even for a stage that is skipped as already done, so a re-run
-		# that resumes mid-pipeline still walks the machine to `ready` in order.
-		if capture.status != stage.status.value:
+		# Status advances (forward only) even for a stage skipped as already done, so
+		# a re-run that resumes mid-pipeline still walks the machine to `ready`.
+		if _ORDER.index(CaptureStatus(capture.status)) < _ORDER.index(stage.status):
 			transition(capture, stage.status)
 		run_id = await _claim_run(session, capture, stage, version)
 		await commit_and_rebind(session, user_id)
