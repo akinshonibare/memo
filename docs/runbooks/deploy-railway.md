@@ -7,13 +7,16 @@ services built from this repo (issue #42, Q8).
 
 | Service | Settings | Start command |
 | --- | --- | --- |
-| `api` | Dockerfile build, health check `/health`, pre-deploy `alembic upgrade head`, restart on failure | `uvicorn memo.main:app --host 0.0.0.0 --port $PORT` |
+| `api` | Dockerfile build, health check `/health`, pre-deploy `alembic upgrade head`, restart on failure | `sh -c 'uvicorn memo.main:app --host 0.0.0.0 --port ${PORT:-8000}'` |
 | `worker` | Dockerfile build, restart on failure | `arq memo.worker.WorkerSettings` |
 
 Both use the same `Dockerfile`. Railway deprecated `railway.json` config files in
 September 2026, so these settings live on the services themselves (set through the
 Railway MCP/CLI at provisioning time; visible under each service's Settings). Migrations
 run once per API deploy as the pre-deploy command, as the owner role.
+
+The start command is wrapped in `sh -c` because Railway runs the override without a
+shell, so a bare `$PORT` is passed literally and uvicorn refuses it.
 
 Provisioned 2026-09-28: project `memo` (id `bfce4149-…`), environment `production`,
 services `Postgres`, `Redis`, bucket `recordings` (ams), `api`, `worker`.
