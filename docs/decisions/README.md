@@ -74,6 +74,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0020](0020-morning-view-pins-the-idea-reads-items-live.md) | Morning view pins the idea, reads todos and events live | active |
 | [0021](0021-ask-reads-derivations-live.md) | Ask reads retrieved notes' derivations live; knows today | active |
 | [0022](0022-deleting-a-note-keeps-its-derivations.md) | Deleting a note keeps its derivations; citations cascade | active |
+| [0023](0023-no-daily-morning-push.md) | No daily morning push; push waits for V4's quality bar | provisional |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

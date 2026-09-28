@@ -16,7 +16,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   record and write, detail with review, delete, playback, Ask sheet, Settings.
 - **Quality gates**: 122 tests against real Postgres, ruff, mypy strict, migrations cycled,
   evals for extraction (recorded), retrieval and faithfulness. CI runs on every PR.
-- **Decisions**: ADRs 0001–0022 in [decisions/](decisions/). 0006 and 0018 are superseded.
+- **Decisions**: ADRs 0001–0023 in [decisions/](decisions/). 0006 and 0018 are superseded.
 
 ## Not done, in the order it should happen
 
@@ -32,8 +32,9 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    through the 04:00 build. Ships with the next EAS preview build (no OTA updates yet).
    The server snapshot went stale during the day (a todo rejected at 09:00 stayed on
    Today); fixed by [ADR 0020](decisions/0020-morning-view-pins-the-idea-reads-items-live.md):
-   the idea is pinned at 04:00, todos and events are read live. Then decide whether a push
-   notification is worth an APNs setup.
+   the idea is pinned at 04:00, todos and events are read live. Push: decided against a
+   daily one ([ADR 0023](decisions/0023-no-daily-morning-push.md)); revisit after two weeks
+   of use.
 3. **Edit and add derivations from the app.** _Done in the app:_ a card awaiting review
    has Confirm / Edit / Reject, a confirmed or added one is tapped to edit, and a ready note
    has "Add what it missed" (todo, event, or idea). Adds `@react-native-community/datetimepicker`,
