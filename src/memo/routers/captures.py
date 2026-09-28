@@ -1,0 +1,232 @@
+import datetime as dt
+import uuid
+from typing import Annotated, Any
+
+import structlog
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import ValidationError
+from sqlalchemy import and_, or_, select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
+
+from memo.auth import CurrentUser
+from memo.db import DbSession, commit_and_rebind
+from memo.ids import uuid7
+from memo.models import Capture, Derivation, Recording
+from memo.pagination import decode_cursor, encode_cursor
+from memo.routers.limits import limit_capture
+from memo.routers.recordings import get_object_store
+from memo.schemas.captures import (
+	CaptureCreate,
+	CaptureDetail,
+	CaptureOut,
+	CapturePage,
+)
+from memo.schemas.derivations import (
+	DerivationCreate,
+	DerivationOut,
+	validate_payload,
+	validation_detail,
+)
+from memo.services.queue import Queue
+from memo.services.storage import ObjectStore
+from memo.status import CaptureStatus, transition
+
+log = structlog.get_logger("memo.captures")
+
+router = APIRouter(prefix="/captures", tags=["captures"])
+
+
+def get_queue(request: Request) -> Queue:
+	queue: Queue = request.app.state.queue
+	return queue
+
+
+async def _enqueue(queue: Queue, capture: Capture) -> None:
+	request_id = structlog.contextvars.get_contextvars().get("request_id")
+	try:
+		await queue.enqueue_process_capture(capture.id, capture.user_id, request_id)
+	except Exception:
+		# The row is committed, so nothing is lost: the stale-pending sweep re-enqueues.
+		log.exception("enqueue.failed", capture_id=str(capture.id))
+
+
+async def _owned_capture(
+	session: DbSession, capture_id: uuid.UUID, user_id: uuid.UUID
+) -> Capture:
+	capture = await session.scalar(
+		select(Capture).where(Capture.id == capture_id, Capture.user_id == user_id)
+	)
+	if capture is None:
+		raise HTTPException(status.HTTP_404_NOT_FOUND)
+	return capture
+
+
+@router.post(
+	"",
+	status_code=status.HTTP_202_ACCEPTED,
+	response_model=CaptureOut,
+	dependencies=[Depends(limit_capture)],
+)
+async def create_capture(
+	body: CaptureCreate,
+	session: DbSession,
+	user_id: CurrentUser,
+	store: Annotated[ObjectStore, Depends(get_object_store)],
+	queue: Annotated[Queue, Depends(get_queue)],
+) -> Capture:
+	values: dict[str, Any] = {
+		"id": uuid7(),
+		"user_id": user_id,
+		"client_token": body.client_token,
+	}
+	if body.recording_id is not None:
+		recording = await session.scalar(
+			select(Recording).where(
+				Recording.id == body.recording_id, Recording.user_id == user_id
+			)
+		)
+		if recording is None:
+			raise HTTPException(status.HTTP_404_NOT_FOUND, "recording not found")
+		if not await store.exists(recording.storage_key):
+			raise HTTPException(
+				status.HTTP_409_CONFLICT, "recording has not been uploaded yet"
+			)
+		values.update(kind="audio", recording_id=recording.id)
+	else:
+		values.update(kind="text", text=body.text)
+
+	stmt = (
+		insert(Capture)
+		.values(**values)
+		.on_conflict_do_nothing(constraint="uq_captures_user_client_token")
+		.returning(Capture)
+	)
+	try:
+		capture = (await session.scalars(stmt)).one_or_none()
+	except IntegrityError as exc:
+		raise HTTPException(
+			status.HTTP_409_CONFLICT, "recording is already attached to a capture"
+		) from exc
+	if capture is None:
+		# A replay: the client already submitted this token. Return the row it created;
+		# it was enqueued the first time.
+		existing = await session.scalars(
+			select(Capture).where(
+				Capture.user_id == user_id, Capture.client_token == body.client_token
+			)
+		)
+		return existing.one()
+
+	# Commit before enqueueing: the durability boundary is the committed row, and a
+	# worker that dequeues before the commit would find nothing.
+	await commit_and_rebind(session, user_id)
+	await _enqueue(queue, capture)
+	return capture
+
+
+@router.get("", response_model=CapturePage)
+async def list_captures(
+	session: DbSession,
+	user_id: CurrentUser,
+	cursor: str | None = None,
+	limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> CapturePage:
+	stmt = (
+		select(Capture)
+		.where(Capture.user_id == user_id)
+		.order_by(Capture.created_at.desc(), Capture.id.desc())
+		.limit(limit + 1)
+	)
+	if cursor is not None:
+		after_created, after_id = decode_cursor(cursor)
+		stmt = stmt.where(
+			or_(
+				Capture.created_at < after_created,
+				and_(Capture.created_at == after_created, Capture.id < after_id),
+			)
+		)
+	rows = list((await session.scalars(stmt)).all())
+	page = rows[:limit]
+	next_cursor = (
+		encode_cursor(page[-1].created_at, page[-1].id) if len(rows) > limit else None
+	)
+	return CapturePage(
+		items=[CaptureOut.model_validate(c) for c in page], next_cursor=next_cursor
+	)
+
+
+@router.get("/{capture_id}", response_model=CaptureDetail)
+async def get_capture(
+	capture_id: uuid.UUID, session: DbSession, user_id: CurrentUser
+) -> CaptureDetail:
+	"""The capture, its processing status, and its derivations (design doc, Step 3)."""
+	capture = await _owned_capture(session, capture_id, user_id)
+	derivations = await session.scalars(
+		select(Derivation)
+		.where(Derivation.capture_id == capture.id, Derivation.user_id == user_id)
+		.order_by(Derivation.created_at, Derivation.id)
+	)
+	return CaptureDetail(
+		**CaptureOut.model_validate(capture).model_dump(),
+		derivations=[DerivationOut.model_validate(d) for d in derivations.all()],
+	)
+
+
+@router.post(
+	"/{capture_id}/retry",
+	status_code=status.HTTP_202_ACCEPTED,
+	response_model=CaptureOut,
+)
+async def retry_capture(
+	capture_id: uuid.UUID,
+	session: DbSession,
+	user_id: CurrentUser,
+	queue: Annotated[Queue, Depends(get_queue)],
+) -> Capture:
+	"""Dead-letter exit: the user asks for another go (issue #19)."""
+	capture = await _owned_capture(session, capture_id, user_id)
+	if capture.status != CaptureStatus.FAILED.value:
+		raise HTTPException(
+			status.HTTP_409_CONFLICT, "only a failed capture can be retried"
+		)
+	transition(capture, CaptureStatus.PENDING)
+	await commit_and_rebind(session, user_id)
+	await _enqueue(queue, capture)
+	return capture
+
+
+@router.post(
+	"/{capture_id}/derivations",
+	status_code=status.HTTP_201_CREATED,
+	response_model=DerivationOut,
+)
+async def add_derivation(
+	capture_id: uuid.UUID,
+	body: DerivationCreate,
+	session: DbSession,
+	user_id: CurrentUser,
+) -> Derivation:
+	"""The extractor missed one. A recall failure, recorded as `user_created` so it
+	is distinguishable from a PATCH (a precision failure) in the eval intake."""
+	capture = await _owned_capture(session, capture_id, user_id)
+	try:
+		payload = validate_payload(body.kind, body.payload)
+	except ValidationError as exc:
+		raise HTTPException(
+			status.HTTP_422_UNPROCESSABLE_CONTENT, validation_detail(exc)
+		) from exc
+	derivation = Derivation(
+		id=uuid7(),
+		user_id=user_id,
+		capture_id=capture.id,
+		kind=body.kind,
+		payload=payload,
+		status="user_created",
+		extractor_version="user",
+		confidence=None,
+		reviewed_at=dt.datetime.now(dt.UTC),
+	)
+	session.add(derivation)
+	await session.flush()
+	return derivation

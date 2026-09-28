@@ -8,7 +8,9 @@ services:
     ports:
       - "${POSTGRES_HOST_PORT}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # Postgres 18 images keep data under /var/lib/postgresql/<major>/ and refuse the
+      # pre-18 /var/lib/postgresql/data mount, so the mount is one level up.
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "${POSTGRES_USER}", "-d", "${POSTGRES_DB}", "-h", "localhost"]
       interval: 5s
@@ -24,6 +26,25 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "PING"]
       start_period: 3s
+  # S3-compatible object storage standing in for a Railway Bucket in dev and tests
+  # (RustFS: MinIO no longer publishes public images). The bucket itself is created
+  # by the app on startup in local/test environments.
+  s3:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY_ID}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_ACCESS_KEY}
+    ports:
+      - "${S3_HOST_PORT}:9000"
+    volumes:
+      - s3data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 volumes:
   pgdata:
   redisdata:
+  s3data:

@@ -1,0 +1,223 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useCallback, useEffect, useState } from "react";
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Api, type Capture } from "../api";
+import { AskBar, IconCircle } from "../components";
+import { ACTIVE_STATUSES, formatStamp, headline, statusLabel } from "../format";
+import { colors, ui } from "../ui";
+
+const POLL_MS = 3000;
+
+export function HomeScreen({
+  api,
+  refreshKey,
+  onOpen,
+  onAsk,
+  onRecord,
+  onCompose,
+  onSettings,
+}: {
+  api: Api;
+  refreshKey: number;
+  onOpen: (id: string) => void;
+  onAsk: () => void;
+  onRecord: () => void;
+  onCompose: () => void;
+  onSettings: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const [captures, setCaptures] = useState<Capture[]>([]);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const page = await api.listCaptures(50);
+      setCaptures(page.items);
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [api]);
+
+  const anyActive = captures.some((c) => ACTIVE_STATUSES.has(c.status));
+  useEffect(() => {
+    const first = setTimeout(refresh, 0);
+    const timer = setInterval(refresh, anyActive ? POLL_MS : POLL_MS * 5);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [refresh, anyActive, refreshKey]);
+
+  const q = query.trim().toLowerCase();
+  const shown = q
+    ? captures.filter((c) => (c.text ?? "").toLowerCase().includes(q))
+    : captures;
+
+  return (
+    <View style={ui.screen}>
+      <View style={[styles.topBar, ui.pad]}>
+        <IconCircle name="settings-outline" onPress={onSettings} />
+        <IconCircle name="create-outline" onPress={onCompose} />
+      </View>
+      <Text style={[ui.h1, ui.pad]}>memo</Text>
+      <View style={[styles.search, { marginHorizontal: 20 }]}>
+        <Ionicons name="search" size={20} color={colors.muted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search"
+          placeholderTextColor={colors.muted}
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+        />
+      </View>
+      {error && (
+        <Text style={[ui.danger, ui.pad, { marginBottom: 8 }]}>{error}</Text>
+      )}
+      <FlatList
+        data={shown}
+        keyExtractor={(c) => c.id}
+        renderItem={({ item }) => (
+          <Row capture={item} onPress={() => onOpen(item.id)} />
+        )}
+        ItemSeparatorComponent={() => (
+          <View style={[ui.hairline, { marginHorizontal: 20 }]} />
+        )}
+        contentContainerStyle={{ paddingBottom: 140 + insets.bottom }}
+        keyboardShouldPersistTaps="handled"
+        ListEmptyComponent={
+          <Text style={[ui.empty, { marginTop: 48 }]}>
+            {q
+              ? "Nothing matches."
+              : "Nothing captured yet.\nTap record, or write a note."}
+          </Text>
+        }
+      />
+      <View
+        style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) }]}
+      >
+        <AskBar onPress={onAsk} />
+        <Pressable
+          onPress={onRecord}
+          style={({ pressed }) => [
+            styles.record,
+            pressed && styles.recordPressed,
+          ]}
+          accessibilityLabel="Record a voice note"
+        />
+      </View>
+    </View>
+  );
+}
+
+function Row({ capture, onPress }: { capture: Capture; onPress: () => void }) {
+  const { title, rest: snippet } = headline(capture);
+  const status = statusLabel(capture.status);
+  const failed = capture.status === "failed";
+  const showActions = capture.kind === "audio" || status !== null;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && { opacity: 0.7 }]}
+    >
+      <Text style={ui.meta}>{formatStamp(capture.created_at)}</Text>
+      <Text style={ui.rowTitle} numberOfLines={2}>
+        {title}
+      </Text>
+      {snippet && (
+        <Text style={ui.bodyMuted} numberOfLines={2}>
+          {snippet}
+        </Text>
+      )}
+      {showActions && (
+        <View style={styles.rowActions}>
+          {capture.kind === "audio" && (
+            <View style={styles.chip}>
+              <Ionicons name="mic" size={16} color={colors.text} />
+              <Text style={styles.chipText}>Voice</Text>
+            </View>
+          )}
+          {status && (
+            <View style={[styles.chip, failed && styles.chipDanger]}>
+              <Text
+                style={[styles.chipText, failed && { color: colors.danger }]}
+              >
+                {status}
+              </Text>
+            </View>
+          )}
+          <View style={{ flex: 1 }} />
+          <IconCircle name="ellipsis-horizontal" size={40} onPress={onPress} />
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingTop: 4,
+  },
+  search: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    height: 50,
+    marginBottom: 8,
+  },
+  searchInput: { flex: 1, color: colors.text, fontSize: 18 },
+  row: { paddingHorizontal: 20, paddingVertical: 18, gap: 2 },
+  rowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    height: 40,
+  },
+  chipDanger: { backgroundColor: "#2a1214" },
+  chipText: { color: colors.text, fontSize: 16, fontWeight: "700" },
+  bottom: {
+    position: "absolute",
+    left: 20,
+    right: 20,
+    bottom: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  record: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: colors.record,
+    borderWidth: 6,
+    borderColor: "#3a1a19",
+  },
+  recordPressed: { transform: [{ scale: 0.94 }] },
+});

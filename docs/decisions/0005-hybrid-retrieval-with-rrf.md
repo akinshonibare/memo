@@ -1,6 +1,8 @@
 # 0005 — Hybrid retrieval fused with reciprocal rank fusion, not pure vector search
 
-**Status:** provisional
+**Status:** active — since [#32](https://github.com/akinshonibare/memo/issues/32) (2026-09-28). One
+addition found by the eval: the lexical branch ORs the question's terms, because
+`websearch_to_tsquery`'s default AND almost never matches a whole question.
 **Date:** 2026-08-17
 
 ## Problem

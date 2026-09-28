@@ -1,0 +1,50 @@
+{
+  "expo": {
+    "name": "memo",
+    "slug": "memo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "backgroundColor": "#000000",
+      "bundleIdentifier": "com.akinshonibare.memo",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "memo records voice notes so they can be transcribed.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.akinshonibare.memo",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-audio",
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "backgroundColor": "#000000",
+    "extra": {
+      "eas": {
+        "projectId": "fb5218ca-c4c4-4ee2-b97d-0c38e4a7d58d"
+      }
+    },
+    "owner": "akiin"
+  }
+}

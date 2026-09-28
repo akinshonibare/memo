@@ -1,0 +1,20 @@
+{"id": "q01", "question": "what did I need to talk to Tunde about?", "expected": ["c01"], "note": "proper noun: lexical should nail it"}
+{"id": "q02", "question": "when was I anxious about work?", "expected": ["c02"], "note": "mood query; the word appears, but paraphrases would not"}
+{"id": "q03", "question": "when is the dentist?", "expected": ["c03"]}
+{"id": "q04", "question": "what was my idea about resurfacing old notes?", "expected": ["c04"]}
+{"id": "q05", "question": "where did I have lunch with Dami?", "expected": ["c05"]}
+{"id": "q06", "question": "why is reciprocal rank fusion better than weighting scores?", "expected": ["c06"], "note": "paraphrase of the stored text"}
+{"id": "q07", "question": "what time does Kemi land?", "expected": ["c07"]}
+{"id": "q08", "question": "have I been sleeping badly?", "expected": ["c08"]}
+{"id": "q09", "question": "when does my car insurance run out?", "expected": ["c09"], "note": "'run out' vs 'lapses': semantic"}
+{"id": "q10", "question": "what did I think about extraction and correctness?", "expected": ["c10"]}
+{"id": "q11", "question": "who is sending me a contract?", "expected": ["c11"]}
+{"id": "q12", "question": "where is the offsite?", "expected": ["c12"]}
+{"id": "q13", "question": "what does Priya need from me?", "expected": ["c13"]}
+{"id": "q14", "question": "when did I last feel calm?", "expected": ["c14"], "note": "mood paraphrase"}
+{"id": "q15", "question": "why did the RLS tests pass for the wrong reason?", "expected": ["c15"]}
+{"id": "q16", "question": "what are we doing for mum's birthday?", "expected": ["c16"]}
+{"id": "q17", "question": "am I thinking of stopping the side project?", "expected": ["c17"], "note": "'stopping' vs 'quitting'"}
+{"id": "q18", "question": "when is the plumber coming?", "expected": ["c18"]}
+{"id": "q19", "question": "what does ef_search control?", "expected": ["c19"], "note": "rare token"}
+{"id": "q20", "question": "everything about Tunde", "expected": ["c01", "c20"], "note": "two captures share a name"}

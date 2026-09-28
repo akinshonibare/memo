@@ -1,6 +1,6 @@
 # 0011 — uuidv7 primary keys, generated in the application
 
-**Status:** provisional — becomes `active` the moment [#7](https://github.com/akinshonibare/memo/issues/7) lands
+**Status:** active — since [#7](https://github.com/akinshonibare/memo/issues/7) (2026-09-27)
 **Date:** 2026-08-18
 
 ## Problem

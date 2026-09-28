@@ -24,6 +24,7 @@ audio/
 node_modules/
 .expo/
 dist/
+apps/mobile/.claude/
 
 # OS
 .DS_Store

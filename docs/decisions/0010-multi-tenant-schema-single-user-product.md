@@ -1,6 +1,6 @@
 # 0010 — A multi-tenant schema under a single-user product
 
-**Status:** provisional — becomes `active` the moment [#7](https://github.com/akinshonibare/memo/issues/7) lands
+**Status:** active — since [#7](https://github.com/akinshonibare/memo/issues/7) (2026-09-27)
 **Date:** 2026-08-18
 
 ## Problem
@@ -85,6 +85,18 @@ rather than raise, and a NULL comparison matches no rows, so the failure mode is
 
 Sequence: boundary in migration 1 ([#7](https://github.com/akinshonibare/memo/issues/7)),
 RLS once there is a session to hang it on ([#6](https://github.com/akinshonibare/memo/issues/6)).
+
+**Landed (2026-09-27), with one deviation.** Migration 0001 enables RLS on `users` and
+`captures` with `NULLIF(current_setting('app.user_id', true), '')::uuid` (the `NULLIF`
+matters: after a `SET LOCAL` ends, the setting reads as `''`, and `''::uuid` raises rather
+than matching nothing). `memo.db.get_session` calls `set_config(..., true)` inside the
+request transaction. The app connects as a non-owner role `memo_app`. **`FORCE ROW LEVEL
+SECURITY` was not applied**: forcing it makes the owner fail closed too, so every migration
+seed and every future backfill would have to bind a user first — the "why is this empty"
+tax this ADR already names. The owner-bypass trap is closed differently: a test asserts the
+API's connection is `memo_app` and not a superuser, so pointing tests at the owner URL goes
+red instead of silently passing. Two-user isolation, fail-closed on a missing bind, and
+`WITH CHECK` rejecting a forged `user_id` each have a test.
 
 ## What we're accepting
 
