@@ -1,6 +1,6 @@
 # 0002 — Postgres + pgvector, not a dedicated vector database
 
-**Status:** provisional
+**Status:** active — since [#30](https://github.com/akinshonibare/memo/issues/30) (2026-09-28)
 **Date:** 2026-08-17
 
 ## Problem

@@ -3,9 +3,11 @@ import uuid
 from decimal import Decimal
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
 	BigInteger,
 	CheckConstraint,
+	Computed,
 	DateTime,
 	Float,
 	ForeignKey,
@@ -18,7 +20,7 @@ from sqlalchemy import (
 	func,
 	text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from memo.ids import uuid7
@@ -232,3 +234,55 @@ class LLMCallRow(Base):
 
 
 Index("ix_llm_calls_user_created", LLMCallRow.user_id, LLMCallRow.created_at)
+
+
+EMBEDDING_DIM = 1024
+
+
+class Chunk(Base):
+	"""The retrieval unit and what a citation addresses. Never deleted on re-chunk:
+	superseded, so an old citation still resolves to the text it was grounded in."""
+
+	__tablename__ = "chunks"
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID]
+	capture_id: Mapped[uuid.UUID]
+	derivation_id: Mapped[uuid.UUID | None]
+	ordinal: Mapped[int]
+	text: Mapped[str] = mapped_column(Text)
+	char_start: Mapped[int]
+	char_end: Mapped[int]
+	embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM))
+	embedding_model: Mapped[str] = mapped_column(String(64))
+	embedding_dim: Mapped[int]
+	tsv: Mapped[str | None] = mapped_column(
+		TSVECTOR, Computed("to_tsvector('english', text)", persisted=True)
+	)
+	superseded_at: Mapped[dt.datetime | None]
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+	__table_args__ = (
+		UniqueConstraint("id", "user_id", name="uq_chunks_id_user"),
+		ForeignKeyConstraint(
+			["capture_id", "user_id"],
+			["captures.id", "captures.user_id"],
+			name="fk_chunks_capture_same_user",
+			ondelete="CASCADE",
+		),
+		ForeignKeyConstraint(
+			["derivation_id", "user_id"],
+			["derivations.id", "derivations.user_id"],
+			name="fk_chunks_derivation_same_user",
+			ondelete="CASCADE",
+		),
+	)
+
+
+Index("ix_chunks_user_created", Chunk.user_id, Chunk.created_at)
+Index("ix_chunks_capture", Chunk.capture_id)
+Index(
+	"ix_chunks_user_live",
+	Chunk.user_id,
+	postgresql_where=text("superseded_at IS NULL"),
+)
