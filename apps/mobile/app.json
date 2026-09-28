@@ -1,14 +1,19 @@
 {
   "expo": {
     "name": "memo",
-    "slug": "mobile",
+    "slug": "memo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
-      "backgroundColor": "#000000"
+      "backgroundColor": "#000000",
+      "bundleIdentifier": "com.akinshonibare.memo",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "memo records voice notes so they can be transcribed.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +22,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.akinshonibare.memo"
     },
     "web": {
       "favicon": "./assets/favicon.png"
