@@ -3,6 +3,8 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from memo.schemas.derivations import DerivationOut
+
 
 class CaptureCreate(BaseModel):
 	# extra="forbid" so a user_id smuggled into the body is a 422, not silently ignored.
@@ -32,6 +34,10 @@ class CaptureOut(BaseModel):
 	failure_reason: str | None
 	attempt_count: int
 	created_at: dt.datetime
+
+
+class CaptureDetail(CaptureOut):
+	derivations: list[DerivationOut]
 
 
 class CapturePage(BaseModel):
