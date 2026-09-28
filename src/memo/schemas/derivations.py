@@ -34,7 +34,14 @@ _LEAKED_FIELD = re.compile(r"""['"]\s*,\s*['"]?\w+['"]?\s*:""")
 
 
 class _Item(BaseModel):
-	model_config = ConfigDict(extra="forbid")
+	# In the extraction *output* schema (serialization mode) every field is required,
+	# defaults included. Constrained decoding emits properties in declared order, and
+	# an optional `confidence` declared second let the model skip it, write `summary`,
+	# then smuggle the confidence into the summary string: `...morning.','confidence':1`
+	# or a runaway loop to max_tokens. Validation (PATCH bodies) is unaffected.
+	model_config = ConfigDict(
+		extra="forbid", json_schema_serialization_defaults_required=True
+	)
 
 	title: str = Field(min_length=1, max_length=200)
 	confidence: float = Field(default=1.0, ge=0.0, le=1.0)
@@ -92,7 +99,9 @@ PAYLOAD_MODELS: dict[str, type[_Item]] = {
 class Extraction(BaseModel):
 	"""What the extractor returns for one capture. Empty lists are a valid answer."""
 
-	model_config = ConfigDict(extra="forbid")
+	model_config = ConfigDict(
+		extra="forbid", json_schema_serialization_defaults_required=True
+	)
 
 	todos: list[TodoPayload] = Field(default_factory=list)
 	events: list[EventPayload] = Field(default_factory=list)

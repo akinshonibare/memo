@@ -5,7 +5,9 @@ history is measurable rather than mysterious."""
 import datetime as dt
 from zoneinfo import ZoneInfo
 
-EXTRACTOR_VERSION = "extract-v1"
+# v1.1: same prompt text; the constrained output schema now requires every field
+# (see AnthropicExtractionProvider). Stamped separately because outputs differ.
+EXTRACTOR_VERSION = "extract-v1.1"
 
 SYSTEM_PROMPT = """\
 You extract structured items from a single entry in one person's private journal.

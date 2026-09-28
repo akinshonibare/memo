@@ -65,3 +65,14 @@ def test_leaked_json_in_a_text_field_is_rejected() -> None:
 		TodoPayload(title="Call Tunde", notes='about pricing", "due": "2026-10-02')
 	# Ordinary punctuation is fine.
 	IdeaPayload(title="Quote", summary="She said 'no, thanks': that was it.")
+
+
+def test_the_extraction_output_schema_requires_every_field() -> None:
+	# An optional `confidence` declared second let constrained decoding skip it, and
+	# the model then wrote it inside `summary` or looped to max_tokens (extract-v1.1).
+	schema = Extraction.model_json_schema(mode="serialization")
+	assert schema["required"] == ["todos", "events", "ideas"]
+	for name, definition in schema["$defs"].items():
+		assert set(definition["required"]) == set(definition["properties"]), name
+	# PATCH bodies are validated in the other mode, where confidence stays optional.
+	assert "confidence" not in IdeaPayload.model_json_schema()["required"]

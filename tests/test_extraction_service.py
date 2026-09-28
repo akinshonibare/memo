@@ -86,4 +86,4 @@ async def test_provider_transient_errors_propagate_as_retryable() -> None:
 
 
 def test_version_stamps_prompt_and_model() -> None:
-	assert Extractor(ScriptedProvider([])).version == "extract-v1/claude-test"
+	assert Extractor(ScriptedProvider([])).version == "extract-v1.1/claude-test"

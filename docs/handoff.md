@@ -41,11 +41,13 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    PATCH used to flip `user_created` to `confirmed`, erasing the recall signal; an edit
    now confirms only what was `pending_review`. Still open: nothing reads the signal yet;
    the eval intake from real corrections is part of item 4.
-4. **Arm the extraction gate with real data.** Record a live run
-   (`uv run python -m evals.extraction.run --record evals/extraction/recorded.json`) so CI
-   measures Opus against the golden set instead of a replay. Replace the synthetic golden
-   cases with real captures as they accumulate. Watch for the leaked-JSON case that the
-   validator now catches.
+4. **Arm the extraction gate with real data.** _Armed:_ `evals/extraction/recorded.json` is
+   a live `claude-opus-5` run, so CI now scores real outputs (todo 0.96/0.92, event 1.00/1.00,
+   idea 0.78/0.88 precision/recall). The run found g05 corrupted on every sample (leaked
+   JSON, once a runaway to `max_tokens`); root cause and fix in ADR 0015's later finding
+   (`extract-v1.1`). Known misses are listed in `evals/extraction/README.md`. Still open:
+   replace the synthetic golden cases with real captures (every edit/add from item 3 is one),
+   and a semantic title matcher for paraphrased ideas.
 5. **First PITR restore drill.** Dashboard only: Postgres → Backups → restore to a sibling,
    then `scripts/restore_drill.sh` against it, and write the RTO into
    [runbooks/backups-and-restore.md](runbooks/backups-and-restore.md). Nobody has done it.
