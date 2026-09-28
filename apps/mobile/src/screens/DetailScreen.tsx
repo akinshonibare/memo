@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type CaptureDetail, type Derivation } from "../api";
-import { AskBar, IconCircle, Pill } from "../components";
-import { ACTIVE_STATUSES, formatDue, formatStamp, formatWhen, headline, statusLabel } from "../format";
+import { AskBar, IconCircle, Pill, confirmDelete } from "../components";
+import { ACTIVE_STATUSES, formatClock, formatDue, formatStamp, formatWhen, headline, statusLabel } from "../format";
+import { playUrl, stopPlayback, usePlayingId } from "../playback";
 import { colors, ui } from "../ui";
 
 const POLL_MS = 3000;
@@ -75,6 +76,33 @@ export function DetailScreen({
     }
   };
 
+  const playingId = usePlayingId();
+  const togglePlay = async () => {
+    if (!capture) return;
+    if (playingId === capture.id) {
+      stopPlayback();
+      return;
+    }
+    try {
+      const audio = await api.getAudio(capture.id);
+      await playUrl(capture.id, audio.url);
+    } catch (e) {
+      setError(`Couldn't play: ${String(e)}`);
+    }
+  };
+  const remove = () =>
+    confirmDelete("Delete this note? Everything extracted from it goes too.", async () => {
+      if (!capture) return;
+      if (playingId === capture.id) stopPlayback();
+      try {
+        await api.deleteCapture(capture.id);
+        onChanged();
+        onBack();
+      } catch (e) {
+        setError(`Couldn't delete: ${String(e)}`);
+      }
+    });
+
   const pending = capture?.derivations.filter((d) => d.status === "pending_review") ?? [];
   const settled = capture?.derivations.filter((d) => d.status !== "pending_review") ?? [];
 
@@ -83,9 +111,13 @@ export function DetailScreen({
       <View style={[styles.topBar, ui.pad]}>
         <IconCircle name="chevron-back" onPress={onBack} />
         <View style={{ flex: 1 }} />
+        {capture?.kind === "audio" && (
+          <IconCircle name={playingId === capture.id ? "stop" : "play"} onPress={togglePlay} />
+        )}
         {capture?.status === "failed" && (
           <Pill label="Retry" tone="light" onPress={retry} busy={busy === "retry"} />
         )}
+        {capture && <IconCircle name="ellipsis-horizontal" onPress={remove} />}
       </View>
       <ScrollView
         contentContainerStyle={[ui.pad, { paddingBottom: 140 + insets.bottom }]}
@@ -93,7 +125,10 @@ export function DetailScreen({
       >
         {capture && (
           <>
-            <Text style={ui.meta}>{formatStamp(capture.created_at, true)}</Text>
+            <Text style={ui.meta}>
+              {formatStamp(capture.created_at, true)}
+              {capture.duration_ms != null ? ` · ${formatClock(capture.duration_ms)}` : ""}
+            </Text>
             <Text style={[ui.h2, { marginTop: 6 }]}>{headline(capture).title}</Text>
             {headline(capture).rest && (
               <Text style={[ui.body, { marginTop: 14 }]}>{headline(capture).rest}</Text>
@@ -186,7 +221,7 @@ function DerivationCard({
 }
 
 const styles = StyleSheet.create({
-  topBar: { flexDirection: "row", alignItems: "center", paddingTop: 4, marginBottom: 20 },
+  topBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 4, marginBottom: 20 },
   processing: { alignItems: "center", paddingVertical: 56 },
   failure: {
     marginTop: 24,

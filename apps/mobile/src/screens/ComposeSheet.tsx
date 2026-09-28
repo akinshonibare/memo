@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, StyleSheet, Text, TextInput, View } from "react-native";
 import { Api, ApiError, type Capture } from "../api";
 import { IconCircle, Pill, SheetHandle } from "../components";
+import { useKeyboardHeight } from "../keyboard";
 import { colors, ui } from "../ui";
 
 export function ComposeSheet({
@@ -16,6 +17,7 @@ export function ComposeSheet({
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const keyboard = useKeyboardHeight();
 
   const save = async () => {
     const body = text.trim();
@@ -33,10 +35,7 @@ export function ComposeSheet({
 
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={styles.sheet}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-      >
+      <View style={[styles.sheet, { paddingBottom: 24 + keyboard }]}>
         <SheetHandle />
         <View style={styles.top}>
           <View style={{ flex: 1 }} />
@@ -57,7 +56,7 @@ export function ComposeSheet({
         <View style={styles.actions}>
           <Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!text.trim()} />
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
