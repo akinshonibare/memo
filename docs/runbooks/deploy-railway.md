@@ -50,8 +50,12 @@ S3_REGION=${{Bucket.REGION}}
 S3_ADDRESSING_STYLE=auto
 ANTHROPIC_API_KEY=...
 VOYAGE_API_KEY=...
+VOYAGE_API_URL=https://ai.mongodb.com/v1/embeddings   # only for keys minted in MongoDB Atlas (al-…); omit for Voyage-dashboard keys (pa-…)
 DEEPGRAM_API_KEY=...
 ```
+
+The three provider keys are pushed from the local `.env` with `scripts/push_secrets.sh`,
+which sets them on both services and redeploys once.
 
 The first `alembic upgrade head` creates the `memo_app` role with `APP_DB_PASSWORD`;
 `DATABASE_URL` must use that same password. Postgres on Railway uses TLS; asyncpg
