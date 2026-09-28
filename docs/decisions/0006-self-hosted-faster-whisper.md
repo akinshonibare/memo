@@ -1,9 +1,10 @@
 # 0006 — Self-hosted faster-whisper, not hosted STT
 
-**Status:** under revision — ⚠️ the homelab is off the table (2026-08-17)
-This ADR's core argument was "audio never leaves the machine." Without a homelab there is
-no such machine, and the privacy premise collapses. Do not cite this ADR until it is
-replaced. Superseding decision pending — see [../open-questions.md](../open-questions.md) Q8.
+**Status:** superseded by [0013](0013-hosted-stt-not-self-hosted-whisper.md) (2026-09-27)
+This ADR's core argument was "audio never leaves the machine." Q8 removed the machine
+(2026-08-17): without a homelab the privacy premise collapses. The reasoning below was
+right for the topology it was written against — it was *overtaken*, not wrong. Kept
+unedited; see 0013's "What changed".
 **Date:** 2026-08-17
 
 ## Problem
