@@ -1,5 +1,7 @@
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import { useState } from "react";
-import { Modal, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Api } from "../api";
 import { type Config, saveBaseUrl } from "../config";
 import { IconCircle, Pill, SheetHandle } from "../components";
@@ -11,17 +13,20 @@ export function SettingsSheet({
   onClose,
   onBaseUrlChanged,
   onSignOut,
+  onDataDeleted,
 }: {
   visible: boolean;
   config: Config;
   onClose: () => void;
   onBaseUrlChanged: (baseUrl: string) => void;
   onSignOut: () => void;
+  onDataDeleted: () => void;
 }) {
   const [baseUrl, setBaseUrl] = useState(config.baseUrl);
   const [timezone, setTimezone] = useState(deviceTimezone());
   const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"save" | "signout" | null>(null);
+  const [busy, setBusy] = useState<"save" | "signout" | "export" | "delete" | null>(null);
+  const [dataStatus, setDataStatus] = useState<string | null>(null);
   const signedIn = !!config.token;
 
   const save = async () => {
@@ -55,6 +60,53 @@ export function SettingsSheet({
     }
   };
 
+  // Everything as one JSON file, handed to the share sheet (Files, AirDrop, Mail).
+  // Recordings are download links inside it that expire, not bytes.
+  const exportData = async () => {
+    setBusy("export");
+    setDataStatus(null);
+    try {
+      const data = await new Api(config).exportEverything();
+      const day = new Date().toISOString().slice(0, 10);
+      const uri = `${FileSystem.cacheDirectory}memo-export-${day}.json`;
+      await FileSystem.writeAsStringAsync(uri, JSON.stringify(data, null, 2));
+      await Sharing.shareAsync(uri, { UTI: "public.json", mimeType: "application/json" });
+    } catch (error) {
+      setDataStatus(`Export failed: ${String(error)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const deleteData = () =>
+    Alert.alert(
+      "Delete everything?",
+      "Every note, recording, extracted item and conversation is removed for good. You stay signed in. Export first if you want a copy.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete everything",
+          style: "destructive",
+          onPress: async () => {
+            setBusy("delete");
+            setDataStatus(null);
+            try {
+              const api = new Api(config);
+              const me = await api.getMe();
+              const result = await api.deleteEverything(me.id);
+              const notes = result.deleted.captures ?? 0;
+              setDataStatus(`Deleted ${notes} note${notes === 1 ? "" : "s"}.`);
+              onDataDeleted();
+            } catch (error) {
+              setDataStatus(`Delete failed: ${String(error)}`);
+            } finally {
+              setBusy(null);
+            }
+          },
+        },
+      ],
+    );
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.sheet}>
@@ -63,40 +115,53 @@ export function SettingsSheet({
           <View style={{ flex: 1 }} />
           <IconCircle name="close" onPress={onClose} />
         </View>
-        <Text style={[ui.h2, { marginTop: 12, marginBottom: 20 }]}>Settings</Text>
-        {signedIn && (
-          <>
-            <Text style={ui.label}>Timezone</Text>
-            <TextInput
-              style={styles.input}
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={timezone}
-              onChangeText={setTimezone}
-              placeholder="America/Toronto"
-              placeholderTextColor={colors.muted}
-            />
-          </>
-        )}
-        <Text style={ui.label}>Server</Text>
-        <TextInput
-          style={styles.input}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          value={baseUrl}
-          onChangeText={setBaseUrl}
-          placeholder="https://api-production-xxxx.up.railway.app"
-          placeholderTextColor={colors.muted}
-        />
-        {status && <Text style={[ui.danger, { marginBottom: 12 }]}>{status}</Text>}
-        <View style={styles.actions}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 40 }}>
+          <Text style={[ui.h2, { marginTop: 12, marginBottom: 20 }]}>Settings</Text>
           {signedIn && (
-            <Pill label="Sign out" tone="danger" onPress={signOut} busy={busy === "signout"} />
+            <>
+              <Text style={ui.label}>Timezone</Text>
+              <TextInput
+                style={styles.input}
+                autoCapitalize="none"
+                autoCorrect={false}
+                value={timezone}
+                onChangeText={setTimezone}
+                placeholder="America/Toronto"
+                placeholderTextColor={colors.muted}
+              />
+            </>
           )}
-          <View style={{ flex: 1 }} />
-          <Pill label="Save" tone="light" onPress={save} busy={busy === "save"} disabled={!baseUrl.trim()} />
-        </View>
+          <Text style={ui.label}>Server</Text>
+          <TextInput
+            style={styles.input}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            value={baseUrl}
+            onChangeText={setBaseUrl}
+            placeholder="https://api-production-xxxx.up.railway.app"
+            placeholderTextColor={colors.muted}
+          />
+          {status && <Text style={[ui.danger, { marginBottom: 12 }]}>{status}</Text>}
+          <View style={styles.actions}>
+            {signedIn && (
+              <Pill label="Sign out" tone="danger" onPress={signOut} busy={busy === "signout"} />
+            )}
+            <View style={{ flex: 1 }} />
+            <Pill label="Save" tone="light" onPress={save} busy={busy === "save"} disabled={!baseUrl.trim()} />
+          </View>
+          {signedIn && (
+            <View style={styles.data}>
+              <Text style={ui.label}>Your data</Text>
+              <View style={styles.actions}>
+                <Pill label="Export" icon="share-outline" onPress={exportData} busy={busy === "export"} />
+                <View style={{ flex: 1 }} />
+                <Pill label="Delete everything" tone="danger" onPress={deleteData} busy={busy === "delete"} />
+              </View>
+              {dataStatus && <Text style={[ui.meta, { marginTop: 12 }]}>{dataStatus}</Text>}
+            </View>
+          )}
+        </ScrollView>
       </View>
     </Modal>
   );
@@ -123,4 +188,5 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   actions: { flexDirection: "row", alignItems: "center" },
+  data: { marginTop: 36 },
 });

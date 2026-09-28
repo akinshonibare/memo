@@ -106,6 +106,10 @@ export default function App() {
             setSettings(false);
           }}
           onSignOut={signOut}
+          onDataDeleted={() => {
+            setView({ name: "home" });
+            bump();
+          }}
         />
       </SafeAreaView>
     </SafeAreaProvider>

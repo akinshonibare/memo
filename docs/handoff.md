@@ -53,8 +53,18 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    `answer-v2` attaches each retrieved note's live derivations (date, review status) and
    states today's date; derivation chunks now carry their dates; rejecting retires a chunk.
    Not done: re-embedding on edit/add, and date-range questions ("what's this week?").
-7. **Housekeeping.** Remove the stale `API_TOKEN` variable from both Railway services.
-   Export and delete-everything are server-only; give them a home in Settings.
+7. **Housekeeping.** _Done:_ `API_TOKEN` removed from both Railway services (2026-09-28).
+   Settings has Export (JSON through the share sheet, via `expo-sharing`) and Delete
+   everything. Delete-everything was failing for anyone who had used Ask (citation FK,
+   [#55](https://github.com/akinshonibare/memo/issues/55)); fixed by deleting
+   conversations before captures. Single-note delete still hits #55.
+
+## Filed for later
+
+- [#55](https://github.com/akinshonibare/memo/issues/55): deleting a note that an answer
+  cited fails with an FK violation.
+- [#56](https://github.com/akinshonibare/memo/issues/56): deleting a note should keep its
+  extracted todos, events and ideas. Do with #55; one ADR.
 
 ## Rules that still apply
 

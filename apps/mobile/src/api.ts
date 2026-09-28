@@ -146,6 +146,20 @@ export class Api {
     return this.request<MorningView>("/v1/morning");
   }
 
+  // --- your data (issue #49) --------------------------------------------------------
+
+  exportEverything() {
+    return this.request<unknown>("/v1/me/export");
+  }
+
+  // The server makes you name your own user id, so a stray call can't do this.
+  deleteEverything(userId: string) {
+    return this.request<{ deleted: Record<string, number> }>(
+      `/v1/me/data?confirm=${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+    );
+  }
+
   // --- captures -----------------------------------------------------------------
 
   createTextCapture(text: string) {

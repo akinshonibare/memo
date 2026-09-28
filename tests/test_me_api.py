@@ -72,7 +72,14 @@ async def _populate(
 		json={"kind": "todo", "payload": {"title": "Call Tunde"}},
 	)
 	conversation = (await client.post("/v1/conversations")).json()["id"]
-	await client.post(f"/v1/conversations/{conversation}/messages", json={"text": "hi"})
+	asked = await client.post(
+		f"/v1/conversations/{conversation}/messages",
+		json={"text": "what about Tunde?"},
+	)
+	# Stream the answer so citations exist: they point at the captures' chunks, and a
+	# delete that removes captures before conversations trips on them (#55).
+	async with client.stream("GET", asked.json()["stream_url"]) as response:
+		await response.aread()
 	return {"text": text_capture, "audio": audio_capture, "key": str(key)}
 
 
