@@ -14,7 +14,6 @@ from memo.services.retry import RetryableError, TerminalError, classify_status
 
 log = structlog.get_logger("memo.embeddings")
 
-VOYAGE_URL = "https://api.voyageai.com/v1/embeddings"
 BATCH = 128
 
 
@@ -38,10 +37,17 @@ class Embedder(Protocol):
 
 class VoyageEmbedder:
 	def __init__(
-		self, *, api_key: str, http: httpx.AsyncClient, model: str, dim: int
+		self,
+		*,
+		api_key: str,
+		http: httpx.AsyncClient,
+		model: str,
+		dim: int,
+		url: str,
 	) -> None:
 		self._api_key = api_key
 		self._http = http
+		self._url = url
 		self.model = model
 		self.dim = dim
 
@@ -49,7 +55,7 @@ class VoyageEmbedder:
 		started = time.perf_counter()
 		try:
 			response = await self._http.post(
-				VOYAGE_URL,
+				self._url,
 				json={
 					"input": texts,
 					"model": self.model,
@@ -116,4 +122,5 @@ def make_embedder(settings: Settings, http: httpx.AsyncClient) -> Embedder:
 		http=http,
 		model=settings.embedding_model,
 		dim=settings.embedding_dim,
+		url=settings.voyage_api_url,
 	)

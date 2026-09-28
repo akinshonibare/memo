@@ -57,6 +57,10 @@ class Settings(BaseSettings):
 
 	# Embeddings (ADR 0016). Changing the model or dim is a full re-embed.
 	voyage_api_key: SecretStr | None = None
+	# Keys minted in the Voyage dashboard (`pa-…`) work against api.voyageai.com; keys
+	# minted in MongoDB Atlas (`al-…`) only work against ai.mongodb.com. Same request
+	# and response shape either way.
+	voyage_api_url: str = "https://api.voyageai.com/v1/embeddings"
 	embedding_model: str = "voyage-4"
 	embedding_dim: int = 1024
 	hnsw_ef_search: int = 100

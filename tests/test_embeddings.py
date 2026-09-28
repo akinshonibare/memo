@@ -14,6 +14,7 @@ def _embedder(handler: Any, dim: int = 4) -> VoyageEmbedder:
 		http=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
 		model="voyage-4",
 		dim=dim,
+		url="https://voyage.test/v1/embeddings",
 	)
 
 
