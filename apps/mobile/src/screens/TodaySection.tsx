@@ -38,6 +38,8 @@ export function useMorning(api: Api, refreshKey: number): MorningView | null {
 // Today's events and todos, then one resurfaced idea. No overdue labels and no counts,
 // matching the server: a todo whose day has passed is simply still on the list.
 export function TodaySection({ view, onOpen }: { view: MorningView; onOpen: (captureId: string) => void }) {
+  // An item whose note was deleted (ADR 0022) has nothing to open.
+  const open = (captureId: string | null) => (captureId ? () => onOpen(captureId) : undefined);
   const idea = view.resurfaced_idea;
   const empty = view.events.length === 0 && view.todos.length === 0 && !idea;
   if (empty) return null;
@@ -53,7 +55,7 @@ export function TodaySection({ view, onOpen }: { view: MorningView; onOpen: (cap
               icon="calendar-outline"
               title={e.title}
               detail={[formatTime(e.starts_at), e.location].filter(Boolean).join(" · ")}
-              onPress={() => onOpen(e.capture_id)}
+              onPress={open(e.capture_id)}
             />
           ))}
           {view.todos.map((t) => (
@@ -62,14 +64,15 @@ export function TodaySection({ view, onOpen }: { view: MorningView; onOpen: (cap
               icon="ellipse-outline"
               title={t.title}
               detail={t.notes}
-              onPress={() => onOpen(t.capture_id)}
+              onPress={open(t.capture_id)}
             />
           ))}
         </View>
       )}
       {idea && (
         <Pressable
-          onPress={() => onOpen(idea.capture_id)}
+          onPress={open(idea.capture_id)}
+          disabled={!idea.capture_id}
           style={({ pressed }) => [styles.card, styles.idea, pressed && styles.pressed]}
         >
           <Text style={ui.meta}>An idea from {formatDay(idea.captured_on, true)}</Text>
@@ -94,10 +97,10 @@ function Item({
   icon: "calendar-outline" | "ellipse-outline";
   title: string;
   detail: string | null;
-  onPress: () => void;
+  onPress?: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.item, pressed && styles.pressed]}>
+    <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => [styles.item, pressed && styles.pressed]}>
       <Ionicons name={icon} size={20} color={colors.muted} style={styles.icon} />
       <View style={{ flex: 1 }}>
         <Text style={styles.itemTitle}>{title}</Text>

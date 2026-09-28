@@ -5,7 +5,7 @@ from typing import Annotated, Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import ValidationError
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -30,6 +30,7 @@ from memo.schemas.derivations import (
 	validate_payload,
 	validation_detail,
 )
+from memo.services.derivation_index import enqueue_reembed
 from memo.services.queue import Queue
 from memo.services.storage import ObjectStore
 from memo.status import CaptureStatus, transition
@@ -234,10 +235,24 @@ async def delete_capture(
 	user_id: CurrentUser,
 	store: Annotated[ObjectStore, Depends(get_object_store)],
 ) -> None:
-	"""Hard delete. Derivations, chunks and citations cascade in the database; the
-	recording's bytes are removed from the bucket first, while the row still knows
-	its key. An orphaned chunk would keep answering questions, so nothing is soft."""
+	"""Delete the note, keep what the user got out of it (ADR 0022).
+
+	Gone: the text, the recording (bytes removed from the bucket first, while the row
+	still knows its key), every text chunk, and the derivations the user rejected.
+	Kept, with capture_id set to NULL by the foreign key: the todos, events and ideas
+	that weren't rejected, and their chunks, so Ask and Today still see them.
+	Citations of deleted chunks cascade with them. Nothing is soft-deleted: a text
+	chunk left behind would keep answering questions about a note that is gone. The
+	database removes text chunks itself (a BEFORE DELETE trigger, migration 0008), so
+	no deletion path - this route, delete-everything, a user cascade - can forget."""
 	capture = await _owned_capture(session, capture_id, user_id)
+	await session.execute(
+		delete(Derivation).where(
+			Derivation.capture_id == capture.id,
+			Derivation.user_id == user_id,
+			Derivation.status == "rejected",
+		)
+	)
 	if capture.recording_id is not None:
 		recording = await session.scalar(
 			select(Recording).where(
@@ -285,6 +300,7 @@ async def add_derivation(
 	body: DerivationCreate,
 	session: DbSession,
 	user_id: CurrentUser,
+	queue: Annotated[Queue, Depends(get_queue)],
 ) -> Derivation:
 	"""The extractor missed one. A recall failure, recorded as `user_created` so it
 	is distinguishable from a PATCH (a precision failure) in the eval intake."""
@@ -307,5 +323,6 @@ async def add_derivation(
 		reviewed_at=dt.datetime.now(dt.UTC),
 	)
 	session.add(derivation)
-	await session.flush()
+	await commit_and_rebind(session, user_id)
+	await enqueue_reembed(queue, derivation)
 	return derivation

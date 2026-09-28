@@ -21,7 +21,7 @@ export function DerivationSheet({
   onSaved,
 }: {
   api: Api;
-  captureId: string;
+  captureId: string | null; // only needed to add; null when editing a kept item
   kind: Kind;
   existing?: Derivation;
   onClose: () => void;
@@ -58,7 +58,7 @@ export function DerivationSheet({
     setBusy(true);
     try {
       if (existing) await api.reviewDerivation(existing.id, { payload: payload() });
-      else await api.addDerivation(captureId, kind, payload());
+      else if (captureId) await api.addDerivation(captureId, kind, payload());
       onSaved();
       onClose();
     } catch (e) {

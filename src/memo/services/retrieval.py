@@ -22,7 +22,7 @@ RRF_K = 60
 @dataclass(frozen=True)
 class Hit:
 	chunk_id: uuid.UUID
-	capture_id: uuid.UUID
+	capture_id: uuid.UUID | None
 	derivation_id: uuid.UUID | None
 	text: str
 	created_at: dt.datetime
@@ -123,7 +123,9 @@ async def search(
 		)
 	).all()
 
-	by_id: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID | None, str, dt.datetime]] = {}
+	by_id: dict[
+		uuid.UUID, tuple[uuid.UUID | None, uuid.UUID | None, str, dt.datetime]
+	] = {}
 	for row in [*vector_rows, *keyword_rows]:
 		by_id[row[0]] = (row[1], row[2], row[3], row[4])
 	vector_ranked = [row[0] for row in vector_rows]
@@ -135,14 +137,17 @@ async def search(
 		rrf(vector_ranked, keyword_ranked).items(), key=lambda kv: (-kv[1], str(kv[0]))
 	)
 	hits: list[Hit] = []
-	seen_captures: set[uuid.UUID] = set()
+	seen_sources: set[uuid.UUID] = set()
 	for chunk_id, score in fused:
 		capture_id, derivation_id, chunk_text, created_at = by_id[chunk_id]
 		# One chunk per capture: overlap and derivation rows would otherwise let a
-		# single capture take several of the k slots.
-		if capture_id in seen_captures:
+		# single capture take several of the k slots. A derivation that outlived its
+		# note (ADR 0022) is its own source.
+		source = capture_id or derivation_id
+		assert source is not None, "ck_chunks_has_owner"
+		if source in seen_sources:
 			continue
-		seen_captures.add(capture_id)
+		seen_sources.add(source)
 		hits.append(
 			Hit(
 				chunk_id=chunk_id,

@@ -15,14 +15,32 @@ Record a live run with `--record out.json` to produce an offline replay file for
 
 ## Recorded run (2026-09-28, `extract-v1.1/claude-opus-5`)
 
-`recorded.json` arms the CI gate. Known misses, so they aren't mistaken for regressions:
+`recorded.json` arms the CI gate; `matches.json` holds a model's judgement of which
+predicted item is which expected one (`matching.py`, `match-v1`), so paraphrases score as
+hits. Each verdict carries a fingerprint of exactly the items it judged; where that no
+longer fits (a label changed, a new recording), scoring falls back to lexical title
+matching for that example, and the run prints how many examples used recorded matches.
 
-- **Matcher artifacts, not model errors:** g14 ("Commit before enqueue as the durability
-  boundary" vs "Write path should commit before enqueuing") and g40 ("Get the eval set
-  done" vs "Finish the eval set"). Title token matching can't see these paraphrases. The
-  fix is a semantic matcher (an LLM judge with recorded verdicts), not a looser threshold.
-- **Real misses:** g34 adds an idea duplicating the todo it also extracted (precision);
-  g36 folds "compare quotes" into the renewal todo's notes instead of a second todo (recall).
+Current misses, both real:
 
-Re-record after any change to the prompt, schema, or model, and read the misses before
-committing the file: a green gate over a stale recording measures nothing.
+- **g34** adds an idea duplicating the todo it also extracted (precision).
+- **g36** folds "compare quotes" into the renewal todo's notes instead of a second todo
+  (recall).
+
+Re-record after any change to the prompt, schema, or model, then re-judge:
+
+    uv run python -m evals.extraction.run --record evals/extraction/recorded.json
+    uv run python -m evals.extraction.run --replay evals/extraction/recorded.json --match
+
+Read the misses before committing either file: a green gate over a stale recording
+measures nothing.
+
+## Real captures
+
+    uv run python -m evals.extraction.harvest export.json --timezone <zone> > candidates.jsonl
+
+`export.json` is Settings → Export in the app. A capture is a candidate once its review is
+finished; its label is what you kept (confirmed, edited, added). The harvester only
+prints: read each candidate before moving it into `golden.jsonl`, since it is your own
+text. Then re-record and re-judge. Aim to replace the synthetic cases, not add to them:
+the gate should measure your notes, not Claude's idea of them.

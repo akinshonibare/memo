@@ -180,7 +180,12 @@ function AssistantTurn({ turn, onOpenCapture }: { turn: Turn; onOpenCapture: (id
           </Pressable>
           {open &&
             cited.map((c) => (
-              <Pressable key={c.chunk_id} onPress={() => onOpenCapture(c.capture_id)} style={styles.citation}>
+              <Pressable
+                key={c.chunk_id}
+                onPress={c.capture_id ? () => onOpenCapture(c.capture_id as string) : undefined}
+                disabled={!c.capture_id}
+                style={styles.citation}
+              >
                 <Text style={ui.meta}>
                   [{c.rank}] {formatStamp(c.created_at)}
                 </Text>

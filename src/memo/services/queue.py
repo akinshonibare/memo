@@ -10,11 +10,20 @@ from memo.config import Settings
 log = structlog.get_logger("memo.queue")
 
 PROCESS_CAPTURE = "process_capture_task"
+EMBED_DERIVATION = "embed_derivation_task"
 
 
 class Queue(Protocol):
 	async def enqueue_process_capture(
 		self, capture_id: uuid.UUID, user_id: uuid.UUID, request_id: str | None
+	) -> None: ...
+
+	async def enqueue_embed_derivation(
+		self,
+		derivation_id: uuid.UUID,
+		user_id: uuid.UUID,
+		fingerprint: str,
+		request_id: str | None,
 	) -> None: ...
 
 
@@ -38,6 +47,29 @@ class ArqQueue:
 			"enqueued",
 			job=PROCESS_CAPTURE,
 			capture_id=str(capture_id),
+			deduplicated=job is None,
+		)
+
+	async def enqueue_embed_derivation(
+		self,
+		derivation_id: uuid.UUID,
+		user_id: uuid.UUID,
+		fingerprint: str,
+		request_id: str | None,
+	) -> None:
+		# The fingerprint of the text to embed is in the id: a second edit while the
+		# first job runs is new content, so it must not be deduplicated away.
+		job = await self._pool.enqueue_job(
+			EMBED_DERIVATION,
+			str(derivation_id),
+			str(user_id),
+			request_id=request_id,
+			_job_id=f"embed_derivation:{derivation_id}:{fingerprint}",
+		)
+		log.info(
+			"enqueued",
+			job=EMBED_DERIVATION,
+			derivation_id=str(derivation_id),
 			deduplicated=job is None,
 		)
 

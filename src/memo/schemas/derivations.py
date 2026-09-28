@@ -131,7 +131,7 @@ class DerivationOut(BaseModel):
 	model_config = ConfigDict(from_attributes=True)
 
 	id: uuid.UUID
-	capture_id: uuid.UUID
+	capture_id: uuid.UUID | None  # None once its note is deleted (ADR 0022)
 	kind: str
 	payload: dict[str, Any]
 	status: str

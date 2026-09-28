@@ -20,7 +20,7 @@ import anthropic
 import structlog
 from anthropic import AsyncAnthropic
 from anthropic.types import MessageParam
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.config import Settings
@@ -198,7 +198,7 @@ class Event:
 def citation_payload(hit: Hit, rank: int) -> dict[str, Any]:
 	return {
 		"chunk_id": str(hit.chunk_id),
-		"capture_id": str(hit.capture_id),
+		"capture_id": str(hit.capture_id) if hit.capture_id else None,
 		"derivation_id": str(hit.derivation_id) if hit.derivation_id else None,
 		"rank": rank,
 		"snippet": hit.text[:280],
@@ -295,26 +295,53 @@ async def _notes(
 	later confirmation, edit, or addition. Rejected ones are left out."""
 	user = await session.get(User, user_id)
 	zone = tz_or_utc(user.timezone if user is not None else "UTC")
-	capture_ids = {h.capture_id for h in hits}
-	extracted: dict[uuid.UUID, list[str]] = {}
-	if capture_ids:
+	capture_ids = {h.capture_id for h in hits if h.capture_id is not None}
+	# A derivation whose note was deleted (ADR 0022) is retrieved on its own chunk,
+	# so it is read by its own id rather than through a capture.
+	orphan_ids = {
+		h.derivation_id
+		for h in hits
+		if h.capture_id is None and h.derivation_id is not None
+	}
+	by_capture: dict[uuid.UUID, list[str]] = {}
+	by_id: dict[uuid.UUID, str] = {}
+	if capture_ids or orphan_ids:
 		rows = await session.scalars(
 			select(Derivation)
 			.where(
 				Derivation.user_id == user_id,
-				Derivation.capture_id.in_(capture_ids),
+				or_(
+					Derivation.capture_id.in_(capture_ids),
+					Derivation.id.in_(orphan_ids),
+				),
 				Derivation.status != "rejected",
 			)
 			.order_by(Derivation.created_at, Derivation.id)
 		)
 		for d in rows:
-			extracted.setdefault(d.capture_id, []).append(
-				answer_v2.extracted_line(d.kind, d.payload, d.status, zone)
+			line = answer_v2.extracted_line(d.kind, d.payload, d.status, zone)
+			by_id[d.id] = line
+			if d.capture_id is not None:
+				by_capture.setdefault(d.capture_id, []).append(line)
+	notes = []
+	for i, h in enumerate(hits, start=1):
+		if h.capture_id is not None:
+			notes.append(
+				answer_v2.Note(
+					i, h.created_at, h.text, by_capture.get(h.capture_id, [])
+				)
 			)
-	notes = [
-		answer_v2.Note(i, h.created_at, h.text, extracted.get(h.capture_id, []))
-		for i, h in enumerate(hits, start=1)
-	]
+		elif h.derivation_id in by_id:
+			notes.append(
+				answer_v2.Note(
+					i,
+					h.created_at,
+					"(the note this came from was deleted)",
+					[by_id[h.derivation_id]],
+				)
+			)
+		else:
+			notes.append(answer_v2.Note(i, h.created_at, h.text))
 	return notes, dt.datetime.now(zone).date(), zone
 
 
@@ -465,7 +492,7 @@ async def replay(
 			"citations": [
 				{
 					"chunk_id": str(r[0]),
-					"capture_id": str(r[1]),
+					"capture_id": str(r[1]) if r[1] else None,
 					"derivation_id": str(r[2]) if r[2] else None,
 					"rank": r[3],
 					"snippet": r[4][:280],

@@ -37,7 +37,8 @@ class MessageAccepted(BaseModel):
 
 class CitationOut(BaseModel):
 	chunk_id: uuid.UUID
-	capture_id: uuid.UUID
+	# None when the chunk is a derivation whose note was deleted (ADR 0022).
+	capture_id: uuid.UUID | None
 	derivation_id: uuid.UUID | None
 	rank: int
 	snippet: str

@@ -16,7 +16,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   record and write, detail with review, delete, playback, Ask sheet, Settings.
 - **Quality gates**: 122 tests against real Postgres, ruff, mypy strict, migrations cycled,
   evals for extraction (recorded), retrieval and faithfulness. CI runs on every PR.
-- **Decisions**: ADRs 0001–0021 in [decisions/](decisions/). 0006 and 0018 are superseded.
+- **Decisions**: ADRs 0001–0023 in [decisions/](decisions/). 0006 and 0018 are superseded.
 
 ## Not done, in the order it should happen
 
@@ -32,8 +32,9 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    through the 04:00 build. Ships with the next EAS preview build (no OTA updates yet).
    The server snapshot went stale during the day (a todo rejected at 09:00 stayed on
    Today); fixed by [ADR 0020](decisions/0020-morning-view-pins-the-idea-reads-items-live.md):
-   the idea is pinned at 04:00, todos and events are read live. Then decide whether a push
-   notification is worth an APNs setup.
+   the idea is pinned at 04:00, todos and events are read live. Push: decided against a
+   daily one ([ADR 0023](decisions/0023-no-daily-morning-push.md)); revisit after two weeks
+   of use.
 3. **Edit and add derivations from the app.** _Done in the app:_ a card awaiting review
    has Confirm / Edit / Reject, a confirmed or added one is tapped to edit, and a ready note
    has "Add what it missed" (todo, event, or idea). Adds `@react-native-community/datetimepicker`,
@@ -47,26 +48,25 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    JSON, once a runaway to `max_tokens`); root cause and fix in ADR 0015's later finding
    (`extract-v1.1`). Known misses are listed in `evals/extraction/README.md`. Still open:
    replace the synthetic golden cases with real captures (every edit/add from item 3 is one),
-   and a semantic title matcher for paraphrased ideas.
+   Semantic matcher done (`matches.json`, recorded model verdicts, so CI stays offline);
+   `evals.extraction.harvest` turns an app export into candidate cases for Akin to review.
 5. **First PITR restore drill.** _Deferred_ to [#57](https://github.com/akinshonibare/memo/issues/57)
    (needs the Railway dashboard; Claude can run the verification half).
 6. **Ask should see what you confirmed.** _Done_ ([ADR 0021](decisions/0021-ask-reads-derivations-live.md)):
    `answer-v2` attaches each retrieved note's live derivations (date, review status) and
    states today's date; derivation chunks now carry their dates; rejecting retires a chunk.
-   Not done: re-embedding on edit/add, and date-range questions ("what's this week?").
+   Re-embedding on add/edit is done too (ADR 0021 update). Not done: date-range questions
+   ("what's this week?"), and backfilling dates into pre-existing derivation chunks.
 7. **Housekeeping.** _Done:_ `API_TOKEN` removed from both Railway services (2026-09-28).
    Settings has Export (JSON through the share sheet, via `expo-sharing`) and Delete
    everything. Delete-everything was failing for anyone who had used Ask (citation FK,
    [#55](https://github.com/akinshonibare/memo/issues/55)); fixed by deleting
-   conversations before captures. Single-note delete still hits #55.
+   conversations before captures.
 
 ## Filed for later
 
 - [#57](https://github.com/akinshonibare/memo/issues/57): the first PITR restore drill.
-- [#55](https://github.com/akinshonibare/memo/issues/55): deleting a note that an answer
-  cited fails with an FK violation.
-- [#56](https://github.com/akinshonibare/memo/issues/56): deleting a note should keep its
-  extracted todos, events and ideas. Do with #55; one ADR.
+- ~~#55, #56~~: done in ADR 0022 (deleting a note keeps its derivations; citations cascade).
 
 ## Rules that still apply
 

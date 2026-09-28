@@ -36,7 +36,7 @@ RECENT_WINDOW_DAYS = 7
 
 class TodoItem(BaseModel):
 	id: uuid.UUID
-	capture_id: uuid.UUID
+	capture_id: uuid.UUID | None
 	title: str
 	due: dt.date | None
 	notes: str | None
@@ -44,7 +44,7 @@ class TodoItem(BaseModel):
 
 class EventItem(BaseModel):
 	id: uuid.UUID
-	capture_id: uuid.UUID
+	capture_id: uuid.UUID | None
 	title: str
 	starts_at: dt.datetime
 	ends_at: dt.datetime | None
@@ -53,7 +53,7 @@ class EventItem(BaseModel):
 
 class ResurfacedIdea(BaseModel):
 	id: uuid.UUID
-	capture_id: uuid.UUID
+	capture_id: uuid.UUID | None
 	title: str
 	summary: str
 	captured_on: dt.date

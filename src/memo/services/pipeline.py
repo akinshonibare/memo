@@ -31,6 +31,7 @@ from memo.models import (
 	User,
 )
 from memo.services.chunking import CHUNKER_VERSION, chunk_text
+from memo.services.derivation_index import derivation_text
 from memo.services.embeddings import Embedder
 from memo.services.extraction import ExtractionFailed, ExtractorLike
 from memo.services.llm import LLMCall
@@ -183,20 +184,6 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 	)
 
 
-def _derivation_text(derivation: Derivation) -> str:
-	payload = derivation.payload
-	parts = [f"{derivation.kind}: {payload.get('title', '')}"]
-	# The resolved date is what a question like "what's on 6 October" matches on.
-	if payload.get("due"):
-		parts.append(f"due {payload['due']}")
-	if payload.get("starts_at"):
-		parts.append(f"starts {payload['starts_at']}")
-	for key in ("summary", "notes", "location"):
-		if payload.get(key):
-			parts.append(str(payload[key]))
-	return ". ".join(parts)
-
-
 async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 	"""Dual granularity: capture chunks for recall, derivation rows for precision."""
 	source = capture.text or ""
@@ -212,7 +199,7 @@ async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 			.order_by(Derivation.created_at, Derivation.id)
 		)
 	).all()
-	texts = [p.text for p in pieces] + [_derivation_text(d) for d in derivations]
+	texts = [p.text for p in pieces] + [derivation_text(d) for d in derivations]
 	if not texts:
 		raise TerminalError("nothing to embed: the capture has no text")
 
@@ -254,7 +241,7 @@ async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 				capture_id=capture.id,
 				derivation_id=derivation.id,
 				ordinal=offset,
-				text=_derivation_text(derivation),
+				text=derivation_text(derivation),
 				char_start=0,
 				char_end=0,
 				embedding=next(vectors),

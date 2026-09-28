@@ -9,12 +9,16 @@ import { AskSheet } from "./src/screens/AskScreen";
 import { ComposeSheet } from "./src/screens/ComposeSheet";
 import { DetailScreen } from "./src/screens/DetailScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
+import { ItemsScreen } from "./src/screens/ItemsScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { RecordSheet } from "./src/screens/RecordSheet";
 import { SettingsSheet } from "./src/screens/SettingsScreen";
 import { colors } from "./src/ui";
 
-type View_ = { name: "home" } | { name: "detail"; id: string };
+type View_ =
+  | { name: "home" }
+  | { name: "items" }
+  | { name: "detail"; id: string; back: "home" | "items" };
 
 export default function App() {
   const [fontsLoaded] = useFonts({ InstrumentSerif_400Regular });
@@ -68,18 +72,28 @@ export default function App() {
           <HomeScreen
             api={api}
             refreshKey={refreshKey}
-            onOpen={(id) => setView({ name: "detail", id })}
+            onOpen={(id) => setView({ name: "detail", id, back: "home" })}
+            onItems={() => setView({ name: "items" })}
             onAsk={() => setAsk(true)}
             onRecord={() => setRecord(true)}
             onCompose={() => setCompose(true)}
             onSettings={() => setSettings(true)}
           />
         )}
+        {api && view.name === "items" && (
+          <ItemsScreen
+            api={api}
+            refreshKey={refreshKey}
+            onBack={() => setView({ name: "home" })}
+            onOpenCapture={(id) => setView({ name: "detail", id, back: "items" })}
+            onChanged={bump}
+          />
+        )}
         {api && view.name === "detail" && (
           <DetailScreen
             api={api}
             id={view.id}
-            onBack={() => setView({ name: "home" })}
+            onBack={() => setView(view.back === "items" ? { name: "items" } : { name: "home" })}
             onAsk={() => setAsk(true)}
             onChanged={bump}
           />
@@ -91,7 +105,7 @@ export default function App() {
             onClose={() => setAsk(false)}
             onOpenCapture={(id) => {
               setAsk(false);
-              setView({ name: "detail", id });
+              setView({ name: "detail", id, back: "home" });
             }}
           />
         )}

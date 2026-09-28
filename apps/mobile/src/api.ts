@@ -16,7 +16,8 @@ export type Capture = {
 
 export type Derivation = {
   id: string;
-  capture_id: string;
+  // null once the note it came from is deleted: the item is kept (ADR 0022).
+  capture_id: string | null;
   kind: "todo" | "event" | "idea";
   payload: Record<string, unknown> & { title?: string };
   status: "pending_review" | "confirmed" | "rejected" | "user_created";
@@ -28,7 +29,7 @@ export type CaptureDetail = Capture & { derivations: Derivation[] };
 
 export type Citation = {
   chunk_id: string;
-  capture_id: string;
+  capture_id: string | null;
   derivation_id: string | null;
   rank: number;
   snippet: string;
@@ -48,10 +49,10 @@ export type Message = {
 export type MorningView = {
   local_date: string;
   timezone: string;
-  todos: { id: string; capture_id: string; title: string; due: string | null; notes: string | null }[];
+  todos: { id: string; capture_id: string | null; title: string; due: string | null; notes: string | null }[];
   events: {
     id: string;
-    capture_id: string;
+    capture_id: string | null;
     title: string;
     starts_at: string;
     ends_at: string | null;
@@ -59,7 +60,7 @@ export type MorningView = {
   }[];
   resurfaced_idea: {
     id: string;
-    capture_id: string;
+    capture_id: string | null;
     title: string;
     summary: string;
     captured_on: string;
@@ -219,6 +220,21 @@ export class Api {
   }
 
   // --- derivations --------------------------------------------------------------
+
+  // Newest first; kept derivations of deleted notes included (capture_id null).
+  async listDerivations(max = 400): Promise<Derivation[]> {
+    const items: Derivation[] = [];
+    let cursor: string | null = null;
+    do {
+      const query: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+      const page: { items: Derivation[]; next_cursor: string | null } = await this.request(
+        `/v1/derivations?limit=200${query}`,
+      );
+      items.push(...page.items);
+      cursor = page.next_cursor;
+    } while (cursor && items.length < max);
+    return items;
+  }
 
   reviewDerivation(id: string, body: { status?: "confirmed" | "rejected"; payload?: object }) {
     return this.request<Derivation>(`/v1/derivations/${id}`, {

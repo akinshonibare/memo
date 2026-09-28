@@ -14,6 +14,7 @@ from memo.config import get_settings
 from memo.db import make_engine, make_session_factory
 from memo.jobs import (
 	build_morning_views_task,
+	embed_derivation_task,
 	process_capture_task,
 	requeue_stale_captures_task,
 	sweep_unclaimed_recordings_task,
@@ -55,6 +56,7 @@ _settings = get_settings()
 class WorkerSettings:
 	functions = [
 		process_capture_task,
+		embed_derivation_task,
 		sweep_unclaimed_recordings_task,
 		requeue_stale_captures_task,
 		build_morning_views_task,
