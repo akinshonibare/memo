@@ -5,6 +5,7 @@ from memo.routers import (
 	captures,
 	conversations,
 	derivations,
+	me,
 	messages,
 	morning,
 	recordings,
@@ -19,3 +20,4 @@ v1.include_router(usage.router)
 v1.include_router(conversations.router)
 v1.include_router(messages.router)
 v1.include_router(morning.router)
+v1.include_router(me.router)

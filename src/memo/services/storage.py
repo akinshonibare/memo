@@ -14,6 +14,8 @@ class ObjectStore(Protocol):
 		self, key: str, content_type: str, ttl_seconds: int
 	) -> str: ...
 
+	async def presign_get(self, key: str, ttl_seconds: int) -> str: ...
+
 	async def exists(self, key: str) -> bool: ...
 
 	async def get(self, key: str) -> bytes: ...
@@ -66,6 +68,15 @@ class S3ObjectStore:
 			url: str = await s3.generate_presigned_url(
 				"put_object",
 				Params={"Bucket": self.bucket, "Key": key, "ContentType": content_type},
+				ExpiresIn=ttl_seconds,
+			)
+			return url
+
+	async def presign_get(self, key: str, ttl_seconds: int) -> str:
+		async with self._client() as s3:
+			url: str = await s3.generate_presigned_url(
+				"get_object",
+				Params={"Bucket": self.bucket, "Key": key},
 				ExpiresIn=ttl_seconds,
 			)
 			return url
