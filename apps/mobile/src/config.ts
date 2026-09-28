@@ -1,28 +1,34 @@
 import * as SecureStore from "expo-secure-store";
 
-// The API base URL and the static bearer token (ADR 0018). Both live in the device's
-// secure storage; nothing about the account is derivable from the app bundle.
+// The API base URL and the session token (ADR 0019). The token is issued by the server
+// after Sign in with Apple and lives only in the device's Keychain. The base URL has a
+// production default; the override exists for pointing a build at a local API.
+export const DEFAULT_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ?? "https://api-production-fd83.up.railway.app";
+
 const KEY_BASE_URL = "memo.baseUrl";
-const KEY_TOKEN = "memo.token";
+const KEY_TOKEN = "memo.session";
 
-export type Config = { baseUrl: string; token: string };
+export type Config = { baseUrl: string; token: string | null };
 
-export async function loadConfig(): Promise<Config | null> {
+const trimSlash = (url: string) => url.replace(/\/+$/, "");
+
+export async function loadConfig(): Promise<Config> {
   const [baseUrl, token] = await Promise.all([
     SecureStore.getItemAsync(KEY_BASE_URL),
     SecureStore.getItemAsync(KEY_TOKEN),
   ]);
-  if (baseUrl && token) return { baseUrl: baseUrl.replace(/\/+$/, ""), token };
-  // Development convenience: `EXPO_PUBLIC_API_URL=... EXPO_PUBLIC_API_TOKEN=... npx expo
-  // start` pre-configures a fresh install. Inlined at bundle time, so never set these
-  // for a production build.
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  const envToken = process.env.EXPO_PUBLIC_API_TOKEN;
-  if (envUrl && envToken) return { baseUrl: envUrl.replace(/\/+$/, ""), token: envToken };
-  return null;
+  return { baseUrl: trimSlash(baseUrl || DEFAULT_BASE_URL), token: token || null };
 }
 
-export async function saveConfig(config: Config): Promise<void> {
-  await SecureStore.setItemAsync(KEY_BASE_URL, config.baseUrl.trim());
-  await SecureStore.setItemAsync(KEY_TOKEN, config.token.trim());
+export async function saveBaseUrl(baseUrl: string): Promise<void> {
+  await SecureStore.setItemAsync(KEY_BASE_URL, trimSlash(baseUrl.trim()));
+}
+
+export async function saveSession(token: string): Promise<void> {
+  await SecureStore.setItemAsync(KEY_TOKEN, token);
+}
+
+export async function clearSession(): Promise<void> {
+  await SecureStore.deleteItemAsync(KEY_TOKEN);
 }

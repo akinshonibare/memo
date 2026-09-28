@@ -4,8 +4,8 @@ from uuid import UUID
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# The one user V1 ships with. Migration 0001 inserts this row; get_current_user returns
-# it until real auth arrives (ADR 0018). Version nibble 7, variant 8 - a valid uuidv7.
+# The user migration 0001 seeds. The first Sign in with Apple claims it (ADR 0019), so
+# data captured before auth existed stays with its owner. Version nibble 7, variant 8.
 SEED_USER_ID = UUID("00000000-0000-7000-8000-000000000001")
 
 
@@ -26,8 +26,13 @@ class Settings(BaseSettings):
 	# Password migration 0001 assigns to the memo_app role.
 	app_db_password: SecretStr
 
-	api_token: SecretStr
-	current_user_id: UUID = SEED_USER_ID
+	# Sign in with Apple (ADR 0019): the identity token's audience is the app's bundle
+	# id. Sessions the server issues in exchange live this long.
+	apple_bundle_id: str = "com.akinshonibare.memo"
+	session_ttl_days: int = 90
+	# The first Apple sign-in ever attaches to the seeded user rather than creating a
+	# new one, so pre-auth captures keep their owner. Off once that has happened.
+	claim_seed_user_on_first_login: bool = True
 
 	# arq's broker (ADR 0012: the product never reads job state from here).
 	redis_url: str = "redis://localhost:6379/0"

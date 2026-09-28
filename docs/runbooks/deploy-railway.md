@@ -40,7 +40,7 @@ LOG_LEVEL=INFO
 DATABASE_URL=postgresql+asyncpg://memo_app:<APP_DB_PASSWORD>@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}
 DATABASE_ADMIN_URL=postgresql+asyncpg://${{Postgres.PGUSER}}:${{Postgres.PGPASSWORD}}@${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}
 APP_DB_PASSWORD=<openssl rand -hex 24>
-API_TOKEN=<openssl rand -hex 32>            # api only; the Expo app carries it
+APPLE_BUNDLE_ID=com.akinshonibare.memo     # Sign in with Apple audience (ADR 0019)
 REDIS_URL=${{Redis.REDIS_URL}}
 S3_ENDPOINT=${{Bucket.ENDPOINT}}
 S3_BUCKET=${{Bucket.BUCKET}}
@@ -67,7 +67,7 @@ negotiates it when the server requires it, so no `?ssl=` suffix is needed.
 2. Create `api` from the repo; set its config file path; set the variables; deploy.
    The pre-deploy migration creates the schema, the app role, and the seeded user.
 3. Create `worker` from the same repo with `railway.worker.json`; same variables
-   minus `API_TOKEN`; deploy.
+   same variables; deploy.
 4. `curl https://<api-domain>/health` → 200. Then `POST /v1/captures` with the token.
 5. Set the seeded user's timezone: `UPDATE users SET timezone = 'Europe/London';`
    (the morning view builds at 04:00 in that zone).

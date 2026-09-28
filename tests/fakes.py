@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from anthropic.types import MessageParam
 
 from memo.schemas.derivations import Extraction
+from memo.services.apple import AppleIdentity, InvalidIdentityToken
 from memo.services.embeddings import EmbedResult
 from memo.services.extraction import ExtractResult, RawCompletion
 from memo.services.llm import LLMCall
@@ -217,3 +218,13 @@ class FakeQueue:
 		self, capture_id: uuid.UUID, user_id: uuid.UUID, request_id: str | None
 	) -> None:
 		self.jobs.append(EnqueuedJob(capture_id, user_id, request_id))
+
+
+class FakeIdentityVerifier:
+	"""Accepts tokens of the form `apple:<sub>[:<email>]`; rejects everything else."""
+
+	async def verify(self, identity_token: str) -> AppleIdentity:
+		parts = identity_token.split(":")
+		if len(parts) < 2 or parts[0] != "apple" or not parts[1]:
+			raise InvalidIdentityToken("not an apple token")
+		return AppleIdentity(sub=parts[1], email=parts[2] if len(parts) > 2 else None)

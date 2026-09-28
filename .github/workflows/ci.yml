@@ -10,7 +10,6 @@ env:
   DATABASE_URL: postgresql+asyncpg://memo_app:app-password@localhost:5432/memo
   DATABASE_ADMIN_URL: postgresql+asyncpg://memo:password@localhost:5432/memo
   APP_DB_PASSWORD: app-password
-  API_TOKEN: ci-token
   REDIS_URL: redis://localhost:6379/0
   S3_ENDPOINT: http://localhost:9000
   S3_BUCKET: memo-recordings

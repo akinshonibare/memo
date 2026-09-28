@@ -53,19 +53,26 @@ export class ApiError extends Error {
   }
 }
 
+export type Me = { id: string; timezone: string };
+
 export class Api {
+  // Called once when the server says the session is gone (401): the app signs out.
+  onUnauthorized: (() => void) | null = null;
+
   constructor(private config: Config) {}
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await fetch(`${this.config.baseUrl}${path}`, {
       ...init,
       headers: {
-        Authorization: `Bearer ${this.config.token}`,
+        ...(this.config.token ? { Authorization: `Bearer ${this.config.token}` } : {}),
         "Content-Type": "application/json",
         ...(init.headers ?? {}),
       },
     });
+    if (response.status === 204) return undefined as T;
     if (!response.ok) {
+      if (response.status === 401 && this.config.token) this.onUnauthorized?.();
       const body = await response.text();
       const retryAfter = Number(response.headers.get("Retry-After") ?? "");
       throw new ApiError(
@@ -81,16 +88,29 @@ export class Api {
     return fetch(`${this.config.baseUrl}/health`).then((r) => r.ok);
   }
 
+  // --- auth (ADR 0019) ------------------------------------------------------------
+
+  loginWithApple(body: { identity_token: string; full_name?: string; device_name?: string }) {
+    return this.request<{ token: string; user: Me }>("/v1/auth/apple", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  logout() {
+    return this.request<void>("/v1/auth/logout", { method: "POST" });
+  }
+
   // --- me -----------------------------------------------------------------------
 
   getMe() {
-    return this.request<{ id: string; timezone: string }>("/v1/me");
+    return this.request<Me>("/v1/me");
   }
 
   // The morning view and date extraction run in this zone, so it comes from the
   // device rather than a server-side config value.
   setTimezone(timezone: string) {
-    return this.request<{ id: string; timezone: string }>("/v1/me", {
+    return this.request<Me>("/v1/me", {
       method: "PATCH",
       body: JSON.stringify({ timezone }),
     });
@@ -182,6 +202,6 @@ export class Api {
   }
 
   get token() {
-    return this.config.token;
+    return this.config.token ?? "";
   }
 }

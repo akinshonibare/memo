@@ -45,10 +45,30 @@ class User(Base):
 
 	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
 	email: Mapped[str | None] = mapped_column(String(320), unique=True)
+	# Apple's stable per-app user identifier (ADR 0019). Null until first sign-in.
+	apple_sub: Mapped[str | None] = mapped_column(String(255), unique=True)
 	timezone: Mapped[str] = mapped_column(
 		String(64), default="UTC", server_default="UTC"
 	)
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+
+class Session(Base):
+	"""A server-issued bearer session. Only the hash of the token is stored; the
+	token itself exists in the device's Keychain and nowhere else."""
+
+	__tablename__ = "sessions"
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("users.id", ondelete="CASCADE"), index=True
+	)
+	token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+	device_name: Mapped[str | None] = mapped_column(String(120))
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+	expires_at: Mapped[dt.datetime]
+	last_seen_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+	revoked_at: Mapped[dt.datetime | None]
 
 
 class Recording(Base):
