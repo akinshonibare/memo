@@ -1,66 +1,96 @@
+import { InstrumentSerif_400Regular, useFonts } from "@expo-google-fonts/instrument-serif";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Api } from "./src/api";
 import { type Config, loadConfig } from "./src/config";
-import { AskScreen } from "./src/screens/AskScreen";
-import { CaptureScreen } from "./src/screens/CaptureScreen";
-import { ReviewScreen } from "./src/screens/ReviewScreen";
-import { SettingsScreen } from "./src/screens/SettingsScreen";
+import { AskSheet } from "./src/screens/AskScreen";
+import { ComposeSheet } from "./src/screens/ComposeSheet";
+import { DetailScreen } from "./src/screens/DetailScreen";
+import { HomeScreen } from "./src/screens/HomeScreen";
+import { RecordSheet } from "./src/screens/RecordSheet";
+import { SettingsSheet } from "./src/screens/SettingsScreen";
 import { colors } from "./src/ui";
 
-type Tab = "capture" | "review" | "ask" | "settings";
+type View_ = { name: "home" } | { name: "detail"; id: string };
 
 export default function App() {
+  const [fontsLoaded] = useFonts({ InstrumentSerif_400Regular });
   const [config, setConfig] = useState<Config | null | undefined>(undefined);
-  const [tab, setTab] = useState<Tab>("capture");
+  const [view, setView] = useState<View_>({ name: "home" });
+  const [ask, setAsk] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const [record, setRecord] = useState(false);
+  const [compose, setCompose] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    loadConfig().then((loaded) => {
-      setConfig(loaded);
-      if (!loaded) setTab("settings");
-    });
+    loadConfig().then(setConfig);
   }, []);
 
   const api = useMemo(() => (config ? new Api(config) : null), [config]);
+  const bump = () => setRefreshKey((k) => k + 1);
 
-  if (config === undefined) return <View style={styles.root} />;
+  if (!fontsLoaded || config === undefined) return <View style={styles.root} />;
 
   return (
-    <SafeAreaView style={styles.root}>
-      <StatusBar style="light" />
-      <View style={styles.body}>
-        {tab === "settings" || !api ? (
-          <SettingsScreen initial={config} onSaved={(c) => { setConfig(c); setTab("capture"); }} />
-        ) : tab === "capture" ? (
-          <CaptureScreen api={api} />
-        ) : tab === "review" ? (
-          <ReviewScreen api={api} />
-        ) : (
-          <AskScreen api={api} onOpenCapture={() => setTab("review")} />
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.root} edges={["top"]}>
+        <StatusBar style="light" />
+        {api && view.name === "home" && (
+          <HomeScreen
+            api={api}
+            refreshKey={refreshKey}
+            onOpen={(id) => setView({ name: "detail", id })}
+            onAsk={() => setAsk(true)}
+            onRecord={() => setRecord(true)}
+            onCompose={() => setCompose(true)}
+            onSettings={() => setSettings(true)}
+          />
         )}
-      </View>
-      <View style={styles.tabs}>
-        {(["capture", "review", "ask", "settings"] as Tab[]).map((t) => (
-          <Pressable key={t} style={styles.tab} onPress={() => setTab(t)}>
-            <Text style={[styles.tabText, tab === t && styles.tabActive]}>{t}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </SafeAreaView>
+        {api && view.name === "detail" && (
+          <DetailScreen
+            api={api}
+            id={view.id}
+            onBack={() => setView({ name: "home" })}
+            onAsk={() => setAsk(true)}
+            onChanged={bump}
+          />
+        )}
+        {api && (
+          <AskSheet
+            api={api}
+            visible={ask}
+            onClose={() => setAsk(false)}
+            onOpenCapture={(id) => {
+              setAsk(false);
+              setView({ name: "detail", id });
+            }}
+          />
+        )}
+        {api && record && (
+          <RecordSheet api={api} onClose={() => setRecord(false)} onSaved={bump} />
+        )}
+        {api && compose && (
+          <ComposeSheet api={api} onClose={() => setCompose(false)} onSaved={bump} />
+        )}
+        <SettingsSheet
+          visible={settings || !api}
+          initial={config}
+          dismissable={!!api}
+          onClose={() => setSettings(false)}
+          onSaved={(c) => {
+            setConfig(c);
+            setSettings(false);
+            setView({ name: "home" });
+          }}
+        />
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  body: { flex: 1 },
-  tabs: {
-    flexDirection: "row",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.surfaceAlt,
-    backgroundColor: colors.bg,
-  },
-  tab: { flex: 1, paddingVertical: 12, alignItems: "center" },
-  tabText: { color: colors.muted, textTransform: "capitalize" },
-  tabActive: { color: colors.text, fontWeight: "600" },
 });

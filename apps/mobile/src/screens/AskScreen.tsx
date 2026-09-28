@@ -1,6 +1,10 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   FlatList,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -9,20 +13,41 @@ import {
 } from "react-native";
 import EventSource from "react-native-sse";
 import { Api, type Citation, type Message } from "../api";
+import { IconCircle } from "../components";
+import { formatStamp } from "../format";
 import { colors, ui } from "../ui";
 
 type Turn = Message & { streaming?: boolean };
 type StreamEvent = "retrieval" | "token" | "done" | "error";
 
-// Multi-turn, streamed, citations visible before the first token (issue #45).
-export function AskScreen({ api, onOpenCapture }: { api: Api; onOpenCapture: (id: string) => void }) {
+// Multi-turn, streamed, citations arrive before the first token (issue #45). The
+// sheet stays mounted so the conversation survives being closed and reopened.
+export function AskSheet({
+  api,
+  visible,
+  onClose,
+  onOpenCapture,
+}: {
+  api: Api;
+  visible: boolean;
+  onClose: () => void;
+  onOpenCapture: (id: string) => void;
+}) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const source = useRef<EventSource<StreamEvent> | null>(null);
+  const list = useRef<FlatList<Turn>>(null);
 
   useEffect(() => () => source.current?.close(), []);
+
+  const reset = () => {
+    source.current?.close();
+    setConversationId(null);
+    setTurns([]);
+    setBusy(false);
+  };
 
   const ensureConversation = useCallback(async () => {
     if (conversationId) return conversationId;
@@ -86,64 +111,142 @@ export function AskScreen({ api, onOpenCapture }: { api: Api; onOpenCapture: (id
   }, [api, busy, ensureConversation, text]);
 
   return (
-    <View style={ui.screen}>
-      <FlatList
-        data={turns}
-        keyExtractor={(t) => t.id}
-        contentContainerStyle={{ paddingBottom: 12 }}
-        renderItem={({ item }) => (
-          <View style={[ui.card, item.role === "user" && styles.user]}>
-            {item.role === "assistant" && item.citations.length > 0 && (
-              <View style={styles.citations}>
-                {item.citations.map((c) => (
-                  <Pressable key={c.chunk_id} onPress={() => onOpenCapture(c.capture_id)} style={styles.citation}>
-                    <Text style={styles.citationText} numberOfLines={2}>
-                      [{c.rank}] {c.snippet}
-                    </Text>
-                    <Text style={ui.cardMeta}>{c.created_at.slice(0, 10)}</Text>
-                  </Pressable>
-                ))}
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <KeyboardAvoidingView style={styles.sheet} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <View style={styles.header}>
+          <IconCircle name="add" onPress={reset} />
+          <Text style={styles.headerTitle}>Ask</Text>
+          <IconCircle name="close" onPress={onClose} />
+        </View>
+        <FlatList
+          ref={list}
+          data={turns}
+          keyExtractor={(t) => t.id}
+          contentContainerStyle={styles.list}
+          onContentSizeChange={() => list.current?.scrollToEnd({ animated: true })}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) =>
+            item.role === "user" ? (
+              <View style={styles.userBubble}>
+                <Text style={styles.userText}>{item.text}</Text>
               </View>
-            )}
-            <Text style={ui.cardBody}>
-              {item.text || (item.streaming ? "…" : "")}
-            </Text>
-            {item.error && <Text style={styles.failure}>{item.error}</Text>}
-          </View>
-        )}
-        ListEmptyComponent={<Text style={ui.empty}>Ask anything you've written down.</Text>}
-      />
-      <View style={styles.composer}>
-        <TextInput
-          style={styles.input}
-          placeholder="What did I decide about…"
-          placeholderTextColor={colors.muted}
-          value={text}
-          onChangeText={setText}
-          onSubmitEditing={ask}
-          returnKeyType="send"
+            ) : (
+              <AssistantTurn turn={item} onOpenCapture={onOpenCapture} />
+            )
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyWrap}>
+              <Text style={ui.empty}>Ask anything about your notes.</Text>
+            </View>
+          }
         />
-        <Pressable style={[ui.button, (busy || !text.trim()) && ui.buttonDisabled]} onPress={ask} disabled={busy}>
-          <Text style={ui.buttonText}>Ask</Text>
-        </Pressable>
-      </View>
+        <View style={styles.composer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Message"
+            placeholderTextColor={colors.muted}
+            value={text}
+            onChangeText={setText}
+            onSubmitEditing={ask}
+            returnKeyType="send"
+          />
+          <IconCircle name="arrow-up" tone="light" size={40} onPress={ask} />
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function AssistantTurn({ turn, onOpenCapture }: { turn: Turn; onOpenCapture: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <View style={styles.assistant}>
+      <Text style={ui.body}>{turn.text || (turn.streaming ? "…" : "")}</Text>
+      {turn.error && <Text style={[ui.danger, { marginTop: 8 }]}>{turn.error}</Text>}
+      {turn.citations.length > 0 && (
+        <>
+          <Pressable onPress={() => setOpen((o) => !o)} style={styles.sources}>
+            <Text style={styles.sourcesText}>Sources</Text>
+            <Ionicons name={open ? "chevron-up" : "chevron-down"} size={16} color={colors.text} />
+          </Pressable>
+          {open &&
+            turn.citations.map((c) => (
+              <Pressable key={c.chunk_id} onPress={() => onOpenCapture(c.capture_id)} style={styles.citation}>
+                <Text style={ui.meta}>
+                  [{c.rank}] {formatStamp(c.created_at)}
+                </Text>
+                <Text style={styles.citationText} numberOfLines={3}>
+                  {c.snippet}
+                </Text>
+              </Pressable>
+            ))}
+        </>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  user: { backgroundColor: colors.accentSoft, alignSelf: "flex-end", maxWidth: "85%" },
-  citations: { marginBottom: 8, gap: 6 },
-  citation: { padding: 8, borderRadius: 8, backgroundColor: colors.surfaceAlt },
-  citationText: { color: colors.text, fontSize: 13 },
-  composer: { flexDirection: "row", gap: 8, alignItems: "center" },
+  sheet: { flex: 1, backgroundColor: colors.surface },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: colors.surfaceAlt,
+  },
+  headerTitle: { color: colors.text, fontSize: 19, fontWeight: "700" },
+  list: { padding: 16, paddingBottom: 24, flexGrow: 1 },
+  emptyWrap: { flex: 1, justifyContent: "flex-end", paddingBottom: 24, paddingHorizontal: 24 },
+  userBubble: {
+    alignSelf: "flex-end",
+    maxWidth: "85%",
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 22,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    marginBottom: 16,
+  },
+  userText: { color: colors.text, fontSize: 18, lineHeight: 24 },
+  assistant: { marginBottom: 20 },
+  sources: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: colors.faint,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 14,
+  },
+  sourcesText: { color: colors.text, fontSize: 15, fontWeight: "700" },
+  citation: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceAlt,
+    gap: 4,
+  },
+  citationText: { color: colors.text, fontSize: 15, lineHeight: 21 },
+  composer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 28,
+  },
   input: {
     flex: 1,
-    fontSize: 16,
     color: colors.text,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: colors.surface,
+    fontSize: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: colors.surfaceAlt,
   },
-  failure: { color: colors.danger, marginTop: 6 },
 });

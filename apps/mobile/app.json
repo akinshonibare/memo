@@ -1,13 +1,14 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "memo",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "backgroundColor": "#000000"
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +24,9 @@
     },
     "plugins": [
       "expo-audio",
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "backgroundColor": "#000000"
   }
 }
