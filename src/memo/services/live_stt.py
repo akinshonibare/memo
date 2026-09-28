@@ -120,6 +120,8 @@ class DeepgramLiveTranscriber:
 		params = urlencode(
 			{
 				"model": self.model,
+				# Deepgram trains on API traffic unless each request opts out.
+				"mip_opt_out": "true",
 				"encoding": "linear16",
 				"sample_rate": sample_rate,
 				"channels": 1,
