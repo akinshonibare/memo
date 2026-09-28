@@ -9,7 +9,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 # v2.1: a done todo is marked "done" in its status (the Planner's checkbox).
-ANSWER_VERSION = "answer-v2.1"
+# v2.2: the person's chosen name, when set, opens the user turn.
+ANSWER_VERSION = "answer-v2.2"
 
 SYSTEM_PROMPT = """\
 You answer questions about one person's private journal, for that person. The only
@@ -92,9 +93,17 @@ def notes_block(notes: list[Note], zone: ZoneInfo) -> str:
 
 
 def user_turn(
-	question: str, notes: list[Note], *, today: dt.date, zone: ZoneInfo
+	question: str,
+	notes: list[Note],
+	*,
+	today: dt.date,
+	zone: ZoneInfo,
+	name: str | None = None,
 ) -> str:
+	# In the user turn, not the system prompt: the system prompt stays byte-identical
+	# for every user, which is what keeps it cacheable.
+	who = f"You are talking with {name}. Use the name only where it reads naturally.\n"
 	return (
-		f"Today is {today.strftime('%A %-d %B %Y')}.\n\n"
+		(who if name else "") + f"Today is {today.strftime('%A %-d %B %Y')}.\n\n"
 		f"{notes_block(notes, zone)}\n\nQuestion: {question}"
 	)

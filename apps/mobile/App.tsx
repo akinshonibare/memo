@@ -3,7 +3,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { Api } from "./src/api";
+import { Api, type Me } from "./src/api";
 import { type Config, clearSession, loadConfig } from "./src/config";
 import { AskSheet } from "./src/screens/AskScreen";
 import { ComposeSheet } from "./src/screens/ComposeSheet";
@@ -13,7 +13,7 @@ import { IdeasScreen } from "./src/screens/IdeasScreen";
 import { PlannerScreen } from "./src/screens/PlannerScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { RecordSheet } from "./src/screens/RecordSheet";
-import { SettingsSheet } from "./src/screens/SettingsScreen";
+import { ProfileSheet } from "./src/screens/ProfileScreen";
 import { colors } from "./src/ui";
 
 type Back = "home" | "planner" | "ideas";
@@ -28,6 +28,7 @@ export default function App() {
   const [record, setRecord] = useState(false);
   const [compose, setCompose] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [me, setMe] = useState<Me | null>(null);
 
   useEffect(() => {
     loadConfig().then(setConfig);
@@ -54,6 +55,12 @@ export default function App() {
 
   const bump = () => setRefreshKey((k) => k + 1);
 
+  // Who is signed in, for the avatar on Home; refreshed from Profile on every change.
+  useEffect(() => {
+    if (!api) return;
+    api.getMe().then(setMe).catch(() => setMe(null));
+  }, [api]);
+
   if (!fontsLoaded || config === undefined) return <View style={styles.root} />;
 
   return (
@@ -77,6 +84,7 @@ export default function App() {
             onRecord={() => setRecord(true)}
             onCompose={() => setCompose(true)}
             onSettings={() => setSettings(true)}
+            name={me?.name ?? null}
           />
         )}
         {api && view.name === "planner" && (
@@ -120,7 +128,7 @@ export default function App() {
         )}
         {api && record && <RecordSheet api={api} onClose={() => setRecord(false)} onSaved={bump} />}
         {api && compose && <ComposeSheet api={api} onClose={() => setCompose(false)} onSaved={bump} />}
-        <SettingsSheet
+        <ProfileSheet
           visible={settings}
           config={config}
           onClose={() => setSettings(false)}
@@ -129,6 +137,7 @@ export default function App() {
             setSettings(false);
           }}
           onSignOut={signOut}
+          onProfileChanged={setMe}
           onDataDeleted={() => {
             setView({ name: "home" });
             bump();

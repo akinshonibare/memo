@@ -211,9 +211,11 @@ class FakeSpeaker:
 
 	def __init__(self) -> None:
 		self.said: list[str] = []
+		self.voices: list[str | None] = []
 
-	async def speak(self, text: str) -> bytes:
+	async def speak(self, text: str, *, voice: str | None = None) -> bytes:
 		self.said.append(text)
+		self.voices.append(voice)
 		return b"ID3fake-mp3"
 
 
