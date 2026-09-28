@@ -12,8 +12,14 @@ export async function loadConfig(): Promise<Config | null> {
     SecureStore.getItemAsync(KEY_BASE_URL),
     SecureStore.getItemAsync(KEY_TOKEN),
   ]);
-  if (!baseUrl || !token) return null;
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), token };
+  if (baseUrl && token) return { baseUrl: baseUrl.replace(/\/+$/, ""), token };
+  // Development convenience: `EXPO_PUBLIC_API_URL=... EXPO_PUBLIC_API_TOKEN=... npx expo
+  // start` pre-configures a fresh install. Inlined at bundle time, so never set these
+  // for a production build.
+  const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  const envToken = process.env.EXPO_PUBLIC_API_TOKEN;
+  if (envUrl && envToken) return { baseUrl: envUrl.replace(/\/+$/, ""), token: envToken };
+  return null;
 }
 
 export async function saveConfig(config: Config): Promise<void> {

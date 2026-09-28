@@ -10,7 +10,7 @@ export function SettingsScreen({
   initial: Config | null;
   onSaved: (config: Config) => void;
 }) {
-  const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "https://");
+  const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
   const [token, setToken] = useState(initial?.token ?? "");
   const [status, setStatus] = useState<string | null>(null);
 
