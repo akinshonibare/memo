@@ -23,7 +23,13 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.akinshonibare.memo"
+      "package": "com.akinshonibare.memo",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -33,6 +39,12 @@
       "expo-secure-store",
       "expo-font"
     ],
-    "backgroundColor": "#000000"
+    "backgroundColor": "#000000",
+    "extra": {
+      "eas": {
+        "projectId": "fb5218ca-c4c4-4ee2-b97d-0c38e4a7d58d"
+      }
+    },
+    "owner": "akiin"
   }
 }
