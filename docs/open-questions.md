@@ -7,59 +7,48 @@ becomes an ADR. Deciding early would mean deciding without information.
 ---
 
 ### Q1 — LLM provider and model for extraction
-**Needed by:** Phase 3
+**Resolved 2026-09-27 → [ADR 0014](decisions/0014-claude-opus-5-for-extraction.md)**
 
-Extraction is the correctness-critical path (see [ADR 0008](decisions/0008-one-primitive-many-views.md)
-— extraction quality *is* the app's quality). Choice interacts with structured-output
-support, latency, and per-capture cost.
-
-Do **not** decide this from memory — model IDs, pricing, and structured-output support all
-move. Research current specs at decision time.
-
-Axes: structured-output/tool-calling reliability · cost per capture at ~20 captures/day ·
-latency (this is a background job, so seconds are fine — don't over-optimise) · whether a
-small local model is viable for the easy 80% with escalation for the rest.
+`claude-opus-5`, quality-first, because NFR4 makes extraction correctness application
+correctness and the whole monthly cost difference at ~20 captures/day is a few dollars
+(Opus $5/$25 vs Haiku $1/$5 per MTok, verified at decision time). The "small model for the
+easy 80%" idea was not rejected — it was ruled *early*: it needs the golden set to exist so
+"easy" is a number. Revisit trigger: Haiku within 2 points of Opus on todo recall.
 
 ---
 
 ### Q2 — Structured output mechanism
-**Needed by:** Phase 3
+**Resolved 2026-09-27 → [ADR 0015](decisions/0015-structured-outputs-and-terminal-validation.md)**
 
-Three approaches: native tool/function calling with a JSON Schema · a library like
-`instructor` (schema + automatic retry-on-validation-failure) · raw prompt + parse +
-hand-rolled repair.
-
-The interesting question isn't which is easiest — it's **what you do when the model returns
-something that doesn't validate**. Retry with the validation error appended? Repair
-mechanically? Surface a "couldn't parse" state to the user? The brief says *never silent*,
-which rules out the tempting option of dropping it.
+Native structured outputs (`output_config.format`) from the same Pydantic model that
+validates — not forced tool use, which the newest Claude models now reject with a 400. The
+useful distinction the ADR adds: the API guarantees *syntactic* validity, so the only
+failures left are *semantic* (a date that doesn't parse, an empty title), and those are
+deterministic. Policy: one repair with the validation error appended, then terminal
+`failed` with `failure_reason=schema_validation` and the raw output stored — visible and
+retryable, never dropped.
 
 ---
 
 ### Q3 — Embedding model
-**Needed by:** Phase 4
+**Resolved 2026-09-27 → [ADR 0016](decisions/0016-voyage-4-embeddings.md)**
 
-Hosted embedding API vs. self-hosted (e.g. a `sentence-transformers` / BGE-family model on
-the homelab, consistent with [ADR 0006](decisions/0006-self-hosted-faster-whisper.md)'s
-privacy reasoning).
-
-Axes: dimensionality (directly drives index size and query cost) · quality on short
-informal text, which is what a journal is — most benchmarks measure long clean documents ·
-privacy · **migration cost, which is the sleeper issue**: changing embedding model means
-re-embedding the entire corpus, so record the model and version on every chunk row from day
-one. That's cheap now and impossible to retrofit.
+`voyage-4`, 1024 dimensions, `input_type` document/query, one model for chunk rows and
+derivation rows alike. The self-hosted option lost for the same reason 0013 declined to
+self-host STT: no homelab, and the text is on Railway's disks regardless. The sleeper issue
+survives as a hard requirement: `embedding_model` and `embedding_dim` on every row from the
+first migration that has one.
 
 ---
 
 ### Q4 — Chunking strategy
-**Needed by:** Phase 4
+**Resolved 2026-09-27 → [ADR 0017](decisions/0017-length-dependent-chunking.md)**
 
-Fixed token windows with overlap · sentence/paragraph boundaries · one chunk per capture
-(many captures are short!) · semantic chunking.
-
-Note the memo-specific wrinkle: a typed voice note might be 40 words. Chunking that at all
-is probably wrong. The strategy likely needs to be length-dependent, which is a more
-interesting answer than picking a number.
+Length-dependent, as the wrinkle predicted: ≤ ~200 tokens is exactly one chunk; longer
+captures split on paragraphs, then sentences, into ~400-token chunks with ~15% overlap.
+Tokens approximated as chars/4. Chunks carry character offsets so a citation can point at a
+passage, not just a capture. Semantic chunking is deferred until `recall@10` says structure
+isn't enough.
 
 ---
 
@@ -84,26 +73,27 @@ cannot read.
 ---
 
 ### Q6 — Job status: Redis, Postgres, or both
-**Needed by:** Phase 2
+**Resolved 2026-09-27 → [ADR 0012](decisions/0012-job-status-on-the-capture-row.md)**
 
-arq keeps job results in Redis with a TTL. The app needs to show "transcribing…" and
-"failed — retry?" — potentially days later. Redis is a cache; the UI's state is not
-allowed to expire.
-
-Leaning: status lives in Postgres on the capture row, Redis is arq's business only. Worth
-arguing properly rather than assuming.
+The leaning held, argued properly: `captures.status` (+ `failure_reason`, `attempt_count`)
+is the truth because a state the user must act on days later needs the durability of the
+thing it describes, and a cache is *designed* to forget. Redis holds only arq's own
+bookkeeping. The stated downside: two stores can disagree after a crash, so Postgres is
+authoritative and a sweep re-enqueues stale `pending` rows. A `jobs` table is the revisit,
+not the default.
 
 ---
 
 ### Q7 — Auth (or none) for V1
-**Needed by:** before anything is exposed to the internet
+**Resolved 2026-09-27 → [ADR 0018](decisions/0018-static-bearer-token-for-v1.md)**
 
-Brief says single-user, optionally Tailnet-only. Options: nothing + Tailscale-only binding ·
-a static bearer token · real auth deferred to V2.
-
-Constraint worth stating: the moment audio and journal content leave localhost, "no auth"
-stops being a scoping decision and becomes a security one. Tailnet-only is defensible;
-public-with-no-auth is not.
+The constraint fired: Q8 gave the API a public URL, so "no auth" became a security decision.
+Resolved with the lightest defensible option — a static bearer token in a dependency
+gating every route but `/health` — and a distinction worth keeping: **gating** (can this
+request reach the API) is what the token does; **identity** (which user) still comes from
+`get_current_user` per [ADR 0010](decisions/0010-multi-tenant-schema-single-user-product.md),
+which is where real auth plugs in at V2. Tailnet-only lost because it is the homelab plan in
+a different hat.
 
 ---
 
@@ -119,19 +109,15 @@ now genuinely open — see Q9.
 ---
 
 ### Q9 — Where transcription runs, now that there is no homelab
-**Needed by:** Phase 2 · **replaces [ADR 0006](decisions/0006-self-hosted-faster-whisper.md)**
+**Resolved 2026-09-27 → [ADR 0013](decisions/0013-hosted-stt-not-self-hosted-whisper.md)**,
+which supersedes [ADR 0006](decisions/0006-self-hosted-faster-whisper.md)
 
-Three credible options: hosted STT API · `faster-whisper` on a Railway CPU container ·
-`faster-whisper` on serverless GPU (Modal / Replicate / RunPod).
-
-The decision axis has *changed shape*, and that's the interesting part. It was
-privacy-vs-ops. Now that audio sits on a cloud provider's disks either way, privacy is no
-longer decisive, and the real trade is **STT accuracy on proper nouns** (which feeds
-retrieval quality — see [ADR 0005](decisions/0005-hybrid-retrieval-with-rrf.md)) against
-**how much of the V1 learning budget goes to model-serving ops** instead of to extraction,
-retrieval, and streaming.
-
-Verify current pricing and model availability at decision time rather than from memory.
+Hosted — Deepgram Nova-3 (prerecorded API, $0.0043/min verified at decision time; under
+$4/month at memo's volume) behind a `Transcriber` protocol. On the axis this question
+named, hosted wins both sides: better on proper nouns, and zero hours of model serving
+taken from the learning budget. Deepgram over the cheaper vendors for keyterm boosting,
+which is the one feature that speaks directly to the proper-noun problem. 0006 is marked
+superseded and left unedited — it was *overtaken*, not wrong.
 
 ---
 

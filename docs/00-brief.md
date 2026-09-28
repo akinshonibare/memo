@@ -104,3 +104,12 @@ not a change of product scope — "single user, auth out of V1" above still stan
 deliberate decision to pay for the tenant boundary while it costs a convention, rather than
 later when it costs an edit to the retrieval path. If you are reading the schema and wondering
 when memo became multi-user: it didn't.
+
+**2026-09-27 — three lines in "Stack (decided)" are amended by later decisions.**
+- *STT:* not `faster-whisper` on a homelab. There is no homelab (Q8, 2026-08-17); transcription
+  is hosted at Deepgram per [ADR 0013](decisions/0013-hosted-stt-not-self-hosted-whisper.md),
+  which supersedes 0006. The privacy rationale for self-hosting died with the topology.
+- *Deploy:* Railway only, no "homelab later". Same source.
+- *Auth:* still out of V1 as a *product* feature, but the API now has a public URL, so V1
+  ships behind a static bearer token per [ADR 0018](decisions/0018-static-bearer-token-for-v1.md).
+  That is gating, not identity; real auth remains a V2 item.
