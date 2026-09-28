@@ -7,9 +7,13 @@ from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 from websockets.asyncio.client import ClientConnection
 
 from memo.auth import websocket_user
+from memo.config import Settings
+from memo.main import create_app
 from memo.services import live_stt
 from memo.services.live_stt import _DeepgramUpstream, relay
 
@@ -153,3 +157,15 @@ async def test_a_socket_without_a_bearer_header_has_no_user(app: FastAPI) -> Non
 		await websocket_user(cast(Any, _WS({"authorization": "Bearer nope"}))) is None
 	)
 	assert await websocket_user(cast(Any, _WS({"authorization": "Basic x"}))) is None
+
+
+def test_a_refused_socket_gets_a_close_code_the_app_can_read(
+	settings: Settings,
+) -> None:
+	# Found in production: closing before accept() is an HTTP 403 at the handshake,
+	# so 4401 never reached the app. Real app, real lifespan, no token.
+	with TestClient(create_app(settings)) as client:
+		with client.websocket_connect("/v1/voice/live") as ws:
+			with pytest.raises(WebSocketDisconnect) as closed:
+				ws.receive_text()
+	assert closed.value.code == 4401
