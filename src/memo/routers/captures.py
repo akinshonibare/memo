@@ -30,6 +30,7 @@ from memo.schemas.derivations import (
 	validate_payload,
 	validation_detail,
 )
+from memo.services.derivation_index import enqueue_reembed
 from memo.services.queue import Queue
 from memo.services.storage import ObjectStore
 from memo.status import CaptureStatus, transition
@@ -305,6 +306,7 @@ async def add_derivation(
 	body: DerivationCreate,
 	session: DbSession,
 	user_id: CurrentUser,
+	queue: Annotated[Queue, Depends(get_queue)],
 ) -> Derivation:
 	"""The extractor missed one. A recall failure, recorded as `user_created` so it
 	is distinguishable from a PATCH (a precision failure) in the eval intake."""
@@ -327,5 +329,6 @@ async def add_derivation(
 		reviewed_at=dt.datetime.now(dt.UTC),
 	)
 	session.add(derivation)
-	await session.flush()
+	await commit_and_rebind(session, user_id)
+	await enqueue_reembed(queue, derivation)
 	return derivation

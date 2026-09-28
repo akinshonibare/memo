@@ -10,9 +10,11 @@ from sqlalchemy import select, text
 
 from memo.db import bind_system, bind_user
 from memo.models import Capture, Recording
+from memo.services.derivation_index import reembed_derivation
 from memo.services.morning import build_morning_view, is_build_hour
 from memo.services.pipeline import PipelineContext, process_capture
 from memo.services.queue import PROCESS_CAPTURE
+from memo.services.retry import RetryableError, TerminalError, backoff_delay
 
 log = structlog.get_logger("memo.jobs")
 
@@ -41,6 +43,41 @@ async def process_capture_task(
 	if outcome.retry_after is not None:
 		raise Retry(defer=outcome.retry_after)
 	return outcome.status
+
+
+EMBED_MAX_TRIES = 6
+
+
+async def embed_derivation_task(
+	ctx: dict[str, Any], derivation_id: str, user_id: str, request_id: str | None = None
+) -> str:
+	"""Keep a derivation's chunk current after an add or an edit (ADR 0021).
+
+	Best-effort by design: until it runs, Ask still sees the derivation through its
+	note (read live at answer time), so a failure costs recall on questions that only
+	match the item itself - worth a few retries, not a dead-letter state."""
+	structlog.contextvars.clear_contextvars()
+	structlog.contextvars.bind_contextvars(
+		request_id=request_id or ctx.get("job_id"), job_id=ctx.get("job_id")
+	)
+	tries = int(ctx.get("job_try") or 1)
+	uid = uuid.UUID(user_id)
+	try:
+		async with ctx["session_factory"]() as session:
+			await bind_user(session, uid)
+			outcome = await reembed_derivation(
+				session, ctx["embedder"], uuid.UUID(derivation_id), uid
+			)
+			await session.commit()
+	except RetryableError as exc:
+		if tries >= EMBED_MAX_TRIES:
+			log.warning("derivation.reembed_gave_up", error=str(exc), tries=tries)
+			return "gave_up"
+		raise Retry(defer=backoff_delay(tries)) from exc
+	except TerminalError as exc:
+		log.warning("derivation.reembed_failed", error=str(exc))
+		return "failed"
+	return outcome
 
 
 async def sweep_unclaimed_recordings_task(ctx: dict[str, Any]) -> int:

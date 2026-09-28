@@ -53,7 +53,8 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
 6. **Ask should see what you confirmed.** _Done_ ([ADR 0021](decisions/0021-ask-reads-derivations-live.md)):
    `answer-v2` attaches each retrieved note's live derivations (date, review status) and
    states today's date; derivation chunks now carry their dates; rejecting retires a chunk.
-   Not done: re-embedding on edit/add, and date-range questions ("what's this week?").
+   Re-embedding on add/edit is done too (ADR 0021 update). Not done: date-range questions
+   ("what's this week?"), and backfilling dates into pre-existing derivation chunks.
 7. **Housekeeping.** _Done:_ `API_TOKEN` removed from both Railway services (2026-09-28).
    Settings has Export (JSON through the share sheet, via `expo-sharing`) and Delete
    everything. Delete-everything was failing for anyone who had used Ask (citation FK,

@@ -2,14 +2,15 @@ import datetime as dt
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
 from sqlalchemy import and_, or_, select, update
 
 from memo.auth import CurrentUser
-from memo.db import DbSession
+from memo.db import DbSession, commit_and_rebind
 from memo.models import Chunk, Derivation
 from memo.pagination import decode_cursor, encode_cursor
+from memo.routers.captures import get_queue
 from memo.schemas.derivations import (
 	DERIVATION_STATUSES,
 	KINDS,
@@ -19,6 +20,8 @@ from memo.schemas.derivations import (
 	validate_payload,
 	validation_detail,
 )
+from memo.services.derivation_index import enqueue_reembed
+from memo.services.queue import Queue
 
 router = APIRouter(prefix="/derivations", tags=["derivations"])
 
@@ -71,6 +74,7 @@ async def review_derivation(
 	body: DerivationPatch,
 	session: DbSession,
 	user_id: CurrentUser,
+	queue: Annotated[Queue, Depends(get_queue)],
 ) -> Derivation:
 	"""Confirm, reject, or edit. Every call here is a labelled example arriving free."""
 	derivation = await session.scalar(
@@ -107,5 +111,8 @@ async def review_derivation(
 			)
 			.values(superseded_at=derivation.reviewed_at)
 		)
-	await session.flush()
+	await commit_and_rebind(session, user_id)
+	if body.payload is not None and derivation.status != "rejected":
+		# New text: the chunk that retrieval matches on must follow it.
+		await enqueue_reembed(queue, derivation)
 	return derivation

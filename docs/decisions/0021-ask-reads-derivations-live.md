@@ -74,3 +74,16 @@ retrieved note's id, and hand them to the model labelled with their review statu
 index decides *which* notes are relevant; the database decides *what's true about them*.
 The cost I'd name: questions that only match the structured fact, like a bare date, still
 depend on the index, so that's where I'd look next.
+
+## Update (2026-09-28): option 1's cheap half is done
+
+Adds and payload edits now enqueue `embed_derivation_task`, which supersedes the
+derivation's chunk and writes a new one from the current text (`memo.services.derivation_index`).
+It is idempotent (it does nothing if the live chunk already matches) and the job id carries a
+fingerprint of the text, so an edit made while an earlier re-embed runs isn't dropped as a
+duplicate. It stays best-effort, with a few retries and then a logged give-up and no dead-letter
+state, because the live read in this ADR already covers the item whenever its note is retrieved.
+
+Still accepted: this is two call sites that must remember to enqueue (add, edit). A third write
+path would need to as well. Existing undated derivation chunks from before this ADR are not
+backfilled.

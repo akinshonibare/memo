@@ -213,11 +213,21 @@ class EnqueuedJob:
 @dataclass
 class FakeQueue:
 	jobs: list[EnqueuedJob] = field(default_factory=list)
+	embeds: list[tuple[uuid.UUID, uuid.UUID, str]] = field(default_factory=list)
 
 	async def enqueue_process_capture(
 		self, capture_id: uuid.UUID, user_id: uuid.UUID, request_id: str | None
 	) -> None:
 		self.jobs.append(EnqueuedJob(capture_id, user_id, request_id))
+
+	async def enqueue_embed_derivation(
+		self,
+		derivation_id: uuid.UUID,
+		user_id: uuid.UUID,
+		fingerprint: str,
+		request_id: str | None,
+	) -> None:
+		self.embeds.append((derivation_id, user_id, fingerprint))
 
 
 class FakeIdentityVerifier:
