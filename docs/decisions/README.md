@@ -64,7 +64,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0010](0010-multi-tenant-schema-single-user-product.md) | Multi-tenant schema under a single-user product | active |
 | [0011](0011-uuidv7-primary-keys.md) | uuidv7 primary keys, generated in the application | active |
 | [0012](0012-job-status-on-the-capture-row.md) | Job status on the capture row, Redis for arq only | active |
-| [0013](0013-hosted-stt-not-self-hosted-whisper.md) | Hosted STT (Deepgram Nova-3), not self-hosted Whisper | provisional |
+| [0013](0013-hosted-stt-not-self-hosted-whisper.md) | Hosted STT (Deepgram Nova-3), not self-hosted Whisper | active |
 | [0014](0014-claude-opus-5-for-extraction.md) | `claude-opus-5` for extraction | provisional |
 | [0015](0015-structured-outputs-and-terminal-validation.md) | Native structured outputs; validation terminal after one repair | provisional |
 | [0016](0016-voyage-4-embeddings.md) | `voyage-4` at 1024 dims, model recorded on every row | provisional |

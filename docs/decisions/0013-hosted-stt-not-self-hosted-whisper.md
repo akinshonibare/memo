@@ -1,6 +1,6 @@
 # 0013 — Transcription runs at a hosted STT provider (Deepgram Nova-3)
 
-**Status:** provisional — becomes `active` when [#16](https://github.com/akinshonibare/memo/issues/16) lands
+**Status:** active — since [#16](https://github.com/akinshonibare/memo/issues/16) (2026-09-28)
 **Date:** 2026-09-27
 **Supersedes:** [0006](0006-self-hosted-faster-whisper.md)
 **Closes:** Q9, [#14](https://github.com/akinshonibare/memo/issues/14)
