@@ -230,10 +230,97 @@ class LLMCallRow(Base):
 	latency_ms: Mapped[int]
 	cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6))
 	request_id: Mapped[str | None] = mapped_column(String(64))
+	message_id: Mapped[uuid.UUID | None]
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 
 Index("ix_llm_calls_user_created", LLMCallRow.user_id, LLMCallRow.created_at)
+
+
+class Conversation(Base):
+	__tablename__ = "conversations"
+	__mapper_args__ = {"eager_defaults": True}
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("users.id", ondelete="CASCADE")
+	)
+	title: Mapped[str | None] = mapped_column(Text)
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+	updated_at: Mapped[dt.datetime] = mapped_column(
+		server_default=func.now(), onupdate=func.now()
+	)
+
+	__table_args__ = (
+		UniqueConstraint("id", "user_id", name="uq_conversations_id_user"),
+	)
+
+
+MESSAGE_STATUSES = ("pending", "streaming", "done", "failed")
+
+
+class Message(Base):
+	"""One turn. An assistant message exists as a row before generation starts, so a
+	client that drops mid-answer reconnects to the same stream_url."""
+
+	__tablename__ = "messages"
+	__mapper_args__ = {"eager_defaults": True}
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	conversation_id: Mapped[uuid.UUID]
+	user_id: Mapped[uuid.UUID]
+	role: Mapped[str] = mapped_column(String(16))
+	text: Mapped[str | None] = mapped_column(Text)
+	status: Mapped[str] = mapped_column(String(16))
+	rewritten_query: Mapped[str | None] = mapped_column(Text)
+	rewrite_ms: Mapped[int | None]
+	ttft_ms: Mapped[int | None]
+	error: Mapped[str | None] = mapped_column(Text)
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+	completed_at: Mapped[dt.datetime | None]
+
+	__table_args__ = (
+		UniqueConstraint("id", "user_id", name="uq_messages_id_user"),
+		CheckConstraint("role IN ('user', 'assistant')", name="ck_messages_role"),
+		CheckConstraint(
+			f"status IN ({_in_list(MESSAGE_STATUSES)})", name="ck_messages_status"
+		),
+		ForeignKeyConstraint(
+			["conversation_id", "user_id"],
+			["conversations.id", "conversations.user_id"],
+			name="fk_messages_conversation_same_user",
+			ondelete="CASCADE",
+		),
+	)
+
+
+Index("ix_messages_conversation_created", Message.conversation_id, Message.created_at)
+
+
+class MessageCitation(Base):
+	"""A retrieval artifact: which chunk grounded which answer, chosen by the system
+	before generation. References a chunk id, never free text."""
+
+	__tablename__ = "message_citations"
+
+	message_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+	chunk_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+	user_id: Mapped[uuid.UUID]
+	rank: Mapped[int]
+
+	__table_args__ = (
+		ForeignKeyConstraint(
+			["message_id", "user_id"],
+			["messages.id", "messages.user_id"],
+			name="fk_message_citations_message_same_user",
+			ondelete="CASCADE",
+		),
+		ForeignKeyConstraint(
+			["chunk_id", "user_id"],
+			["chunks.id", "chunks.user_id"],
+			name="fk_message_citations_chunk_same_user",
+		),
+	)
 
 
 EMBEDDING_DIM = 1024
