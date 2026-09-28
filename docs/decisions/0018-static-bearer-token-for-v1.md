@@ -1,6 +1,6 @@
 # 0018 — A static bearer token gates V1; identity still comes from a dependency
 
-**Status:** provisional — becomes `active` when [#9](https://github.com/akinshonibare/memo/issues/9) lands
+**Status:** active — since [#9](https://github.com/akinshonibare/memo/issues/9) (2026-09-27)
 **Date:** 2026-09-27
 **Closes:** Q7, [#41](https://github.com/akinshonibare/memo/issues/41)
 

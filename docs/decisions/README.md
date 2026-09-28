@@ -61,15 +61,15 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0007](0007-expo-managed-not-native-swift.md) | Expo managed workflow, not native Swift | provisional |
 | [0008](0008-one-primitive-many-views.md) | One capture primitive, derivations as views | load-bearing |
 | [0009](0009-uv-and-src-layout.md) | uv, `src/` layout, Python 3.12 pinned | active |
-| [0010](0010-multi-tenant-schema-single-user-product.md) | Multi-tenant schema under a single-user product | provisional |
-| [0011](0011-uuidv7-primary-keys.md) | uuidv7 primary keys, generated in the application | provisional |
-| [0012](0012-job-status-on-the-capture-row.md) | Job status on the capture row, Redis for arq only | provisional |
+| [0010](0010-multi-tenant-schema-single-user-product.md) | Multi-tenant schema under a single-user product | active |
+| [0011](0011-uuidv7-primary-keys.md) | uuidv7 primary keys, generated in the application | active |
+| [0012](0012-job-status-on-the-capture-row.md) | Job status on the capture row, Redis for arq only | active |
 | [0013](0013-hosted-stt-not-self-hosted-whisper.md) | Hosted STT (Deepgram Nova-3), not self-hosted Whisper | provisional |
 | [0014](0014-claude-opus-5-for-extraction.md) | `claude-opus-5` for extraction | provisional |
 | [0015](0015-structured-outputs-and-terminal-validation.md) | Native structured outputs; validation terminal after one repair | provisional |
 | [0016](0016-voyage-4-embeddings.md) | `voyage-4` at 1024 dims, model recorded on every row | provisional |
 | [0017](0017-length-dependent-chunking.md) | Length-dependent chunking | provisional |
-| [0018](0018-static-bearer-token-for-v1.md) | Static bearer token gates V1; identity from a dependency | provisional |
+| [0018](0018-static-bearer-token-for-v1.md) | Static bearer token gates V1; identity from a dependency | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

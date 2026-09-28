@@ -1,23 +1,9 @@
-import httpx
-
-from memo.config import Settings, get_settings
-from memo.main import app
+from httpx import AsyncClient
 
 
-async def test_health_uses_overridden_settings() -> None:
-	app.dependency_overrides[get_settings] = lambda: Settings(
-		database_url="postgresql://test:test@localhost/test",
-		app_env="test",
-	)
+async def test_health_is_open_and_reports_env(client: AsyncClient) -> None:
+	response = await client.get("/health", headers={"Authorization": ""})
 
-	try:
-		transport = httpx.ASGITransport(app=app)
-		async with httpx.AsyncClient(
-			transport=transport, base_url="http://test"
-		) as client:
-			response = await client.get("/health")
-
-		assert response.status_code == 200
-		assert response.json()["app_env"] == "test"
-	finally:
-		app.dependency_overrides.clear()
+	assert response.status_code == 200
+	assert response.json()["app_env"] == "test"
+	assert response.headers["x-request-id"]
