@@ -1,6 +1,6 @@
 # 0012 — Job status lives on the capture row, not in Redis
 
-**Status:** provisional — becomes `active` when [#13](https://github.com/akinshonibare/memo/issues/13) lands
+**Status:** active — since [#13](https://github.com/akinshonibare/memo/issues/13) (2026-09-27)
 **Date:** 2026-09-27
 **Closes:** Q6, [#11](https://github.com/akinshonibare/memo/issues/11)
 
