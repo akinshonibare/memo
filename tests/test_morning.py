@@ -15,7 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from memo.config import SEED_USER_ID
 from memo.db import bind_user, commit_and_rebind
 from memo.jobs import build_morning_views_task
-from memo.services.morning import BUILD_HOUR, build_morning_view, is_build_hour
+from memo.services.morning import (
+	BUILD_HOUR,
+	build_morning_view,
+	is_build_hour,
+	todays_view,
+)
 
 LONDON = ZoneInfo("Europe/London")
 NOW = dt.datetime(2026, 9, 28, 3, 30, tzinfo=dt.UTC)  # 04:30 in London (BST)
@@ -210,6 +215,56 @@ async def test_rebuilding_the_same_day_keeps_the_same_idea_and_never_repeats_it_
 	async with admin_engine.connect() as conn:
 		shown = await conn.scalar(text("SELECT count(*) FROM resurfacings"))
 	assert shown == 2
+
+
+async def test_reads_after_the_build_see_reviews_additions_and_deletes(
+	app: FastAPI, client: AsyncClient, admin_engine: AsyncEngine, session: AsyncSession
+) -> None:
+	# ADR 0020: the idea is pinned at 04:00, todos and events are read live.
+	await _set_timezone(admin_engine, "Europe/London")
+	today = NOW.astimezone(LONDON).date()
+	old = NOW - dt.timedelta(days=30)
+	cap = await _capture(client, "tok-morn-live")
+	idea_cap = await _capture(client, "tok-morn-live-idea")
+	dropped = await _derivation(
+		admin_engine,
+		cap,
+		kind="todo",
+		payload={"title": "Rejected later", "due": today.isoformat()},
+		created_at=old,
+		status="pending_review",
+	)
+	idea = await _derivation(
+		admin_engine,
+		idea_cap,
+		kind="idea",
+		payload={"title": "Deleted later", "summary": "x"},
+		created_at=old,
+	)
+	built = await build_morning_view(session, SEED_USER_ID, now=NOW)
+	await commit_and_rebind(session, SEED_USER_ID)
+	assert [t.title for t in built.todos] == ["Rejected later"]
+	assert built.resurfaced_idea is not None and str(built.resurfaced_idea.id) == idea
+
+	await client.patch(f"/v1/derivations/{dropped}", json={"status": "rejected"})
+	await _derivation(
+		admin_engine,
+		cap,
+		kind="todo",
+		payload={"title": "Added at lunch", "due": today.isoformat()},
+		created_at=NOW + dt.timedelta(hours=8),
+		status="user_created",
+	)
+	assert (await client.delete(f"/v1/captures/{idea_cap}")).status_code == 204
+
+	async with app.state.session_factory() as fresh:
+		await bind_user(fresh, SEED_USER_ID)
+		later = await todays_view(fresh, SEED_USER_ID, now=NOW + dt.timedelta(hours=9))
+
+	assert later is not None
+	assert [t.title for t in later.todos] == ["Added at lunch"]
+	assert later.resurfaced_idea is None
+	assert later.built_at == built.built_at, "a read never rewrites the snapshot"
 
 
 async def test_build_hour_fires_exactly_once_a_day_across_dst_changes() -> None:

@@ -16,7 +16,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   record and write, detail with review, delete, playback, Ask sheet, Settings.
 - **Quality gates**: 122 tests against real Postgres, ruff, mypy strict, migrations cycled,
   evals for extraction (recorded), retrieval and faithfulness. CI runs on every PR.
-- **Decisions**: ADRs 0001–0019 in [decisions/](decisions/). 0006 and 0018 are superseded.
+- **Decisions**: ADRs 0001–0020 in [decisions/](decisions/). 0006 and 0018 are superseded.
 
 ## Not done, in the order it should happen
 
@@ -30,13 +30,9 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
 2. **Morning view in the app.** _App side done:_ a "Today" section heads the Home list
    (hidden while searching or when empty), refetched on foreground since the phone sleeps
    through the 04:00 build. Ships with the next EAS preview build (no OTA updates yet).
-   Open, server side (`src/`, Akin's): **the snapshot goes stale during the day.** The
-   view is built once and never invalidated, so an item rejected or deleted after 04:00
-   stays on Today, and one confirmed or added doesn't appear until tomorrow. Recommended
-   fix: `GET /v1/morning` rebuilds when any of the user's derivations has
-   `updated_at > built_at` (the rebuild already keeps the day's idea). Alternatives to
-   weigh: rebuild on every GET (then what is the nightly job for?), or invalidate on write
-   (couples every derivation write path to the morning view). Then decide whether a push
+   The server snapshot went stale during the day (a todo rejected at 09:00 stayed on
+   Today); fixed by [ADR 0020](decisions/0020-morning-view-pins-the-idea-reads-items-live.md):
+   the idea is pinned at 04:00, todos and events are read live. Then decide whether a push
    notification is worth an APNs setup.
 3. **Edit and add derivations from the app.** The server has `PATCH /v1/derivations/{id}`
    with a payload and `POST /v1/captures/{id}/derivations`; the app only confirms or rejects.
