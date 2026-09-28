@@ -50,9 +50,13 @@ Mechanics (migration 0008):
   keys use `ON DELETE SET NULL (capture_id)`, the Postgres 15+ column-list form, because a
   plain `SET NULL` on `(capture_id, user_id)` would also null `user_id` and drop the row out
   of its tenant.
-- `CHECK (capture_id IS NOT NULL OR derivation_id IS NOT NULL)` on chunks. The route deletes
-  text chunks first; if any path ever forgets, the `SET NULL` violates the check and the
-  delete fails loudly rather than leaving the note's text searchable.
+- `CHECK (capture_id IS NOT NULL OR derivation_id IS NOT NULL)` on chunks, and a
+  `BEFORE DELETE` trigger on captures that removes the note's text chunks first. The first
+  version had the route delete them and relied on the CHECK to catch a path that forgot.
+  CI found the path: deleting a *user* cascades to captures and chunks together, Postgres
+  fired the capture's `SET NULL` before the user's cascade reached the chunk, and the CHECK
+  rejected the delete. A trigger makes it hold on every path, including ones the code
+  doesn't own.
 - `message_citations → chunks` is `ON DELETE CASCADE`.
 - Delete-everything deletes chunks and derivations explicitly, because detaching is right
   for one note and wrong for "everything".

@@ -9,7 +9,6 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from memo.config import SEED_USER_ID
@@ -147,17 +146,55 @@ async def test_export_carries_derivations_without_a_note(
 	}
 
 
-async def test_a_text_chunk_cannot_outlive_its_note(
-	client: AsyncClient, session: AsyncSession, admin_engine: AsyncEngine
+async def test_a_text_chunk_cannot_outlive_its_note_on_any_delete_path(
+	client: AsyncClient,
+	session: AsyncSession,
+	admin_engine: AsyncEngine,
+	second_user: uuid.UUID,
 ) -> None:
-	# The route deletes text chunks first. If any path forgets, the database refuses
-	# rather than leaving the note's text searchable (ck_chunks_has_owner).
+	# Bypassing the route entirely: the trigger still removes the text chunks, and the
+	# kept derivation chunks survive (ck_chunks_has_owner holds either way).
 	capture_id, _ = await _processed(client, session, "call Tunde", "tok-keep-4")
-	with pytest.raises(IntegrityError, match="ck_chunks_has_owner"):
-		async with admin_engine.begin() as conn:
-			await conn.execute(
-				text("DELETE FROM captures WHERE id = :id"), {"id": capture_id}
-			)
+	async with admin_engine.begin() as conn:
+		await conn.execute(
+			text("DELETE FROM captures WHERE id = :id"), {"id": capture_id}
+		)
+		text_chunks = await conn.scalar(
+			text("SELECT count(*) FROM chunks WHERE derivation_id IS NULL")
+		)
+		kept = await conn.scalar(
+			text("SELECT count(*) FROM chunks WHERE capture_id IS NULL")
+		)
+	assert text_chunks == 0
+	assert kept > 0
+
+	# Deleting a whole user cascades to captures and chunks at once; the order of those
+	# two foreign-key actions is Postgres's, and it must not matter (CI found this).
+	async with admin_engine.begin() as conn:
+		other = uuid.uuid4()
+		await conn.execute(
+			text(
+				"INSERT INTO captures (id, user_id, kind, text, client_token) "
+				"VALUES (:id, :uid, 'text', 'theirs', 'tok-other-user')"
+			),
+			{"id": other, "uid": second_user},
+		)
+		await conn.execute(
+			text(
+				"INSERT INTO chunks (id, user_id, capture_id, ordinal, text, "
+				"char_start, char_end, embedding, embedding_model, embedding_dim) "
+				"SELECT gen_random_uuid(), :uid, :cid, 0, 'theirs', 0, 6, embedding, "
+				"embedding_model, embedding_dim FROM chunks LIMIT 1"
+			),
+			{"uid": second_user, "cid": other},
+		)
+		await conn.execute(
+			text("DELETE FROM users WHERE id = :id"), {"id": second_user}
+		)
+		left = await conn.scalar(
+			text("SELECT count(*) FROM chunks WHERE user_id = :u"), {"u": second_user}
+		)
+	assert left == 0
 
 
 async def test_delete_everything_takes_kept_derivations_too(
