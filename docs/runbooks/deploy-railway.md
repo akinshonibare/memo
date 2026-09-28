@@ -5,14 +5,18 @@ services built from this repo (issue #42, Q8).
 
 ## Services
 
-| Service | Config file | Start command |
+| Service | Settings | Start command |
 | --- | --- | --- |
-| `api` | `railway.api.json` | `uvicorn memo.main:app --host 0.0.0.0 --port $PORT`, pre-deploy `alembic upgrade head` |
-| `worker` | `railway.worker.json` | `arq memo.worker.WorkerSettings` |
+| `api` | Dockerfile build, health check `/health`, pre-deploy `alembic upgrade head`, restart on failure | `uvicorn memo.main:app --host 0.0.0.0 --port $PORT` |
+| `worker` | Dockerfile build, restart on failure | `arq memo.worker.WorkerSettings` |
 
-Both services point at this repo's `main` and use the same `Dockerfile`. Set each
-service's **Config file path** in its settings to the matching JSON. Migrations run
-once per API deploy as the pre-deploy command, as the owner role.
+Both use the same `Dockerfile`. Railway deprecated `railway.json` config files in
+September 2026, so these settings live on the services themselves (set through the
+Railway MCP/CLI at provisioning time; visible under each service's Settings). Migrations
+run once per API deploy as the pre-deploy command, as the owner role.
+
+Provisioned 2026-09-28: project `memo` (id `bfce4149-…`), environment `production`,
+services `Postgres`, `Redis`, bucket `recordings` (ams), `api`, `worker`.
 
 ## Managed resources
 
