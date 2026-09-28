@@ -346,4 +346,8 @@ export class Api {
   get token() {
     return this.config.token ?? "";
   }
+
+  get baseUrl() {
+    return this.config.baseUrl;
+  }
 }

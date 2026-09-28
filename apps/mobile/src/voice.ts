@@ -49,6 +49,9 @@ export class SpeechQueue {
   private running = false;
   private generation = 0;
   onSpeakingChange: ((speaking: boolean) => void) | null = null;
+  // Live mode keeps the mic stream open while speaking (it is muted in software, not
+  // released), so the session must stay in record mode but route to the loudspeaker.
+  keepMic = false;
 
   constructor(private fetchAudio: Fetcher) {}
 
@@ -71,7 +74,11 @@ export class SpeechQueue {
     this.setRunning(true);
     stopPlayback(); // a note's recording and an answer never talk over each other
     // Recording mode routes output to the earpiece on iOS; speaking wants the speaker.
-    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+    await setAudioModeAsync(
+      this.keepMic
+        ? { allowsRecording: true, playsInSilentMode: true, shouldRouteThroughEarpiece: false }
+        : { allowsRecording: false, playsInSilentMode: true },
+    );
     while (this.queue.length > 0 && gen === this.generation) {
       const uri = await this.queue.shift()!;
       if (!uri || gen !== this.generation) continue;

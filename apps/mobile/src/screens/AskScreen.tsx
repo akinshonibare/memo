@@ -17,6 +17,7 @@ import { IconCircle } from "../components";
 import { formatStamp } from "../format";
 import { useKeyboardHeight } from "../keyboard";
 import { colors, ui } from "../ui";
+import { useLiveVoice } from "../liveVoice";
 import { SentenceSplitter, SpeechQueue } from "../voice";
 
 type Turn = Message & { streaming?: boolean };
@@ -54,20 +55,28 @@ export function AskSheet({
   // leave the finger lifted before it does.
   const recording = useRef(false);
   const released = useRef(false);
+  // The one answer currently allowed to speak. Clearing it silences the rest of that
+  // answer's sentences even though its text keeps streaming onto the screen.
+  const speakingTurn = useRef<string | null>(null);
   const speech = useMemo(() => {
     const q = new SpeechQueue((sentence) => api.speak(sentence));
     q.onSpeakingChange = setSpeaking;
     return q;
   }, [api]);
 
+  const silence = useCallback(() => {
+    speakingTurn.current = null;
+    speech.stop();
+  }, [speech]);
+
   useEffect(() => () => source.current?.close(), []);
   useEffect(() => () => speech.stop(), [speech]);
   useEffect(() => {
-    if (!visible) speech.stop();
-  }, [visible, speech]);
+    if (!visible) silence();
+  }, [visible, silence]);
 
   const reset = () => {
-    speech.stop();
+    silence();
     source.current?.close();
     setConversationId(null);
     setTurns([]);
@@ -94,6 +103,8 @@ export function AskSheet({
     try {
       const cid = await ensureConversation();
       const accepted = await api.sendMessage(cid, question);
+      if (splitter) speakingTurn.current = accepted.message_id;
+      const maySpeak = () => splitter !== null && speakingTurn.current === accepted.message_id;
       setTurns((prev) => [
         ...prev,
         { id: `${accepted.message_id}-q`, role: "user", text: question, status: "done", error: null, citations: [] },
@@ -110,10 +121,10 @@ export function AskSheet({
       es.addEventListener("token", (event) => {
         const data = JSON.parse(event.data ?? "{}") as { delta: string };
         patchTurn(accepted.message_id, (t) => ({ ...t, text: (t.text ?? "") + data.delta }));
-        for (const sentence of splitter?.push(data.delta) ?? []) speech.enqueue(sentence);
+        if (maySpeak()) for (const sentence of splitter!.push(data.delta)) speech.enqueue(sentence);
       });
       es.addEventListener("done", () => {
-        const rest = splitter?.flush();
+        const rest = maySpeak() ? splitter!.flush() : null;
         if (rest) speech.enqueue(rest);
         patchTurn(accepted.message_id, (t) => ({ ...t, status: "done", streaming: false }));
         es.close();
@@ -140,11 +151,53 @@ export function AskSheet({
     }
   }, [api, busy, ensureConversation, speech, text]);
 
+  // Step 2: hands-free. A final utterance is asked like a typed question and its answer
+  // spoken; listening resumes once that answer has finished both streaming and
+  // speaking. `liveTurn` guards the gap between the utterance and the answer starting.
+  const liveTurn = useRef<"idle" | "pending" | "streaming">("idle");
+  const live = useLiveVoice({
+    baseUrl: api.baseUrl,
+    token: api.token,
+    onFinal: (utterance) => {
+      liveTurn.current = "pending";
+      void ask(utterance);
+    },
+  });
+  useEffect(() => {
+    speech.keepMic = live.state !== "off";
+  }, [speech, live.state]);
+  const { state: liveState, resume: liveResume, stop: liveStop } = live;
+  useEffect(() => {
+    if (liveState !== "answering") return;
+    if (busy) {
+      liveTurn.current = "streaming";
+      return;
+    }
+    if (liveTurn.current === "streaming" && !speaking) {
+      liveTurn.current = "idle";
+      liveResume();
+    }
+  }, [liveState, liveResume, busy, speaking]);
+  useEffect(() => {
+    if (!visible && liveState !== "off") liveStop();
+  }, [visible, liveState, liveStop]);
+
+  // A tap while memo is answering: stop speaking, stop generating, listen again. The
+  // server keeps what was generated so far (the disconnect path, issue #45).
+  const interrupt = () => {
+    silence();
+    source.current?.close();
+    setTurns((prev) => prev.map((t) => (t.streaming ? { ...t, status: "done", streaming: false } : t)));
+    setBusy(false);
+    liveTurn.current = "idle";
+    live.resume();
+  };
+
   const startListening = async () => {
     pressedAt.current = Date.now();
     released.current = false;
     setHint(null);
-    speech.stop(); // talking over the answer stops it
+    silence(); // talking over the answer stops it
     try {
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       if (!permission.granted) throw new Error("memo needs the microphone for this");
@@ -193,7 +246,7 @@ export function AskSheet({
           <IconCircle name="add" onPress={reset} />
           <Text style={styles.headerTitle}>Ask</Text>
           {speaking ? (
-            <IconCircle name="volume-high" tone="light" onPress={() => speech.stop()} />
+            <IconCircle name="volume-high" tone="light" onPress={silence} />
           ) : (
             <IconCircle name="close" onPress={onClose} />
           )}
@@ -220,8 +273,41 @@ export function AskSheet({
             </View>
           }
         />
-        {hint && <Text style={[ui.meta, styles.hint]}>{hint}</Text>}
+        {(hint || live.error) && <Text style={[ui.meta, styles.hint]}>{live.error ?? hint}</Text>}
+        {live.state !== "off" ? (
+          <Pressable
+            onPress={live.state === "answering" ? interrupt : undefined}
+            style={styles.livePanel}
+            accessibilityLabel={live.state === "answering" ? "Interrupt the answer" : undefined}
+          >
+            <View style={styles.liveStatus}>
+              {live.state === "listening" ? (
+                <View style={styles.recDot} />
+              ) : (
+                <ActivityIndicator color={colors.muted} />
+              )}
+              <Text style={styles.liveText} numberOfLines={2}>
+                {live.state === "connecting"
+                  ? "Connecting…"
+                  : live.state === "listening"
+                    ? live.partial || "Listening…"
+                    : speaking
+                      ? "Speaking · tap to interrupt"
+                      : "Thinking…"}
+              </Text>
+            </View>
+            <IconCircle name="stop" tone="light" size={44} onPress={live.stop} />
+          </Pressable>
+        ) : (
         <View style={styles.composer}>
+          <IconCircle
+            name="headset-outline"
+            size={40}
+            onPress={() => {
+              silence();
+              void live.start();
+            }}
+          />
           {voice === "idle" ? (
             <TextInput
               style={styles.input}
@@ -261,6 +347,7 @@ export function AskSheet({
             </Pressable>
           )}
         </View>
+        )}
       </View>
     </Modal>
   );
@@ -385,4 +472,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   micLive: { backgroundColor: colors.record, transform: [{ scale: 1.15 }] },
+  livePanel: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 28,
+    padding: 14,
+    borderRadius: 24,
+    backgroundColor: colors.surfaceAlt,
+  },
+  liveStatus: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  liveText: { flex: 1, color: colors.text, fontSize: 16 },
 });

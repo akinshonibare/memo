@@ -14,6 +14,7 @@ from memo.routers import v1
 from memo.services.apple import AppleIdentityVerifier
 from memo.services.ask import make_providers
 from memo.services.embeddings import make_embedder
+from memo.services.live_stt import make_live_transcriber
 from memo.services.queue import make_queue
 from memo.services.speech import make_speaker
 from memo.services.storage import S3ObjectStore
@@ -43,6 +44,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 		app.state.embedder = make_embedder(resolved, http)
 		app.state.transcriber = make_transcriber(resolved, http)
 		app.state.speaker = make_speaker(resolved, http)
+		app.state.live_transcriber = make_live_transcriber(resolved)
+		app.state.settings = resolved
 		app.state.identity_verifier = AppleIdentityVerifier(
 			bundle_id=resolved.apple_bundle_id
 		)

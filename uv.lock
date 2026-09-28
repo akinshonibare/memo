@@ -687,6 +687,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "arq" },
     { name = "asyncpg" },
+    { name = "certifi" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pgvector" },
@@ -696,6 +697,7 @@ dependencies = [
     { name = "structlog" },
     { name = "uuid6" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -716,6 +718,7 @@ requires-dist = [
     { name = "anthropic", specifier = ">=1.8.0" },
     { name = "arq", specifier = ">=0.28.0" },
     { name = "asyncpg", specifier = ">=0.31.0" },
+    { name = "certifi", specifier = ">=2026.7.22" },
     { name = "fastapi", specifier = ">=0.141.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pgvector", specifier = ">=0.5.0" },
@@ -725,6 +728,7 @@ requires-dist = [
     { name = "structlog", specifier = ">=26.1.0" },
     { name = "uuid6", specifier = ">=2025.0.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.3" },
+    { name = "websockets", specifier = ">=17" },
 ]
 
 [package.metadata.requires-dev]

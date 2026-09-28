@@ -1,6 +1,6 @@
 # 0025 — Voice conversation with Ask: our own pipeline, built in two steps
 
-**Status:** active (step 1 shipped; step 2 in progress)
+**Status:** active (both steps built)
 **Date:** 2026-09-28
 
 ## Problem
@@ -40,10 +40,25 @@ conversation logic stays the existing Ask flow throughout.
   of barge-in.
 - Rate-limited, fail-closed (`rate_voice_per_minute`): every call is a paid one.
 
-**Step 2 (next):** `useAudioStream()` (expo-audio, SDK 57) streams mic PCM to a
-`/v1/voice/live` WebSocket. The server relays it to Deepgram's live endpoint, whose
-end-of-utterance event replaces the hold gesture. Speech from the user while an answer
-plays cancels the SSE generation and the speech queue.
+**Step 2 (built): hands-free, half-duplex.**
+- `useAudioStream()` (expo-audio, SDK 57) streams 16-bit PCM over a `/v1/voice/live`
+  WebSocket. It is authenticated with the same Bearer header as HTTP, never a token in
+  the URL. The first message carries the mic's real sample rate.
+- The server relays the audio to Deepgram live (Nova-3, `endpointing=400`,
+  `utterance_end_ms=1200`, VAD events) and reduces the results to `partial`, `final` and
+  `speech_started`. It sends a KeepAlive during silence, always closes the paid upstream
+  socket, and logs audio seconds and cost at close.
+- The app asks each `final` through the ordinary flow and speaks the answer.
+  **Half-duplex:** the mic is muted in software while the answer plays, then listening
+  resumes. A tap interrupts: speech stops, generation is cancelled, and it listens again.
+- Measured on real audio: `speech_started` at 0.4 s, and `final` ~0.7 s after the speaker
+  stopped.
+
+**Why half-duplex, not talk-over barge-in:** expo-audio exposes no acoustic echo
+cancellation. On the phone's loudspeaker the mic hears memo's own answer, so
+`speech_started` would fire on memo's voice and it would interrupt itself. True barge-in
+needs iOS voice processing (`AVAudioEngine` input with voice processing enabled), which
+means a native Expo module.
 
 ## What we're accepting
 
@@ -61,7 +76,11 @@ plays cancels the SSE generation and the speech queue.
 
 ## Revisit when
 
-- Step 2 lands: update this ADR with its measured time to first audio.
+- Interrupting by tapping feels wrong in practice: write the local Expo module that
+  enables iOS voice processing, then treat `speech_started` during an answer as barge-in.
+- Proper nouns are misheard: the live test heard "Okafor" as "Akhafur". Nova-3 supports
+  keyterm prompting, and the names already in the user's notes and derivations are the
+  obvious keyterms to send when a session opens.
 - A voice conversation needs to *act* (add a todo, tick one off): that's tool use in the
   answer model, and the first time Ask writes rather than reads. It needs its own ADR.
 - Spend: if voice minutes grow, compare against the Voice Agent API's flat $0.075/min
