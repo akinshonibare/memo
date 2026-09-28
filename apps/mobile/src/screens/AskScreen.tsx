@@ -2,9 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   FlatList,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -15,6 +13,7 @@ import EventSource from "react-native-sse";
 import { Api, type Citation, type Message } from "../api";
 import { IconCircle } from "../components";
 import { formatStamp } from "../format";
+import { useKeyboardHeight } from "../keyboard";
 import { colors, ui } from "../ui";
 
 type Turn = Message & { streaming?: boolean };
@@ -39,6 +38,7 @@ export function AskSheet({
   const [busy, setBusy] = useState(false);
   const source = useRef<EventSource<StreamEvent> | null>(null);
   const list = useRef<FlatList<Turn>>(null);
+  const keyboard = useKeyboardHeight();
 
   useEffect(() => () => source.current?.close(), []);
 
@@ -112,7 +112,7 @@ export function AskSheet({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.sheet} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <View style={[styles.sheet, { paddingBottom: keyboard }]}>
         <View style={styles.header}>
           <IconCircle name="add" onPress={reset} />
           <Text style={styles.headerTitle}>Ask</Text>
@@ -152,25 +152,34 @@ export function AskSheet({
           />
           <IconCircle name="arrow-up" tone="light" size={40} onPress={ask} />
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
 
+// Retrieval returns the top-k candidates; the answer cites the ones it used as [n].
+// Only those are sources. An answer that cites nothing has no sources.
+function citedIn(text: string | null, citations: Citation[]): Citation[] {
+  const ranks = new Set<number>();
+  for (const m of (text ?? "").matchAll(/\[(\d+)\]/g)) ranks.add(Number(m[1]));
+  return citations.filter((c) => ranks.has(c.rank));
+}
+
 function AssistantTurn({ turn, onOpenCapture }: { turn: Turn; onOpenCapture: (id: string) => void }) {
   const [open, setOpen] = useState(false);
+  const cited = turn.streaming ? [] : citedIn(turn.text, turn.citations);
   return (
     <View style={styles.assistant}>
       <Text style={ui.body}>{turn.text || (turn.streaming ? "…" : "")}</Text>
       {turn.error && <Text style={[ui.danger, { marginTop: 8 }]}>{turn.error}</Text>}
-      {turn.citations.length > 0 && (
+      {cited.length > 0 && (
         <>
           <Pressable onPress={() => setOpen((o) => !o)} style={styles.sources}>
             <Text style={styles.sourcesText}>Sources</Text>
             <Ionicons name={open ? "chevron-up" : "chevron-down"} size={16} color={colors.text} />
           </Pressable>
           {open &&
-            turn.citations.map((c) => (
+            cited.map((c) => (
               <Pressable key={c.chunk_id} onPress={() => onOpenCapture(c.capture_id)} style={styles.citation}>
                 <Text style={ui.meta}>
                   [{c.rank}] {formatStamp(c.created_at)}

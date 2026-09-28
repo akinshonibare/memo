@@ -34,6 +34,15 @@ class CaptureOut(BaseModel):
 	failure_reason: str | None
 	attempt_count: int
 	created_at: dt.datetime
+	# From the attached recording; filled in by the list and detail routes.
+	duration_ms: int | None = None
+
+
+class AudioOut(BaseModel):
+	url: str
+	expires_at: dt.datetime
+	mime: str
+	duration_ms: int | None
 
 
 class CaptureDetail(CaptureOut):

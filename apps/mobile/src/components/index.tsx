@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActionSheetIOS, ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors } from "../ui";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
@@ -72,6 +72,23 @@ export function Pill({
       )}
     </Pressable>
   );
+}
+
+// Native "…" menu with one destructive action. iOS gets the action sheet.
+export function confirmDelete(title: string, onDelete: () => void) {
+  if (Platform.OS === "ios") {
+    ActionSheetIOS.showActionSheetWithOptions(
+      { title, options: ["Delete", "Cancel"], destructiveButtonIndex: 0, cancelButtonIndex: 1 },
+      (index) => {
+        if (index === 0) onDelete();
+      },
+    );
+    return;
+  }
+  Alert.alert(title, undefined, [
+    { text: "Cancel", style: "cancel" },
+    { text: "Delete", style: "destructive", onPress: onDelete },
+  ]);
 }
 
 // The "Ask anything" bar that sits at the bottom of the home and detail screens.

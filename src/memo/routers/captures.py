@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
 from memo.auth import CurrentUser
+from memo.config import Settings, get_settings
 from memo.db import DbSession, commit_and_rebind
 from memo.ids import uuid7
 from memo.models import Capture, Derivation, Recording
@@ -17,6 +18,7 @@ from memo.pagination import decode_cursor, encode_cursor
 from memo.routers.limits import limit_capture
 from memo.routers.recordings import get_object_store
 from memo.schemas.captures import (
+	AudioOut,
 	CaptureCreate,
 	CaptureDetail,
 	CaptureOut,
@@ -60,6 +62,28 @@ async def _owned_capture(
 	if capture is None:
 		raise HTTPException(status.HTTP_404_NOT_FOUND)
 	return capture
+
+
+async def _with_durations(
+	session: DbSession, captures: list[Capture], user_id: uuid.UUID
+) -> list[CaptureOut]:
+	"""CaptureOut rows with duration_ms from the attached recordings, one query."""
+	ids = [c.recording_id for c in captures if c.recording_id is not None]
+	durations: dict[uuid.UUID, int | None] = {}
+	if ids:
+		rows = await session.execute(
+			select(Recording.id, Recording.duration_ms).where(
+				Recording.id.in_(ids), Recording.user_id == user_id
+			)
+		)
+		durations = {rid: ms for rid, ms in rows.all()}
+	out = []
+	for c in captures:
+		item = CaptureOut.model_validate(c)
+		if c.recording_id is not None:
+			item.duration_ms = durations.get(c.recording_id)
+		out.append(item)
+	return out
 
 
 @router.post(
@@ -152,7 +176,7 @@ async def list_captures(
 		encode_cursor(page[-1].created_at, page[-1].id) if len(rows) > limit else None
 	)
 	return CapturePage(
-		items=[CaptureOut.model_validate(c) for c in page], next_cursor=next_cursor
+		items=await _with_durations(session, page, user_id), next_cursor=next_cursor
 	)
 
 
@@ -167,10 +191,65 @@ async def get_capture(
 		.where(Derivation.capture_id == capture.id, Derivation.user_id == user_id)
 		.order_by(Derivation.created_at, Derivation.id)
 	)
+	(item,) = await _with_durations(session, [capture], user_id)
 	return CaptureDetail(
-		**CaptureOut.model_validate(capture).model_dump(),
+		**item.model_dump(),
 		derivations=[DerivationOut.model_validate(d) for d in derivations.all()],
 	)
+
+
+@router.get("/{capture_id}/audio", response_model=AudioOut)
+async def get_capture_audio(
+	capture_id: uuid.UUID,
+	session: DbSession,
+	user_id: CurrentUser,
+	settings: Annotated[Settings, Depends(get_settings)],
+	store: Annotated[ObjectStore, Depends(get_object_store)],
+) -> AudioOut:
+	"""A time-limited playback URL for the capture's recording. Bytes come from the
+	bucket, never through the API."""
+	capture = await _owned_capture(session, capture_id, user_id)
+	if capture.recording_id is None:
+		raise HTTPException(status.HTTP_404_NOT_FOUND, "capture has no recording")
+	recording = await session.scalar(
+		select(Recording).where(
+			Recording.id == capture.recording_id, Recording.user_id == user_id
+		)
+	)
+	if recording is None or not await store.exists(recording.storage_key):
+		raise HTTPException(status.HTTP_404_NOT_FOUND, "recording is gone")
+	ttl = settings.upload_url_ttl_seconds
+	return AudioOut(
+		url=await store.presign_get(recording.storage_key, ttl),
+		expires_at=dt.datetime.now(dt.UTC) + dt.timedelta(seconds=ttl),
+		mime=recording.mime,
+		duration_ms=recording.duration_ms,
+	)
+
+
+@router.delete("/{capture_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_capture(
+	capture_id: uuid.UUID,
+	session: DbSession,
+	user_id: CurrentUser,
+	store: Annotated[ObjectStore, Depends(get_object_store)],
+) -> None:
+	"""Hard delete. Derivations, chunks and citations cascade in the database; the
+	recording's bytes are removed from the bucket first, while the row still knows
+	its key. An orphaned chunk would keep answering questions, so nothing is soft."""
+	capture = await _owned_capture(session, capture_id, user_id)
+	if capture.recording_id is not None:
+		recording = await session.scalar(
+			select(Recording).where(
+				Recording.id == capture.recording_id, Recording.user_id == user_id
+			)
+		)
+		if recording is not None:
+			await store.delete(recording.storage_key)
+			await session.delete(recording)
+	await session.delete(capture)
+	await session.flush()
+	log.info("capture.deleted", capture_id=str(capture_id))
 
 
 @router.post(

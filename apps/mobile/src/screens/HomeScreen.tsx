@@ -10,8 +10,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type Capture } from "../api";
-import { AskBar, IconCircle } from "../components";
-import { ACTIVE_STATUSES, formatStamp, headline, statusLabel } from "../format";
+import { AskBar, IconCircle, confirmDelete } from "../components";
+import { ACTIVE_STATUSES, formatClock, formatStamp, headline, statusLabel } from "../format";
+import { playUrl, stopPlayback, usePlayingId } from "../playback";
 import { colors, ui } from "../ui";
 
 const POLL_MS = 3000;
@@ -63,11 +64,35 @@ export function HomeScreen({
     ? captures.filter((c) => (c.text ?? "").toLowerCase().includes(q))
     : captures;
 
+  const playingId = usePlayingId();
+  const togglePlay = async (c: Capture) => {
+    if (playingId === c.id) {
+      stopPlayback();
+      return;
+    }
+    try {
+      const audio = await api.getAudio(c.id);
+      await playUrl(c.id, audio.url);
+    } catch (e) {
+      setError(`Couldn't play: ${String(e)}`);
+    }
+  };
+  const more = (c: Capture) =>
+    confirmDelete("Delete this note? Everything extracted from it goes too.", async () => {
+      if (playingId === c.id) stopPlayback();
+      setCaptures((prev) => prev.filter((x) => x.id !== c.id));
+      try {
+        await api.deleteCapture(c.id);
+      } catch (e) {
+        setError(`Couldn't delete: ${String(e)}`);
+        refresh();
+      }
+    });
+
   return (
     <View style={ui.screen}>
       <View style={[styles.topBar, ui.pad]}>
         <IconCircle name="settings-outline" onPress={onSettings} />
-        <IconCircle name="create-outline" onPress={onCompose} />
       </View>
       <Text style={[ui.h1, ui.pad]}>memo</Text>
       <View style={[styles.search, { marginHorizontal: 20 }]}>
@@ -90,7 +115,13 @@ export function HomeScreen({
         data={shown}
         keyExtractor={(c) => c.id}
         renderItem={({ item }) => (
-          <Row capture={item} onPress={() => onOpen(item.id)} />
+          <Row
+            capture={item}
+            playing={playingId === item.id}
+            onPress={() => onOpen(item.id)}
+            onPlay={() => togglePlay(item)}
+            onMore={() => more(item)}
+          />
         )}
         ItemSeparatorComponent={() => (
           <View style={[ui.hairline, { marginHorizontal: 20 }]} />
@@ -109,6 +140,7 @@ export function HomeScreen({
         style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) }]}
       >
         <AskBar onPress={onAsk} />
+        <IconCircle name="create-outline" size={56} onPress={onCompose} />
         <Pressable
           onPress={onRecord}
           style={({ pressed }) => [
@@ -122,11 +154,23 @@ export function HomeScreen({
   );
 }
 
-function Row({ capture, onPress }: { capture: Capture; onPress: () => void }) {
+function Row({
+  capture,
+  playing,
+  onPress,
+  onPlay,
+  onMore,
+}: {
+  capture: Capture;
+  playing: boolean;
+  onPress: () => void;
+  onPlay: () => void;
+  onMore: () => void;
+}) {
   const { title, rest: snippet } = headline(capture);
   const status = statusLabel(capture.status);
   const failed = capture.status === "failed";
-  const showActions = capture.kind === "audio" || status !== null;
+  const showActions = true;
   return (
     <Pressable
       onPress={onPress}
@@ -144,10 +188,12 @@ function Row({ capture, onPress }: { capture: Capture; onPress: () => void }) {
       {showActions && (
         <View style={styles.rowActions}>
           {capture.kind === "audio" && (
-            <View style={styles.chip}>
-              <Ionicons name="mic" size={16} color={colors.text} />
-              <Text style={styles.chipText}>Voice</Text>
-            </View>
+            <Pressable onPress={onPlay} style={({ pressed }) => [styles.chip, pressed && { opacity: 0.6 }]}>
+              <Ionicons name={playing ? "stop" : "play"} size={16} color={colors.text} />
+              <Text style={styles.chipText}>
+                {capture.duration_ms != null ? formatClock(capture.duration_ms) : "Play"}
+              </Text>
+            </Pressable>
           )}
           {status && (
             <View style={[styles.chip, failed && styles.chipDanger]}>
@@ -159,7 +205,7 @@ function Row({ capture, onPress }: { capture: Capture; onPress: () => void }) {
             </View>
           )}
           <View style={{ flex: 1 }} />
-          <IconCircle name="ellipsis-horizontal" size={40} onPress={onPress} />
+          <IconCircle name="ellipsis-horizontal" size={40} onPress={onMore} />
         </View>
       )}
     </Pressable>

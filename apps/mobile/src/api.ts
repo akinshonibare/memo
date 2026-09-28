@@ -11,6 +11,7 @@ export type Capture = {
   failure_reason: string | null;
   attempt_count: number;
   created_at: string;
+  duration_ms: number | null;
 };
 
 export type Derivation = {
@@ -162,6 +163,16 @@ export class Api {
 
   retryCapture(id: string) {
     return this.request<Capture>(`/v1/captures/${id}/retry`, { method: "POST" });
+  }
+
+  deleteCapture(id: string) {
+    return this.request<void>(`/v1/captures/${id}`, { method: "DELETE" });
+  }
+
+  getAudio(id: string) {
+    return this.request<{ url: string; expires_at: string; mime: string; duration_ms: number | null }>(
+      `/v1/captures/${id}/audio`,
+    );
   }
 
   // --- derivations --------------------------------------------------------------
