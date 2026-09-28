@@ -2,7 +2,7 @@ import datetime as dt
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, or_, select, text
 
 from memo.auth import CurrentUser
@@ -10,6 +10,7 @@ from memo.db import DbSession
 from memo.ids import uuid7
 from memo.models import Conversation, Message
 from memo.pagination import decode_cursor, encode_cursor
+from memo.routers.limits import limit_ask
 from memo.schemas.ask import (
 	CitationOut,
 	ConversationOut,
@@ -140,6 +141,7 @@ async def list_messages(
 	"/{conversation_id}/messages",
 	status_code=status.HTTP_201_CREATED,
 	response_model=MessageAccepted,
+	dependencies=[Depends(limit_ask)],
 )
 async def create_message(
 	conversation_id: uuid.UUID,

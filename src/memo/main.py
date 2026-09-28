@@ -4,6 +4,7 @@ from typing import Annotated
 
 import httpx
 from fastapi import Depends, FastAPI
+from redis.asyncio import Redis
 
 from memo import __version__
 from memo.config import Settings, get_settings
@@ -32,6 +33,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 		app.state.object_store = store
 		queue = await make_queue(resolved)
 		app.state.queue = queue
+		redis = Redis.from_url(resolved.redis_url)
+		app.state.redis = redis
 		http = httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0))
 		app.state.http = http
 		app.state.embedder = make_embedder(resolved, http)
@@ -40,6 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 		app.state.rewrite_provider = rewrite_provider
 		yield
 		await http.aclose()
+		await redis.aclose()
 		await queue.aclose()
 		await engine.dispose()
 

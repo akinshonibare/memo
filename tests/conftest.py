@@ -19,6 +19,7 @@ from tests.fakes import (
 	FakeAnswerProvider,
 	FakeEmbedder,
 	FakeQueue,
+	FakeRedis,
 	FakeRewriteProvider,
 )
 
@@ -118,6 +119,10 @@ async def app(settings: Settings) -> AsyncIterator[FastAPI]:
 		# Jobs are recorded, not sent to Redis; the object store stays real (RustFS).
 		# Model calls are scripted: no network in tests.
 		application.state.queue = FakeQueue()
+		# Real Redis would carry rate-limit counters across tests within a minute;
+		# the real client stays reachable as real_redis for the one test that wants it.
+		application.state.real_redis = application.state.redis
+		application.state.redis = FakeRedis()
 		application.state.embedder = FakeEmbedder()
 		application.state.answer_provider = FakeAnswerProvider()
 		application.state.rewrite_provider = FakeRewriteProvider()

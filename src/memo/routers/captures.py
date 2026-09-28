@@ -14,6 +14,7 @@ from memo.db import DbSession, commit_and_rebind
 from memo.ids import uuid7
 from memo.models import Capture, Derivation, Recording
 from memo.pagination import decode_cursor, encode_cursor
+from memo.routers.limits import limit_capture
 from memo.routers.recordings import get_object_store
 from memo.schemas.captures import (
 	CaptureCreate,
@@ -61,7 +62,12 @@ async def _owned_capture(
 	return capture
 
 
-@router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=CaptureOut)
+@router.post(
+	"",
+	status_code=status.HTTP_202_ACCEPTED,
+	response_model=CaptureOut,
+	dependencies=[Depends(limit_capture)],
+)
 async def create_capture(
 	body: CaptureCreate,
 	session: DbSession,

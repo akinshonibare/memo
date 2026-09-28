@@ -67,6 +67,10 @@ class Settings(BaseSettings):
 	ask_top_k: int = 8
 	ask_history_turns: int = 6
 
+	# Per-user, per-minute (issue #48). Ask fails closed, capture fails open.
+	rate_ask_per_minute: int = 10
+	rate_capture_per_minute: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:

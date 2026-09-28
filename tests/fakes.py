@@ -115,6 +115,22 @@ class FakeRewriteProvider:
 		)
 
 
+class FakeRedis:
+	"""Just enough of redis for the rate limiter, with fresh counters per test."""
+
+	def __init__(self) -> None:
+		self.counts: dict[str, int] = {}
+		self.ttls: dict[str, int] = {}
+
+	async def incr(self, name: str) -> int:
+		self.counts[name] = self.counts.get(name, 0) + 1
+		return self.counts[name]
+
+	async def expire(self, name: str, time: int) -> bool:
+		self.ttls[name] = time
+		return True
+
+
 class FakeExtractor:
 	model = "fake"
 	version = "extract-v1/fake"
@@ -151,6 +167,9 @@ class FakeObjectStore:
 
 	async def presign_put(self, key: str, content_type: str, ttl_seconds: int) -> str:
 		return f"https://fake-bucket.test/{key}?ttl={ttl_seconds}"
+
+	async def presign_get(self, key: str, ttl_seconds: int) -> str:
+		return f"https://fake-bucket.test/{key}?get&ttl={ttl_seconds}"
 
 	async def exists(self, key: str) -> bool:
 		return key in self.objects
