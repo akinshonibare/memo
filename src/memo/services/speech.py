@@ -65,7 +65,8 @@ class DeepgramSpeaker:
 		try:
 			response = await self._http.post(
 				DEEPGRAM_SPEAK_URL,
-				params={"model": model, "encoding": "mp3"},
+				# Deepgram trains on API traffic unless each request opts out.
+				params={"model": model, "encoding": "mp3", "mip_opt_out": "true"},
 				headers={
 					"Authorization": f"Token {self._api_key}",
 					"Content-Type": "application/json",

@@ -38,7 +38,12 @@ class DeepgramTranscriber:
 		try:
 			response = await self._http.post(
 				DEEPGRAM_URL,
-				params={"model": self.model, "smart_format": "true"},
+				# Deepgram trains on API traffic unless each request opts out.
+				params={
+					"model": self.model,
+					"smart_format": "true",
+					"mip_opt_out": "true",
+				},
 				headers={
 					"Authorization": f"Token {self._api_key}",
 					"Content-Type": mime,

@@ -56,6 +56,12 @@ class Settings(BaseSettings):
 	deepgram_api_key: SecretStr | None = None
 	deepgram_model: str = "nova-3"
 	tts_model: str = "aura-2-thalia-en"
+	# Shown on the public privacy page; unset shows TestFlight feedback instead.
+	support_email: str | None = None
+	# Voyage trains on API inputs unless the account opts out, which is a toggle in
+	# Voyage's dashboard, not a request parameter. Set true only once it is flipped:
+	# the privacy page claims no-training for Voyage exactly when this is true.
+	voyage_training_opted_out: bool = False
 
 	# Extraction (ADR 0014/0015). Unset means every capture fails at the extract stage.
 	anthropic_api_key: SecretStr | None = None
