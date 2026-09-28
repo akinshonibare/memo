@@ -1,6 +1,7 @@
 """Create-then-stream ask: citations before tokens, persistence, replay, rewrite,
 failure, disconnect, and the tenant boundary on the one path that speaks in prose."""
 
+import datetime as dt
 import json
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from memo.config import SEED_USER_ID
 from memo.db import bind_user
 from memo.models import Message
+from memo.schemas.derivations import Extraction, TodoPayload
 from memo.services.ask import AskContext, run_turn
 from memo.services.pipeline import PipelineContext, process_capture
 from memo.services.retry import TerminalError
@@ -256,3 +258,83 @@ async def test_another_user_cannot_read_or_stream_the_conversation(
 		await client.get(f"/v1/conversations/{accepted['conversation_id']}/messages")
 	).status_code == 404
 	assert (await client.get("/v1/conversations")).json()["items"] == []
+
+
+async def test_the_answer_sees_live_derivations_and_today(
+	app: FastAPI,
+	client: AsyncClient,
+	corpus: list[uuid.UUID],
+	admin_engine: AsyncEngine,
+) -> None:
+	# ADR 0021: the handoff's "next Tuesday" hedge. The note says a relative date;
+	# the confirmed event says the real one, and the model has to be shown it.
+	dentist = corpus[2]
+	added = await client.post(
+		f"/v1/captures/{dentist}/derivations",
+		json={
+			"kind": "event",
+			"payload": {"title": "Dentist", "starts_at": "2026-10-02T14:30:00+01:00"},
+		},
+	)
+	dropped = await client.post(
+		f"/v1/captures/{dentist}/derivations",
+		json={"kind": "todo", "payload": {"title": "Wrong reading"}},
+	)
+	await client.patch(
+		f"/v1/derivations/{dropped.json()['id']}", json={"status": "rejected"}
+	)
+	assert added.status_code == 201
+
+	accepted = await _ask(client, "when is the dentist?")
+	await _events(client, accepted["stream_url"])
+
+	provider: FakeAnswerProvider = app.state.answer_provider
+	prompt = str(provider.last_messages[-1]["content"])
+	assert prompt.startswith("Today is ")
+	assert "event: Dentist · Fri 2 Oct 2026, 13:30 (added by you)" in prompt
+	assert "Wrong reading" not in prompt
+
+
+async def test_rejecting_a_derivation_retires_its_chunk(
+	client: AsyncClient, admin_engine: AsyncEngine, session: AsyncSession
+) -> None:
+	extraction = Extraction(
+		todos=[TodoPayload(title="Call Tunde", due=dt.date(2026, 10, 1))]
+	)
+	ctx = PipelineContext(
+		session=session,
+		transcriber=FakeTranscriber(),
+		object_store=FakeObjectStore(),
+		extractor=FakeExtractor(extraction),
+		embedder=FakeEmbedder(),
+	)
+	created = await client.post(
+		"/v1/captures",
+		json={"text": "call Tunde by Thursday", "client_token": "tok-reject-chunk"},
+	)
+	assert created.status_code == 202, created.text
+	capture_id = uuid.UUID(created.json()["id"])
+	assert (await process_capture(ctx, capture_id, SEED_USER_ID)).status == "ready"
+	async with admin_engine.connect() as conn:
+		derivation_id, chunk_text = (
+			await conn.execute(
+				text(
+					"SELECT derivation_id, text FROM chunks WHERE capture_id = :c "
+					"AND derivation_id IS NOT NULL"
+				),
+				{"c": capture_id},
+			)
+		).one()
+	assert chunk_text == "todo: Call Tunde. due 2026-10-01"
+
+	await client.patch(f"/v1/derivations/{derivation_id}", json={"status": "rejected"})
+
+	async with admin_engine.connect() as conn:
+		live = await conn.scalar(
+			text(
+				"SELECT count(*) FROM chunks WHERE derivation_id = :d "
+				"AND superseded_at IS NULL"
+			),
+			{"d": derivation_id},
+		)
+	assert live == 0

@@ -16,7 +16,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   record and write, detail with review, delete, playback, Ask sheet, Settings.
 - **Quality gates**: 122 tests against real Postgres, ruff, mypy strict, migrations cycled,
   evals for extraction (recorded), retrieval and faithfulness. CI runs on every PR.
-- **Decisions**: ADRs 0001–0020 in [decisions/](decisions/). 0006 and 0018 are superseded.
+- **Decisions**: ADRs 0001–0021 in [decisions/](decisions/). 0006 and 0018 are superseded.
 
 ## Not done, in the order it should happen
 
@@ -49,11 +49,10 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
 5. **First PITR restore drill.** Dashboard only: Postgres → Backups → restore to a sibling,
    then `scripts/restore_drill.sh` against it, and write the RTO into
    [runbooks/backups-and-restore.md](runbooks/backups-and-restore.md). Nobody has done it.
-6. **Ask should see what you confirmed.** Retrieval works over chunk text; a confirmed
-   event with a resolved date is invisible to it, which is why an answer hedged on "next
-   Tuesday" while extraction had committed to 6 October. Options: embed confirmed
-   derivations as their own chunks (the dual-granularity row 0017 already allows), or
-   inject today's derivations into the answer prompt. Needs the comparison treatment.
+6. **Ask should see what you confirmed.** _Done_ ([ADR 0021](decisions/0021-ask-reads-derivations-live.md)):
+   `answer-v2` attaches each retrieved note's live derivations (date, review status) and
+   states today's date; derivation chunks now carry their dates; rejecting retires a chunk.
+   Not done: re-embedding on edit/add, and date-range questions ("what's this week?").
 7. **Housekeeping.** Remove the stale `API_TOKEN` variable from both Railway services.
    Export and delete-everything are server-only; give them a home in Settings.
 

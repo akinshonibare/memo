@@ -4,11 +4,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import ValidationError
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 
 from memo.auth import CurrentUser
 from memo.db import DbSession
-from memo.models import Derivation
+from memo.models import Chunk, Derivation
 from memo.pagination import decode_cursor, encode_cursor
 from memo.schemas.derivations import (
 	DERIVATION_STATUSES,
@@ -95,5 +95,17 @@ async def review_derivation(
 	elif derivation.status == "pending_review":
 		derivation.status = "confirmed"
 	derivation.reviewed_at = dt.datetime.now(dt.UTC)
+	if derivation.status == "rejected":
+		# A rejected item must stop answering questions (ADR 0021). Superseded, not
+		# deleted: a past answer's citation still resolves to what it was shown.
+		await session.execute(
+			update(Chunk)
+			.where(
+				Chunk.derivation_id == derivation.id,
+				Chunk.user_id == user_id,
+				Chunk.superseded_at.is_(None),
+			)
+			.values(superseded_at=derivation.reviewed_at)
+		)
 	await session.flush()
 	return derivation
