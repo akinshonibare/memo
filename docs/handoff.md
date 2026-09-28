@@ -20,15 +20,24 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
 
 ## Not done, in the order it should happen
 
-1. **The learning pass.** The repo exists so Akin learns production Python and AI
+1. **The learning pass.** _Deferred to the end of the build (Akin, 2026-09-28), together
+   with cold quizzes._ The repo exists so Akin learns production Python and AI
    engineering; V1 was built by Claude under an explicit one-time suspension of the
    "Akin writes `src/`" rule. Every teach-back in `docs/notes/` is a Claude draft marked for
    rewrite. Go issue by issue (#6 → #49), read the commit for the issue, rewrite its note in
    your own words, and answer the ADR's interview angle out loud. Resume cold quizzes from
    `docs/interview/quiz-bank.md`.
-2. **Morning view in the app.** `GET /v1/morning` exists and is built nightly at 04:00
-   local; nothing in the app shows it. One screen: today's confirmed todos and events plus
-   the resurfaced idea. Then decide whether a push notification is worth an APNs setup.
+2. **Morning view in the app.** _App side done:_ a "Today" section heads the Home list
+   (hidden while searching or when empty), refetched on foreground since the phone sleeps
+   through the 04:00 build. Ships with the next EAS preview build (no OTA updates yet).
+   Open, server side (`src/`, Akin's): **the snapshot goes stale during the day.** The
+   view is built once and never invalidated, so an item rejected or deleted after 04:00
+   stays on Today, and one confirmed or added doesn't appear until tomorrow. Recommended
+   fix: `GET /v1/morning` rebuilds when any of the user's derivations has
+   `updated_at > built_at` (the rebuild already keeps the day's idea). Alternatives to
+   weigh: rebuild on every GET (then what is the nightly job for?), or invalidate on write
+   (couples every derivation write path to the morning view). Then decide whether a push
+   notification is worth an APNs setup.
 3. **Edit and add derivations from the app.** The server has `PATCH /v1/derivations/{id}`
    with a payload and `POST /v1/captures/{id}/derivations`; the app only confirms or rejects.
    The "the extractor missed one" path is the recall signal the evals need.

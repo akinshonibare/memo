@@ -14,6 +14,7 @@ import { AskBar, IconCircle, confirmDelete } from "../components";
 import { ACTIVE_STATUSES, formatClock, formatStamp, headline, statusLabel } from "../format";
 import { playUrl, stopPlayback, usePlayingId } from "../playback";
 import { colors, ui } from "../ui";
+import { TodaySection, useMorning } from "./TodaySection";
 
 const POLL_MS = 3000;
 
@@ -38,6 +39,7 @@ export function HomeScreen({
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const morning = useMorning(api, refreshKey);
 
   const refresh = useCallback(async () => {
     try {
@@ -128,6 +130,9 @@ export function HomeScreen({
         )}
         contentContainerStyle={{ paddingBottom: 140 + insets.bottom }}
         keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={
+          morning && !q ? <TodaySection view={morning} onOpen={onOpen} /> : null
+        }
         ListEmptyComponent={
           <Text style={[ui.empty, { marginTop: 48 }]}>
             {q
