@@ -214,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
 			http=httpx.AsyncClient(),
 			model=settings.embedding_model,
 			dim=settings.embedding_dim,
+			url=settings.voyage_api_url,
 		)
 
 	modes = asyncio.run(run(embedder))
