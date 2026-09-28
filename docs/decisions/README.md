@@ -69,7 +69,8 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0015](0015-structured-outputs-and-terminal-validation.md) | Native structured outputs; validation terminal after one repair | active |
 | [0016](0016-voyage-4-embeddings.md) | `voyage-4` at 1024 dims, model recorded on every row | active |
 | [0017](0017-length-dependent-chunking.md) | Length-dependent chunking | active |
-| [0018](0018-static-bearer-token-for-v1.md) | Static bearer token gates V1; identity from a dependency | active |
+| [0018](0018-static-bearer-token-for-v1.md) | Static bearer token gates V1; identity from a dependency | superseded by 0019 |
+| [0019](0019-sign-in-with-apple-and-server-sessions.md) | Sign in with Apple; server-issued sessions, hashed | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

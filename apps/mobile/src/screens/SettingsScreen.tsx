@@ -1,61 +1,84 @@
 import { useState } from "react";
 import { Modal, StyleSheet, Text, TextInput, View } from "react-native";
 import { Api } from "../api";
-import { type Config, saveConfig } from "../config";
+import { type Config, saveBaseUrl } from "../config";
 import { IconCircle, Pill, SheetHandle } from "../components";
 import { colors, ui } from "../ui";
 
 export function SettingsSheet({
   visible,
-  initial,
-  dismissable,
+  config,
   onClose,
-  onSaved,
+  onBaseUrlChanged,
+  onSignOut,
 }: {
   visible: boolean;
-  initial: Config | null;
-  dismissable: boolean;
+  config: Config;
   onClose: () => void;
-  onSaved: (config: Config) => void;
+  onBaseUrlChanged: (baseUrl: string) => void;
+  onSignOut: () => void;
 }) {
-  const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
-  const [token, setToken] = useState(initial?.token ?? "");
+  const [baseUrl, setBaseUrl] = useState(config.baseUrl);
   const [timezone, setTimezone] = useState(deviceTimezone());
   const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"save" | "signout" | null>(null);
+  const signedIn = !!config.token;
 
   const save = async () => {
-    const config = { baseUrl: baseUrl.trim().replace(/\/+$/, ""), token: token.trim() };
-    setBusy(true);
+    const next = baseUrl.trim().replace(/\/+$/, "");
+    setBusy("save");
     try {
-      const ok = await fetch(`${config.baseUrl}/health`).then((r) => r.ok);
+      const ok = await fetch(`${next}/health`).then((r) => r.ok);
       if (!ok) throw new Error("health check failed");
-      await saveConfig(config);
-      await new Api(config).setTimezone(timezone.trim());
+      await saveBaseUrl(next);
+      if (signedIn && next === config.baseUrl) {
+        await new Api(config).setTimezone(timezone.trim());
+      }
       setStatus(null);
-      onSaved(config);
+      onBaseUrlChanged(next);
     } catch (error) {
       setStatus(`Could not reach the API: ${String(error)}`);
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  };
+
+  const signOut = async () => {
+    setBusy("signout");
+    try {
+      await new Api(config).logout();
+    } catch {
+      // The session is being dropped locally either way.
+    } finally {
+      setBusy(null);
+      onSignOut();
     }
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={dismissable ? onClose : undefined}
-    >
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={styles.sheet}>
         <SheetHandle />
         <View style={styles.top}>
           <View style={{ flex: 1 }} />
-          {dismissable && <IconCircle name="close" onPress={onClose} />}
+          <IconCircle name="close" onPress={onClose} />
         </View>
         <Text style={[ui.h2, { marginTop: 12, marginBottom: 20 }]}>Settings</Text>
-        <Text style={ui.label}>API base URL</Text>
+        {signedIn && (
+          <>
+            <Text style={ui.label}>Timezone</Text>
+            <TextInput
+              style={styles.input}
+              autoCapitalize="none"
+              autoCorrect={false}
+              value={timezone}
+              onChangeText={setTimezone}
+              placeholder="America/Toronto"
+              placeholderTextColor={colors.muted}
+            />
+          </>
+        )}
+        <Text style={ui.label}>Server</Text>
         <TextInput
           style={styles.input}
           autoCapitalize="none"
@@ -66,30 +89,13 @@ export function SettingsSheet({
           placeholder="https://api-production-xxxx.up.railway.app"
           placeholderTextColor={colors.muted}
         />
-        <Text style={ui.label}>Bearer token</Text>
-        <TextInput
-          style={styles.input}
-          autoCapitalize="none"
-          autoCorrect={false}
-          secureTextEntry
-          value={token}
-          onChangeText={setToken}
-          placeholder="API_TOKEN from the server"
-          placeholderTextColor={colors.muted}
-        />
-        <Text style={ui.label}>Timezone</Text>
-        <TextInput
-          style={styles.input}
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={timezone}
-          onChangeText={setTimezone}
-          placeholder="America/Toronto"
-          placeholderTextColor={colors.muted}
-        />
         {status && <Text style={[ui.danger, { marginBottom: 12 }]}>{status}</Text>}
         <View style={styles.actions}>
-          <Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!baseUrl.trim() || !token.trim()} />
+          {signedIn && (
+            <Pill label="Sign out" tone="danger" onPress={signOut} busy={busy === "signout"} />
+          )}
+          <View style={{ flex: 1 }} />
+          <Pill label="Save" tone="light" onPress={save} busy={busy === "save"} disabled={!baseUrl.trim()} />
         </View>
       </View>
     </Modal>
@@ -116,5 +122,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
     marginBottom: 20,
   },
-  actions: { flexDirection: "row", justifyContent: "flex-end" },
+  actions: { flexDirection: "row", alignItems: "center" },
 });

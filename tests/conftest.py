@@ -1,4 +1,5 @@
 import asyncio
+import datetime as dt
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
 
@@ -14,10 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from alembic import command
 from memo.auth import get_current_user
 from memo.config import SEED_USER_ID, Settings
+from memo.db import bind_system
 from memo.main import create_app
+from memo.services import sessions
 from tests.fakes import (
 	FakeAnswerProvider,
 	FakeEmbedder,
+	FakeIdentityVerifier,
 	FakeQueue,
 	FakeRedis,
 	FakeRewriteProvider,
@@ -90,6 +94,7 @@ async def admin_engine(settings: Settings) -> AsyncIterator[AsyncEngine]:
 async def clean_tables(admin_engine: AsyncEngine) -> None:
 	async with admin_engine.begin() as conn:
 		for table in (
+			"sessions",
 			"resurfacings",
 			"morning_views",
 			"message_citations",
@@ -107,7 +112,10 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 			text("DELETE FROM users WHERE id <> :seed"), {"seed": str(SEED_USER_ID)}
 		)
 		await conn.execute(
-			text("UPDATE users SET timezone = 'UTC' WHERE id = :seed"),
+			text(
+				"UPDATE users SET timezone = 'UTC', apple_sub = NULL, email = NULL "
+				"WHERE id = :seed"
+			),
 			{"seed": str(SEED_USER_ID)},
 		)
 
@@ -126,6 +134,7 @@ async def app(settings: Settings) -> AsyncIterator[FastAPI]:
 		application.state.embedder = FakeEmbedder()
 		application.state.answer_provider = FakeAnswerProvider()
 		application.state.rewrite_provider = FakeRewriteProvider()
+		application.state.identity_verifier = FakeIdentityVerifier()
 		yield application
 
 
@@ -135,9 +144,18 @@ def queue(app: FastAPI) -> FakeQueue:
 	return fake
 
 
+async def issue_session(app: FastAPI, user_id: uuid.UUID) -> str:
+	"""A real session row for user_id, the way /v1/auth/apple would mint one."""
+	async with app.state.session_factory() as s:
+		await bind_system(s)
+		token = await sessions.create(s, user_id, ttl=dt.timedelta(days=1))
+		await s.commit()
+	return token
+
+
 @pytest.fixture
 async def client(app: FastAPI, settings: Settings) -> AsyncIterator[AsyncClient]:
-	token = settings.api_token.get_secret_value()
+	token = await issue_session(app, SEED_USER_ID)
 	async with AsyncClient(
 		transport=ASGITransport(app=app),
 		base_url="http://test",

@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from memo.auth import require_token
 from memo.routers import (
+	auth,
 	captures,
 	conversations,
 	derivations,
@@ -12,7 +12,10 @@ from memo.routers import (
 	usage,
 )
 
-v1 = APIRouter(prefix="/v1", dependencies=[Depends(require_token)])
+# Every route resolves its user through CurrentUser (ADR 0019); only /auth/apple
+# and /health are reachable without a session.
+v1 = APIRouter(prefix="/v1")
+v1.include_router(auth.router)
 v1.include_router(captures.router)
 v1.include_router(recordings.router)
 v1.include_router(derivations.router)

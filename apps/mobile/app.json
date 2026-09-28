@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "memo records voice notes so they can be transcribed.",
         "ITSAppUsesNonExemptEncryption": false
-      }
+      },
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {
@@ -37,7 +38,8 @@
     "plugins": [
       "expo-audio",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      "expo-apple-authentication"
     ],
     "backgroundColor": "#000000",
     "extra": {

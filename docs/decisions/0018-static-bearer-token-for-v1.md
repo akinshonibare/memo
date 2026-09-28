@@ -1,6 +1,6 @@
 # 0018 — A static bearer token gates V1; identity still comes from a dependency
 
-**Status:** active — since [#9](https://github.com/akinshonibare/memo/issues/9) (2026-09-27)
+**Status:** superseded by [0019](0019-sign-in-with-apple-and-server-sessions.md) (2026-09-28) — the revisit trigger fired the first day the app was installed on a phone
 **Date:** 2026-09-27
 **Closes:** Q7, [#41](https://github.com/akinshonibare/memo/issues/41)
 

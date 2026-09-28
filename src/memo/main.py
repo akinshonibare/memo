@@ -11,6 +11,7 @@ from memo.config import Settings, get_settings
 from memo.db import make_engine, make_session_factory
 from memo.logging import RequestIdMiddleware, configure_logging
 from memo.routers import v1
+from memo.services.apple import AppleIdentityVerifier
 from memo.services.ask import make_providers
 from memo.services.embeddings import make_embedder
 from memo.services.queue import make_queue
@@ -38,6 +39,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 		http = httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0))
 		app.state.http = http
 		app.state.embedder = make_embedder(resolved, http)
+		app.state.identity_verifier = AppleIdentityVerifier(
+			bundle_id=resolved.apple_bundle_id
+		)
 		answer_provider, rewrite_provider = make_providers(resolved)
 		app.state.answer_provider = answer_provider
 		app.state.rewrite_provider = rewrite_provider
