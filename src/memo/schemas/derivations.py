@@ -2,6 +2,7 @@
 body is validated against (curriculum Phase 3: one Pydantic model for both)."""
 
 import datetime as dt
+import re
 import uuid
 from typing import Any, Literal
 
@@ -25,6 +26,13 @@ DERIVATION_STATUSES: tuple[str, ...] = (
 )
 
 
+# A string value that ends in something like `','confidence':1.0` is the model
+# spilling the next field into this one. The JSON is still valid, so only a semantic
+# check catches it; failing here sends the response through the one-repair loop
+# (ADR 0015) instead of storing the junk.
+_LEAKED_FIELD = re.compile(r"""['"]\s*,\s*['"]?\w+['"]?\s*:""")
+
+
 class _Item(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
@@ -38,6 +46,13 @@ class _Item(BaseModel):
 		if not stripped:
 			raise ValueError("title must not be blank")
 		return stripped
+
+	@field_validator("*", mode="after")
+	@classmethod
+	def _no_leaked_fields(cls, value: Any) -> Any:
+		if isinstance(value, str) and _LEAKED_FIELD.search(value):
+			raise ValueError("text contains what looks like a leaked JSON field")
+		return value
 
 
 class TodoPayload(_Item):

@@ -4,7 +4,12 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from memo.schemas.derivations import Extraction, validate_payload
+from memo.schemas.derivations import (
+	Extraction,
+	IdeaPayload,
+	TodoPayload,
+	validate_payload,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "extraction"
 
@@ -46,3 +51,17 @@ def test_validate_payload_normalises_and_drops_confidence() -> None:
 	assert out == {"title": "Call the bank", "due": None, "notes": None}
 	with pytest.raises(ValidationError):
 		validate_payload("event", {"title": "x"})
+
+
+def test_leaked_json_in_a_text_field_is_rejected() -> None:
+	# Seen in production: the model closed the summary string, then kept writing the
+	# next field inside it. Valid JSON, wrong content, so it has to fail validation.
+	with pytest.raises(ValidationError):
+		IdeaPayload(
+			title="Weekly digest",
+			summary="Send myself a digest each week.','confidence':1.0",
+		)
+	with pytest.raises(ValidationError):
+		TodoPayload(title="Call Tunde", notes='about pricing", "due": "2026-10-02')
+	# Ordinary punctuation is fine.
+	IdeaPayload(title="Quote", summary="She said 'no, thanks': that was it.")
