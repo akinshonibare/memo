@@ -120,6 +120,9 @@ async def live(websocket: WebSocket) -> None:
 	First message from the app: {"type": "start", "sample_rate": N} - the phone's real
 	rate is only known once its mic is running. Then binary PCM16 frames, and
 	{"type": "stop"} to end. Down come partial / final / speech_started events."""
+	# Accept before refusing: a socket closed before accept() fails its handshake with
+	# a bare HTTP 403, and the app could not tell "sign in again" from "try later".
+	await websocket.accept()
 	user_id = await websocket_user(websocket)
 	if user_id is None:
 		await websocket.close(code=UNAUTHORIZED)
@@ -135,7 +138,6 @@ async def live(websocket: WebSocket) -> None:
 	if not decision.allowed:
 		await websocket.close(code=RATE_LIMITED)
 		return
-	await websocket.accept()
 	try:
 		start = json.loads(await websocket.receive_text())
 		sample_rate = int(start.get("sample_rate", 0))
