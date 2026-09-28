@@ -15,6 +15,7 @@ from alembic import command
 from memo.auth import get_current_user
 from memo.config import SEED_USER_ID, Settings
 from memo.main import create_app
+from tests.fakes import FakeQueue
 
 TEST_DB = "memo_test"
 
@@ -82,7 +83,8 @@ async def admin_engine(settings: Settings) -> AsyncIterator[AsyncEngine]:
 @pytest.fixture(autouse=True)
 async def clean_tables(admin_engine: AsyncEngine) -> None:
 	async with admin_engine.begin() as conn:
-		await conn.execute(text("DELETE FROM captures"))
+		for table in ("job_runs", "captures", "recordings"):
+			await conn.execute(text(f"DELETE FROM {table}"))
 		await conn.execute(
 			text("DELETE FROM users WHERE id <> :seed"), {"seed": str(SEED_USER_ID)}
 		)
@@ -92,7 +94,15 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 async def app(settings: Settings) -> AsyncIterator[FastAPI]:
 	application = create_app(settings)
 	async with LifespanManager(application):
+		# Jobs are recorded, not sent to Redis; the object store stays real (MinIO).
+		application.state.queue = FakeQueue()
 		yield application
+
+
+@pytest.fixture
+def queue(app: FastAPI) -> FakeQueue:
+	fake: FakeQueue = app.state.queue
+	return fake
 
 
 @pytest.fixture

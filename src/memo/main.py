@@ -9,18 +9,28 @@ from memo.config import Settings, get_settings
 from memo.db import make_engine, make_session_factory
 from memo.logging import RequestIdMiddleware, configure_logging
 from memo.routers import v1
+from memo.services.queue import make_queue
+from memo.services.storage import S3ObjectStore
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
 	resolved = settings or get_settings()
+	configure_logging(resolved.log_level)
 
 	@asynccontextmanager
 	async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-		configure_logging(resolved.log_level)
 		engine = make_engine(resolved.database_url)
 		app.state.engine = engine
 		app.state.session_factory = make_session_factory(engine)
+		store = S3ObjectStore.from_settings(resolved)
+		if resolved.app_env in ("local", "test"):
+			# MinIO starts empty; a Railway Bucket already exists.
+			await store.ensure_bucket()
+		app.state.object_store = store
+		queue = await make_queue(resolved)
+		app.state.queue = queue
 		yield
+		await queue.aclose()
 		await engine.dispose()
 
 	app = FastAPI(title="memo", version=__version__, lifespan=lifespan)
