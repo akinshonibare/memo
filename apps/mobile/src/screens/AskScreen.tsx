@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder } from "expo-audio";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
@@ -15,6 +17,7 @@ import { IconCircle } from "../components";
 import { formatStamp } from "../format";
 import { useKeyboardHeight } from "../keyboard";
 import { colors, ui } from "../ui";
+import { SentenceSplitter, SpeechQueue } from "../voice";
 
 type Turn = Message & { streaming?: boolean };
 type StreamEvent = "retrieval" | "token" | "done" | "error";
@@ -40,9 +43,31 @@ export function AskSheet({
   const list = useRef<FlatList<Turn>>(null);
   const keyboard = useKeyboardHeight();
 
+  // Voice mode (ADR 0025, step 1): hold the mic to ask; an answer to a spoken question
+  // is read aloud a sentence at a time as it streams.
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const [voice, setVoice] = useState<"idle" | "listening" | "transcribing">("idle");
+  const [speaking, setSpeaking] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+  const pressedAt = useRef(0);
+  // Set only once recording really started: the permission prompt or a failure can
+  // leave the finger lifted before it does.
+  const recording = useRef(false);
+  const released = useRef(false);
+  const speech = useMemo(() => {
+    const q = new SpeechQueue((sentence) => api.speak(sentence));
+    q.onSpeakingChange = setSpeaking;
+    return q;
+  }, [api]);
+
   useEffect(() => () => source.current?.close(), []);
+  useEffect(() => () => speech.stop(), [speech]);
+  useEffect(() => {
+    if (!visible) speech.stop();
+  }, [visible, speech]);
 
   const reset = () => {
+    speech.stop();
     source.current?.close();
     setConversationId(null);
     setTurns([]);
@@ -59,10 +84,12 @@ export function AskSheet({
   const patchTurn = (id: string, patch: (t: Turn) => Turn) =>
     setTurns((prev) => prev.map((t) => (t.id === id ? patch(t) : t)));
 
-  const ask = useCallback(async () => {
-    const question = text.trim();
+  const ask = useCallback(async (spoken?: string) => {
+    const question = (spoken ?? text).trim();
     if (!question || busy) return;
-    setText("");
+    if (spoken === undefined) setText("");
+    speech.stop();
+    const splitter = spoken !== undefined ? new SentenceSplitter() : null;
     setBusy(true);
     try {
       const cid = await ensureConversation();
@@ -83,8 +110,11 @@ export function AskSheet({
       es.addEventListener("token", (event) => {
         const data = JSON.parse(event.data ?? "{}") as { delta: string };
         patchTurn(accepted.message_id, (t) => ({ ...t, text: (t.text ?? "") + data.delta }));
+        for (const sentence of splitter?.push(data.delta) ?? []) speech.enqueue(sentence);
       });
       es.addEventListener("done", () => {
+        const rest = splitter?.flush();
+        if (rest) speech.enqueue(rest);
         patchTurn(accepted.message_id, (t) => ({ ...t, status: "done", streaming: false }));
         es.close();
         setBusy(false);
@@ -108,7 +138,53 @@ export function AskSheet({
         { id: `err-${Date.now()}`, role: "assistant", text: null, status: "failed", error: String(error), citations: [] },
       ]);
     }
-  }, [api, busy, ensureConversation, text]);
+  }, [api, busy, ensureConversation, speech, text]);
+
+  const startListening = async () => {
+    pressedAt.current = Date.now();
+    released.current = false;
+    setHint(null);
+    speech.stop(); // talking over the answer stops it
+    try {
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (!permission.granted) throw new Error("memo needs the microphone for this");
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+      recording.current = true;
+      setVoice("listening");
+      // The finger lifted while we were still setting up: a tap, not a question.
+      if (released.current) await stopListening();
+    } catch (e) {
+      setHint(String(e));
+      setVoice("idle");
+    }
+  };
+
+  const stopListening = async () => {
+    released.current = true;
+    if (!recording.current) return; // still starting (handled there) or it failed
+    recording.current = false;
+    await recorder.stop();
+    if (Date.now() - pressedAt.current < 400 || !recorder.uri) {
+      setVoice("idle");
+      setHint("Hold the mic while you talk.");
+      return;
+    }
+    setVoice("transcribing");
+    try {
+      const question = await api.transcribeQuestion(recorder.uri);
+      setVoice("idle");
+      if (!question) {
+        setHint("Didn't catch that. Try again?");
+        return;
+      }
+      await ask(question);
+    } catch (e) {
+      setVoice("idle");
+      setHint(`Couldn't hear that: ${String(e)}`);
+    }
+  };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -116,7 +192,11 @@ export function AskSheet({
         <View style={styles.header}>
           <IconCircle name="add" onPress={reset} />
           <Text style={styles.headerTitle}>Ask</Text>
-          <IconCircle name="close" onPress={onClose} />
+          {speaking ? (
+            <IconCircle name="volume-high" tone="light" onPress={() => speech.stop()} />
+          ) : (
+            <IconCircle name="close" onPress={onClose} />
+          )}
         </View>
         <FlatList
           ref={list}
@@ -140,17 +220,46 @@ export function AskSheet({
             </View>
           }
         />
+        {hint && <Text style={[ui.meta, styles.hint]}>{hint}</Text>}
         <View style={styles.composer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Message"
-            placeholderTextColor={colors.muted}
-            value={text}
-            onChangeText={setText}
-            onSubmitEditing={ask}
-            returnKeyType="send"
-          />
-          <IconCircle name="arrow-up" tone="light" size={40} onPress={ask} />
+          {voice === "idle" ? (
+            <TextInput
+              style={styles.input}
+              placeholder="Message, or hold the mic"
+              placeholderTextColor={colors.muted}
+              value={text}
+              onChangeText={setText}
+              onSubmitEditing={() => ask()}
+              returnKeyType="send"
+            />
+          ) : (
+            <View style={[styles.input, styles.listening]}>
+              {voice === "listening" ? (
+                <>
+                  <View style={styles.recDot} />
+                  <Text style={styles.listeningText}>Listening… release to ask</Text>
+                </>
+              ) : (
+                <>
+                  <ActivityIndicator color={colors.muted} />
+                  <Text style={styles.listeningText}>Working out what you said…</Text>
+                </>
+              )}
+            </View>
+          )}
+          {text.trim() ? (
+            <IconCircle name="arrow-up" tone="light" size={40} onPress={() => ask()} />
+          ) : (
+            <Pressable
+              onPressIn={startListening}
+              onPressOut={stopListening}
+              disabled={busy || voice === "transcribing"}
+              accessibilityLabel="Hold to ask by voice"
+              style={[styles.mic, voice === "listening" && styles.micLive]}
+            >
+              <Ionicons name="mic" size={20} color={voice === "listening" ? colors.text : colors.bg} />
+            </Pressable>
+          )}
         </View>
       </View>
     </Modal>
@@ -263,4 +372,17 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: colors.surfaceAlt,
   },
+  hint: { textAlign: "center", paddingHorizontal: 20, marginBottom: -4 },
+  listening: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 },
+  listeningText: { color: colors.muted, fontSize: 15 },
+  recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.record },
+  mic: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.text,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micLive: { backgroundColor: colors.record, transform: [{ scale: 1.15 }] },
 });

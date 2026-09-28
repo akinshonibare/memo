@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 import * as FileSystem from "expo-file-system/legacy";
 import type { Config } from "./config";
+import { toBase64 } from "./voice";
 
 export type Capture = {
   id: string;
@@ -288,6 +289,37 @@ export class Api {
       method: "POST",
       body: JSON.stringify({ kind, payload }),
     });
+  }
+
+  // --- voice (ADR 0025) ---------------------------------------------------------
+
+  // A spoken question, as text. The clip goes to the API and is never stored.
+  async transcribeQuestion(fileUri: string, mime = "audio/m4a"): Promise<string> {
+    const response = await FileSystem.uploadAsync(`${this.config.baseUrl}/v1/voice/transcribe`, fileUri, {
+      httpMethod: "POST",
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: { Authorization: `Bearer ${this.token}`, "Content-Type": mime },
+    });
+    if (response.status === 401) this.onUnauthorized?.();
+    if (response.status < 200 || response.status >= 300) {
+      throw new ApiError(response.status, response.body.slice(0, 300));
+    }
+    return (JSON.parse(response.body) as { text: string }).text;
+  }
+
+  // One sentence of an answer as speech, saved to a cache file the player can open.
+  async speak(text: string): Promise<string> {
+    const response = await fetch(`${this.config.baseUrl}/v1/voice/speak`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!response.ok) throw new ApiError(response.status, (await response.text()).slice(0, 300));
+    const uri = `${FileSystem.cacheDirectory}speech-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`;
+    await FileSystem.writeAsStringAsync(uri, toBase64(await response.arrayBuffer()), {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return uri;
   }
 
   // --- ask ----------------------------------------------------------------------

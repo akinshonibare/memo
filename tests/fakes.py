@@ -206,6 +206,17 @@ class FakeDescriber:
 		return DescribeResult(text=self.text, call=fake_llm_call("describe"))
 
 
+class FakeSpeaker:
+	model = "fake-tts"
+
+	def __init__(self) -> None:
+		self.said: list[str] = []
+
+	async def speak(self, text: str) -> bytes:
+		self.said.append(text)
+		return b"ID3fake-mp3"
+
+
 class FakeTranscriber:
 	def __init__(
 		self,
