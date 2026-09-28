@@ -81,6 +81,21 @@ export class Api {
     return fetch(`${this.config.baseUrl}/health`).then((r) => r.ok);
   }
 
+  // --- me -----------------------------------------------------------------------
+
+  getMe() {
+    return this.request<{ id: string; timezone: string }>("/v1/me");
+  }
+
+  // The morning view and date extraction run in this zone, so it comes from the
+  // device rather than a server-side config value.
+  setTimezone(timezone: string) {
+    return this.request<{ id: string; timezone: string }>("/v1/me", {
+      method: "PATCH",
+      body: JSON.stringify({ timezone }),
+    });
+  }
+
   // --- captures -----------------------------------------------------------------
 
   createTextCapture(text: string) {

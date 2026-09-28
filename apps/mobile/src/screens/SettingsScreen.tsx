@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Modal, StyleSheet, Text, TextInput, View } from "react-native";
+import { Api } from "../api";
 import { type Config, saveConfig } from "../config";
 import { IconCircle, Pill, SheetHandle } from "../components";
 import { colors, ui } from "../ui";
@@ -19,6 +20,7 @@ export function SettingsSheet({
 }) {
   const [baseUrl, setBaseUrl] = useState(initial?.baseUrl ?? "");
   const [token, setToken] = useState(initial?.token ?? "");
+  const [timezone, setTimezone] = useState(deviceTimezone());
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -29,6 +31,7 @@ export function SettingsSheet({
       const ok = await fetch(`${config.baseUrl}/health`).then((r) => r.ok);
       if (!ok) throw new Error("health check failed");
       await saveConfig(config);
+      await new Api(config).setTimezone(timezone.trim());
       setStatus(null);
       onSaved(config);
     } catch (error) {
@@ -74,6 +77,16 @@ export function SettingsSheet({
           placeholder="API_TOKEN from the server"
           placeholderTextColor={colors.muted}
         />
+        <Text style={ui.label}>Timezone</Text>
+        <TextInput
+          style={styles.input}
+          autoCapitalize="none"
+          autoCorrect={false}
+          value={timezone}
+          onChangeText={setTimezone}
+          placeholder="America/Toronto"
+          placeholderTextColor={colors.muted}
+        />
         {status && <Text style={[ui.danger, { marginBottom: 12 }]}>{status}</Text>}
         <View style={styles.actions}>
           <Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!baseUrl.trim() || !token.trim()} />
@@ -81,6 +94,14 @@ export function SettingsSheet({
       </View>
     </Modal>
   );
+}
+
+function deviceTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
 }
 
 const styles = StyleSheet.create({

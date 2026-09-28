@@ -162,3 +162,18 @@ async def test_delete_leaves_nothing_retrievable_and_spares_other_users(
 		)
 	assert result.hits == [] and result.vector_ranked == []
 	assert (await client.get("/v1/captures")).json()["items"] == []
+
+
+async def test_timezone_is_readable_and_settable(client: AsyncClient) -> None:
+	assert (await client.get("/v1/me")).json()["timezone"] == "UTC"
+	updated = await client.patch("/v1/me", json={"timezone": "America/Toronto"})
+	assert updated.status_code == 200, updated.text
+	assert updated.json()["timezone"] == "America/Toronto"
+	assert (await client.get("/v1/me")).json()["timezone"] == "America/Toronto"
+
+
+async def test_unknown_timezone_is_a_422(client: AsyncClient) -> None:
+	assert (
+		await client.patch("/v1/me", json={"timezone": "Mars/Olympus_Mons"})
+	).status_code == 422
+	assert (await client.get("/v1/me")).json()["timezone"] == "UTC"

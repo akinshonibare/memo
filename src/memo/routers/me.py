@@ -3,17 +3,18 @@ removal; the schema was built multi-tenant, so both are one user's rows."""
 
 import datetime as dt
 import uuid
+import zoneinfo
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select, text
 from sqlalchemy.engine import CursorResult
 
 from memo.auth import CurrentUser
 from memo.config import Settings, get_settings
 from memo.db import DbSession
-from memo.models import Capture, Conversation, Derivation, Message, Recording
+from memo.models import Capture, Conversation, Derivation, Message, Recording, User
 from memo.routers.recordings import get_object_store
 from memo.schemas.ask import MessageOut
 from memo.schemas.captures import CaptureOut
@@ -21,6 +22,49 @@ from memo.schemas.derivations import DerivationOut
 from memo.services.storage import ObjectStore
 
 router = APIRouter(prefix="/me", tags=["me"])
+
+
+class MeOut(BaseModel):
+	model_config = ConfigDict(from_attributes=True)
+
+	id: uuid.UUID
+	timezone: str
+
+
+class MePatch(BaseModel):
+	"""The timezone drives the morning view's 04:00 and how extraction reads "noon",
+	so it is the user's to set - from the device, not from a config file."""
+
+	timezone: str = Field(min_length=1, max_length=64)
+
+	@field_validator("timezone")
+	@classmethod
+	def _is_a_real_zone(cls, value: str) -> str:
+		try:
+			zoneinfo.ZoneInfo(value)
+		except (zoneinfo.ZoneInfoNotFoundError, ValueError) as exc:
+			raise ValueError(f"unknown IANA timezone: {value!r}") from exc
+		return value
+
+
+async def _load_user(session: DbSession, user_id: uuid.UUID) -> User:
+	user = await session.get(User, user_id)
+	if user is None:
+		raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+	return user
+
+
+@router.get("", response_model=MeOut)
+async def read_me(session: DbSession, user_id: CurrentUser) -> User:
+	return await _load_user(session, user_id)
+
+
+@router.patch("", response_model=MeOut)
+async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> User:
+	user = await _load_user(session, user_id)
+	user.timezone = body.timezone
+	await session.flush()
+	return user
 
 
 class RecordingExport(BaseModel):
