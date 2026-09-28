@@ -15,13 +15,15 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 import structlog
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.db import bind_user, commit_and_rebind
 from memo.ids import uuid7
-from memo.models import Capture, JobRun, Recording
+from memo.models import Capture, Derivation, JobRun, LLMCallRow, Recording, User
+from memo.services.extraction import ExtractionFailed, ExtractorLike
+from memo.services.llm import LLMCall
 from memo.services.retry import RetryableError, TerminalError, backoff_delay
 from memo.services.storage import ObjectStore
 from memo.services.transcription import Transcriber
@@ -38,6 +40,7 @@ class PipelineContext:
 	session: AsyncSession
 	transcriber: Transcriber
 	object_store: ObjectStore
+	extractor: ExtractorLike
 	max_attempts: int = 5
 
 
@@ -86,9 +89,84 @@ async def _transcribe(ctx: PipelineContext, capture: Capture) -> None:
 	)
 
 
+async def _record_calls(
+	ctx: PipelineContext, capture: Capture, calls: list[LLMCall]
+) -> None:
+	request_id = structlog.contextvars.get_contextvars().get("request_id")
+	for call in calls:
+		ctx.session.add(
+			LLMCallRow(
+				id=uuid7(),
+				user_id=capture.user_id,
+				capture_id=capture.id,
+				stage=call.stage,
+				provider=call.provider,
+				model=call.model,
+				input_tokens=call.input_tokens,
+				output_tokens=call.output_tokens,
+				cache_read_tokens=call.cache_read_tokens,
+				cache_write_tokens=call.cache_write_tokens,
+				latency_ms=call.latency_ms,
+				cost_usd=call.cost_usd,
+				request_id=str(request_id)[:64] if request_id else None,
+			)
+		)
+
+
+async def _extract(ctx: PipelineContext, capture: Capture) -> None:
+	if not capture.text or not capture.text.strip():
+		raise TerminalError("nothing to extract: the capture has no text")
+	user = await ctx.session.get(User, capture.user_id)
+	timezone = user.timezone if user is not None else "UTC"
+	version = ctx.extractor.version
+	try:
+		result = await ctx.extractor.extract(
+			capture.text, captured_at=capture.created_at, timezone=timezone
+		)
+	except ExtractionFailed as exc:
+		# Paid-for calls are recorded even when the outcome is a failure.
+		await _record_calls(ctx, capture, exc.calls)
+		capture.extraction_raw = exc.raw
+		raise TerminalError(str(exc)) from exc
+	await _record_calls(ctx, capture, result.calls)
+
+	# Idempotent by replacement: a re-run of this version drops only what nobody has
+	# reviewed. Confirmed, rejected and user-created rows are the user's, not ours.
+	await ctx.session.execute(
+		delete(Derivation).where(
+			Derivation.capture_id == capture.id,
+			Derivation.user_id == capture.user_id,
+			Derivation.extractor_version == version,
+			Derivation.status == "pending_review",
+		)
+	)
+	for kind, item in result.extraction.items():
+		ctx.session.add(
+			Derivation(
+				id=uuid7(),
+				user_id=capture.user_id,
+				capture_id=capture.id,
+				kind=kind,
+				payload=item.model_dump(mode="json", exclude={"confidence"}),
+				status="pending_review",
+				extractor_version=version,
+				confidence=item.confidence,
+			)
+		)
+	capture.extraction_raw = None
+	log.info(
+		"stage.extract",
+		capture_id=str(capture.id),
+		version=version,
+		derivations=len(result.extraction.items()),
+		calls=len(result.calls),
+		cost_usd=str(sum((c.cost_usd for c in result.calls), start=0)),
+	)
+
+
 async def _not_yet(ctx: PipelineContext, capture: Capture) -> None:
-	# Extraction (Stage 3) and embedding (Stage 4) slot in here; until then the
-	# capture passes through so the status machine stays the final shape.
+	# Embedding (Stage 4) slots in here; until then the capture passes through so
+	# the status machine stays the final shape.
 	pass
 
 
@@ -103,8 +181,8 @@ STAGES: tuple[Stage, ...] = (
 	Stage(
 		name="extract",
 		status=CaptureStatus.EXTRACTING,
-		version=lambda ctx: "noop",
-		run=_not_yet,
+		version=lambda ctx: ctx.extractor.version,
+		run=_extract,
 		applies=lambda c: True,
 	),
 	Stage(
@@ -190,13 +268,15 @@ async def process_capture(
 		if not stage.applies(capture):
 			continue
 		version = stage.version(ctx)
+		# Status advances even for a stage that is skipped as already done, so a re-run
+		# that resumes mid-pipeline still walks the machine to `ready` in order.
+		if capture.status != stage.status.value:
+			transition(capture, stage.status)
 		run_id = await _claim_run(session, capture, stage, version)
+		await commit_and_rebind(session, user_id)
 		if run_id is None:
 			log.info("stage.skip", capture_id=str(capture.id), stage=stage.name)
 			continue
-		if capture.status != stage.status.value:
-			transition(capture, stage.status)
-		await commit_and_rebind(session, user_id)
 
 		try:
 			await stage.run(ctx, capture)

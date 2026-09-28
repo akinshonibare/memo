@@ -1,6 +1,6 @@
 # 0014 — `claude-opus-5` for extraction
 
-**Status:** provisional — becomes `active` when [#23](https://github.com/akinshonibare/memo/issues/23) lands
+**Status:** active — since [#23](https://github.com/akinshonibare/memo/issues/23) (2026-09-28)
 **Date:** 2026-09-27
 **Closes:** Q1, [#20](https://github.com/akinshonibare/memo/issues/20)
 

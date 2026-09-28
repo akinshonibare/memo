@@ -51,6 +51,10 @@ class Settings(BaseSettings):
 	deepgram_api_key: SecretStr | None = None
 	deepgram_model: str = "nova-3"
 
+	# Extraction (ADR 0014/0015). Unset means every capture fails at the extract stage.
+	anthropic_api_key: SecretStr | None = None
+	extraction_model: str = "claude-opus-5"
+
 
 @lru_cache
 def get_settings() -> Settings:

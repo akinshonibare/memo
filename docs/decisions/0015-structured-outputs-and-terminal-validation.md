@@ -1,6 +1,6 @@
 # 0015 — Structured outputs via the API's schema constraint; semantic validation failures are terminal after one repair
 
-**Status:** provisional — becomes `active` when [#23](https://github.com/akinshonibare/memo/issues/23) lands
+**Status:** active — since [#23](https://github.com/akinshonibare/memo/issues/23) (2026-09-28)
 **Date:** 2026-09-27
 **Closes:** Q2, [#21](https://github.com/akinshonibare/memo/issues/21)
 

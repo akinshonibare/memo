@@ -1,7 +1,51 @@
+import datetime as dt
 import uuid
 from dataclasses import dataclass, field
 
+from memo.schemas.derivations import Extraction
+from memo.services.extraction import ExtractResult
+from memo.services.llm import LLMCall
 from memo.services.transcription import Transcript
+
+
+def fake_llm_call(stage: str = "extract") -> LLMCall:
+	return LLMCall.priced(
+		provider="fake",
+		model="claude-opus-5",
+		stage=stage,
+		input_tokens=400,
+		output_tokens=60,
+		latency_ms=10,
+	)
+
+
+class FakeExtractor:
+	model = "fake"
+	version = "extract-v1/fake"
+
+	def __init__(
+		self,
+		extraction: Extraction | None = None,
+		*,
+		fail_with: Exception | None = None,
+	) -> None:
+		self.extraction = extraction or Extraction()
+		self.fail_with = fail_with
+		self.calls = 0
+		self.seen: list[tuple[str, dt.datetime, str]] = []
+
+	async def extract(
+		self, text: str, *, captured_at: dt.datetime, timezone: str
+	) -> ExtractResult:
+		self.calls += 1
+		self.seen.append((text, captured_at, timezone))
+		if self.fail_with is not None:
+			raise self.fail_with
+		return ExtractResult(
+			extraction=self.extraction,
+			raw=self.extraction.model_dump_json(),
+			calls=[fake_llm_call()],
+		)
 
 
 class FakeObjectStore:

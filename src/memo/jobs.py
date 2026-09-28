@@ -30,6 +30,7 @@ async def process_capture_task(
 			session=session,
 			transcriber=ctx["transcriber"],
 			object_store=ctx["object_store"],
+			extractor=ctx["extractor"],
 			max_attempts=ctx["settings"].max_attempts,
 		)
 		outcome = await process_capture(
