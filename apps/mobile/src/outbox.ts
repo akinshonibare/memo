@@ -24,6 +24,20 @@ const INDEX = `${DIR}index.json`;
 let items: OutboxItem[] | null = null;
 let flushing = false;
 const listeners = new Set<(items: OutboxItem[]) => void>();
+const savedListeners = new Set<() => void>();
+
+// Told whenever a note reaches the server, however it was taken (typed, spoken, a
+// photo, Siri, the share sheet) and whether now or later from the outbox.
+export function onNoteSaved(listener: () => void): () => void {
+  savedListeners.add(listener);
+  return () => {
+    savedListeners.delete(listener);
+  };
+}
+
+function saved() {
+  for (const l of savedListeners) l();
+}
 
 async function load(): Promise<OutboxItem[]> {
   if (items) return items;
@@ -66,6 +80,7 @@ export async function captureOrQueue(
   const item: OutboxItem = { ...newOnce(), ...capture, attempts: 0 };
   try {
     await send(api, item);
+    saved();
     return "sent";
   } catch (error) {
     if (!retryable(error)) throw error;
@@ -91,6 +106,7 @@ export async function flushOutbox(api: Api): Promise<void> {
       try {
         await send(api, item);
         await forget(item);
+        saved();
       } catch (error) {
         const current = (await load()).map((i) =>
           i.clientToken === item.clientToken

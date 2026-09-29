@@ -1,27 +1,36 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { type GestureResponderEvent, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Api, Derivation, Week } from "../api";
-import { IconCircle } from "../components";
+import { IconCircle, TickCircle } from "../components";
+import { useRefetchOnFocus } from "../focus";
 import { formatDue, formatWhen } from "../format";
 import { haptic } from "../haptics";
-import { colors, fonts, ui } from "../ui";
+import { celebrate, celebrateAt, listLayout, rowExit } from "../motion";
+import { fonts, useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
 
 // The weekly review (ADR 0028; the brief's V3): Monday to Sunday, facts not a pep talk.
 // Still-open todos are listed and can be ticked off here; they are never counted
 // against you (no guilt mechanics).
 export function ReviewScreen({
   api,
+  refreshKey,
   onBack,
   onOpenCapture,
   onChanged,
 }: {
   api: Api;
+  refreshKey: number;
   onBack: () => void;
   onOpenCapture: (id: string) => void;
   onChanged: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [weeksAgo, setWeeksAgo] = useState(0);
   const [week, setWeek] = useState<Week | null>(null);
@@ -39,16 +48,39 @@ export function ReviewScreen({
   useEffect(() => {
     const first = setTimeout(load, 0);
     return () => clearTimeout(first);
-  }, [load]);
+  }, [load, refreshKey]);
+  useRefetchOnFocus(load);
 
-  const tick = async (d: Derivation) => {
-    haptic.done();
+  // Ticked here, it pops and leaves the list; ticking the last open one empties the
+  // week's list, and that gets the swarm.
+  const { width, height } = useWindowDimensions();
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
+  // Shown ticked until a week arrives without it; after that, one unticked elsewhere
+  // (Reminders, Today) shows open again rather than staying checked.
+  const [seen, setSeen] = useState(week);
+  if (seen !== week) {
+    setSeen(week);
+    const open = new Set((week?.still_open ?? []).map((d) => d.id));
+    setTicked((prev) => new Set([...prev].filter((id) => open.has(id))));
+  }
+  const tick = async (d: Derivation, e: GestureResponderEvent) => {
+    if (ticked.has(d.id)) return;
+    setTimeout(haptic.done, 90);
+    const open = (week?.still_open ?? []).filter((x) => !ticked.has(x.id));
+    if (open.length === 1 && week?.still_open_total === 1) celebrate(width / 2, height * 0.55, true);
+    else celebrateAt(e);
+    setTicked((prev) => new Set(prev).add(d.id));
     try {
       await api.reviewDerivation(d.id, { completed: true });
-      await load();
+      setTimeout(() => void load(), 600);
       onChanged();
-    } catch (e) {
-      setError(String(e));
+    } catch (err) {
+      setTicked((prev) => {
+        const next = new Set(prev);
+        next.delete(d.id);
+        return next;
+      });
+      setError(String(err));
     }
   };
 
@@ -97,7 +129,15 @@ export function ReviewScreen({
           items={week?.still_open ?? []}
           empty="Nothing open. Enjoy it."
         >
-          {(d) => <Line key={d.id} d={d} onTick={() => tick(d)} onPress={() => d.capture_id && onOpenCapture(d.capture_id)} />}
+          {(d) => (
+            <Line
+              key={d.id}
+              d={d}
+              done={ticked.has(d.id)}
+              onTick={(e) => tick(d, e)}
+              onPress={() => d.capture_id && onOpenCapture(d.capture_id)}
+            />
+          )}
         </Section>
 
         <Section title="Coming up" items={week?.coming_up ?? []} empty="Nothing in the next seven days.">
@@ -123,6 +163,8 @@ function Section({
   empty: string;
   children: (d: Derivation) => React.ReactNode;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
   return (
     <View style={styles.section}>
       <Text style={ui.label}>{title}</Text>
@@ -139,9 +181,12 @@ function Line({
 }: {
   d: Derivation;
   done?: boolean;
-  onTick?: () => void;
+  onTick?: (e: GestureResponderEvent) => void;
   onPress: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const p = d.payload;
   const detail =
     d.kind === "event" && typeof p.starts_at === "string"
@@ -152,15 +197,17 @@ function Line({
           ? p.summary
           : null;
   return (
+    <Animated.View exiting={rowExit} layout={listLayout}>
     <Pressable onPress={onPress} style={({ pressed }) => [styles.line, pressed && { opacity: 0.6 }]}>
       {d.kind === "todo" ? (
-        <Pressable onPress={onTick} disabled={!onTick} hitSlop={10}>
-          <Ionicons
-            name={done ? "checkmark-circle" : "ellipse-outline"}
-            size={21}
-            color={done ? colors.green : colors.muted}
-          />
-        </Pressable>
+        <TickCircle
+          done={!!done}
+          label={String(p.title ?? "")}
+          size={21}
+          color={colors.muted}
+          doneColor={colors.green}
+          onPress={done ? undefined : onTick}
+        />
       ) : (
         <Ionicons name={d.kind === "event" ? "calendar-outline" : "bulb-outline"} size={19} color={colors.muted} />
       )}
@@ -173,6 +220,7 @@ function Line({
         ) : null}
       </View>
     </Pressable>
+    </Animated.View>
   );
 }
 
@@ -184,7 +232,7 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   top: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 4 },
   arrow: { padding: 6 },
   title: { fontFamily: fonts.serif, fontSize: 38, lineHeight: 44, color: colors.text, marginTop: 12 },
@@ -193,4 +241,4 @@ const styles = StyleSheet.create({
   line: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 9 },
   lineTitle: { color: colors.text, fontSize: 16 },
   doneTitle: { color: colors.muted, textDecorationLine: "line-through" },
-});
+}));

@@ -13,12 +13,17 @@ export type Config = { baseUrl: string; token: string | null };
 
 const trimSlash = (url: string) => url.replace(/\/+$/, "");
 
+// A development build pointed at a local API can be handed a session minted there,
+// because Sign in with Apple needs an Apple ID the simulator doesn't have. Only in
+// __DEV__: a release build compiles this away, and it never overrides a real session.
+const DEV_SESSION = __DEV__ ? process.env.EXPO_PUBLIC_DEV_SESSION : undefined;
+
 export async function loadConfig(): Promise<Config> {
   const [baseUrl, token] = await Promise.all([
     SecureStore.getItemAsync(KEY_BASE_URL),
     SecureStore.getItemAsync(KEY_TOKEN),
   ]);
-  return { baseUrl: trimSlash(baseUrl || DEFAULT_BASE_URL), token: token || null };
+  return { baseUrl: trimSlash(baseUrl || DEFAULT_BASE_URL), token: token || DEV_SESSION || null };
 }
 
 export async function saveBaseUrl(baseUrl: string): Promise<void> {

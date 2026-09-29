@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { Modal, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Text, TextInput, View } from "react-native";
 import { Api, ApiError } from "../api";
 import { IconCircle, Pill, SheetHandle } from "../components";
 import { useKeyboardHeight } from "../keyboard";
-import { colors, ui } from "../ui";
+import { useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
 import { haptic } from "../haptics";
 import { captureOrQueue } from "../outbox";
+import { LockCover } from "../lock";
 
 export function ComposeSheet({
   api,
@@ -19,6 +21,9 @@ export function ComposeSheet({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [text, setText] = useState(initialText ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,12 +67,13 @@ export function ComposeSheet({
         <View style={styles.actions}>
           <Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!text.trim()} />
         </View>
+        <LockCover />
       </View>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   sheet: { flex: 1, backgroundColor: colors.surface, paddingHorizontal: 24, paddingBottom: 24 },
   top: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   title: { marginTop: 12, marginBottom: 12 },
@@ -79,4 +85,4 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   actions: { flexDirection: "row", justifyContent: "flex-end", paddingTop: 12 },
-});
+}));

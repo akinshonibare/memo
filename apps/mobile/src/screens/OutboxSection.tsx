@@ -1,13 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { confirmDelete } from "../components";
 import { formatStamp } from "../format";
 import { forget, type OutboxItem, useOutbox } from "../outbox";
-import { colors, ui } from "../ui";
+import { useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
 
 // What's on this phone but not yet on the server (ADR 0028). Waiting items sync by
 // themselves; one the server refused shows why and can be removed - never dropped.
 export function OutboxSection() {
+  const ui = useUi();
+  const styles = useStyles();
   const items = useOutbox();
   if (items.length === 0) return null;
   return (
@@ -21,6 +24,9 @@ export function OutboxSection() {
 }
 
 function Row({ item }: { item: OutboxItem }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const title =
     item.kind === "text" ? (item.text ?? "").split("\n")[0] : item.kind === "audio" ? "Voice note" : "Photo";
   const remove = () => confirmDelete("Remove this note from the phone? It was never saved.", () => void forget(item));
@@ -48,7 +54,7 @@ function Row({ item }: { item: OutboxItem }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: { paddingHorizontal: 20, paddingTop: 12 },
   row: {
     flexDirection: "row",
@@ -60,4 +66,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   title: { color: colors.text, fontSize: 16 },
-});
+}));

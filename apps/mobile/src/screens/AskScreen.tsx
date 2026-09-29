@@ -6,7 +6,6 @@ import {
   FlatList,
   Modal,
   Pressable,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -16,10 +15,14 @@ import { Api, type Citation, type Message } from "../api";
 import { IconCircle } from "../components";
 import { formatStamp } from "../format";
 import { useKeyboardHeight } from "../keyboard";
-import { colors, ui } from "../ui";
+import { useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
 import { useLiveVoice } from "../liveVoice";
 import { SentenceSplitter, SpeechQueue } from "../voice";
+import Animated, { FadeIn } from "react-native-reanimated";
+import { ListeningDot, rowEnter, SpeakingBars } from "../motion";
 import { haptic } from "../haptics";
+import { LockCover } from "../lock";
 
 type Turn = Message & { streaming?: boolean };
 type StreamEvent = "retrieval" | "token" | "done" | "error";
@@ -37,6 +40,9 @@ export function AskSheet({
   onClose: () => void;
   onOpenCapture: (id: string) => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [text, setText] = useState("");
@@ -283,15 +289,18 @@ export function AskSheet({
           contentContainerStyle={styles.list}
           onContentSizeChange={() => list.current?.scrollToEnd({ animated: true })}
           keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) =>
-            item.role === "user" ? (
-              <View style={styles.userBubble}>
-                <Text style={styles.userText}>{item.text}</Text>
-              </View>
-            ) : (
-              <AssistantTurn turn={item} onOpenCapture={onOpenCapture} />
-            )
-          }
+          renderItem={({ item }) => (
+            // A question rises into place; an answer fades up under it.
+            <Animated.View entering={item.role === "user" ? rowEnter : FadeIn.duration(260)}>
+              {item.role === "user" ? (
+                <View style={styles.userBubble}>
+                  <Text style={styles.userText}>{item.text}</Text>
+                </View>
+              ) : (
+                <AssistantTurn turn={item} onOpenCapture={onOpenCapture} />
+              )}
+            </Animated.View>
+          )}
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <Text style={ui.empty}>Ask anything about your notes.</Text>
@@ -307,7 +316,9 @@ export function AskSheet({
           >
             <View style={styles.liveStatus}>
               {live.state === "listening" ? (
-                <View style={styles.recDot} />
+                <ListeningDot />
+              ) : speaking ? (
+                <SpeakingBars />
               ) : (
                 <ActivityIndicator color={colors.muted} />
               )}
@@ -347,7 +358,7 @@ export function AskSheet({
             <View style={[styles.input, styles.listening]}>
               {voice === "listening" ? (
                 <>
-                  <View style={styles.recDot} />
+                  <ListeningDot />
                   <Text style={styles.listeningText}>Listening… release to ask</Text>
                 </>
               ) : (
@@ -373,6 +384,7 @@ export function AskSheet({
           )}
         </View>
         )}
+        <LockCover />
       </View>
     </Modal>
   );
@@ -387,6 +399,9 @@ function citedIn(text: string | null, citations: Citation[]): Citation[] {
 }
 
 function AssistantTurn({ turn, onOpenCapture }: { turn: Turn; onOpenCapture: (id: string) => void }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   const cited = turn.streaming ? [] : citedIn(turn.text, turn.citations);
   return (
@@ -421,7 +436,7 @@ function AssistantTurn({ turn, onOpenCapture }: { turn: Turn; onOpenCapture: (id
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   sheet: { flex: 1, backgroundColor: colors.surface },
   header: {
     flexDirection: "row",
@@ -498,7 +513,6 @@ const styles = StyleSheet.create({
   hint: { textAlign: "center", paddingHorizontal: 20, marginBottom: -4 },
   listening: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 },
   listeningText: { color: colors.muted, fontSize: 15 },
-  recDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.record },
   mic: {
     width: 40,
     height: 40,
@@ -521,4 +535,4 @@ const styles = StyleSheet.create({
   },
   liveStatus: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
   liveText: { flex: 1, color: colors.text, fontSize: 16 },
-});
+}));
