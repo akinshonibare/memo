@@ -97,6 +97,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0043](0043-habits-noticed-not-logged.md) | Habits: noticed in your notes, suggested when they repeat, counted by rhythm, never a streak | active; amended by 0050; its switch superseded by 0054 |
 | [0044](0044-readings-you-choose.md) | Readings you choose: set what you're reading, log what you read, no fixed plan (supersedes 0042's plan) | active |
 | [0045](0045-ask-reads-dates-and-people-before-it-searches.md) | Ask reads dates and people from the records before it searches; names go to Deepgram as keyterms | active |
+| [0046](0046-deploy-on-merge.md) | Deploy on merge: Railway follows `main` after CI (migrations under an advisory lock); OTA updates on merge when a build fits | provisional |
 | [0047](0047-a-morning-push-only-when-the-day-has-something.md) | A morning push, only when the day has something in it: once a day, signed-in phones only, measured from the first send (supersedes 0023) | active |
 | [0048](0048-a-later-note-can-answer-a-prayer-or-carry-on-an-idea.md) | A later note can answer a prayer or carry on an idea: candidates cheaply, a model decides, the author says yes | active |
 | [0049](0049-a-map-of-one-thing.md) | A map of one thing (an ego-graph over existing links), not a map of everything | active on the server; out of the app (0052) |
