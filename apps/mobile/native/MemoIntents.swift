@@ -11,7 +11,7 @@ import UIKit
 
 struct TakeNoteIntent: AppIntent {
   static let title: LocalizedStringResource = "Take a note"
-  static let description = IntentDescription("Save a note to memo. Siri asks what it is.")
+  static let description = IntentDescription("Save a note to memo. You will be asked what it says.")
   static let openAppWhenRun: Bool = true
 
   @Parameter(title: "Note", requestValueDialog: "What's the note?")
