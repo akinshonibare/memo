@@ -36,7 +36,6 @@ type Busy =
   | "lock"
   | "faith"
   | "translation"
-  | "habits"
   | "health"
   | "morning";
 
@@ -151,15 +150,6 @@ export function ProfileSheet({
       onSettingsChanged();
     });
 
-  // Habits (ADR 0043). On the account: the server reads notes for what you did only
-  // while it's on. Home refreshes because its Habits door appears or goes.
-  const toggleHabits = (on: boolean) =>
-    run("habits", async () => {
-      const updated = await api().updateProfile({ habits_enabled: on });
-      setMe(updated);
-      onProfileChanged(updated);
-      onSettingsChanged();
-    });
 
   // The morning push (ADR 0047). On the account: the server sends it, at this time, only
   // on a day with something in it. Turning it on registers this phone first.
@@ -438,24 +428,12 @@ export function ProfileSheet({
                 )}
               </Group>
 
-              <Group
-                title="Habits"
-                footer={
-                  "memo notices what you do from your notes - the gym, reading, time with family, reading the Bible - and suggests a habit once it's happened a few times. It counts days and shows your rhythm, never a streak, and notices milestones: a first 10k, your longest run, your heaviest squat. Your last 60 days of notes are read when you turn it on." +
-                  (me?.habits_enabled && healthAvailable()
-                    ? " With Apple Health on, your workouts count too; memo only reads them, and turning it off deletes what it read."
-                    : "")
-                }
-              >
-                <Row icon="leaf-outline" label="Habits" busy={busy === "habits"}>
-                  <Switch
-                    value={!!me?.habits_enabled}
-                    disabled={!me}
-                    onValueChange={(on) => void toggleHabits(on)}
-                    trackColor={{ true: colors.forest }}
-                  />
-                </Row>
-                {me?.habits_enabled && healthAvailable() && (
+              {/* Habits is always on (ADR 0054): no switch for it, only for Apple Health. */}
+              {healthAvailable() && (
+                <Group
+                  title="Habits"
+                  footer="memo notices what you do from your notes and counts it towards your habits. With Apple Health on, your workouts count too; memo only reads them, and turning it off deletes what it read."
+                >
                   <Row icon="fitness-outline" label="Workouts from Apple Health" busy={busy === "health"}>
                     <Switch
                       value={health.on}
@@ -463,8 +441,8 @@ export function ProfileSheet({
                       trackColor={{ true: colors.forest }}
                     />
                   </Row>
-                )}
-              </Group>
+                </Group>
+              )}
 
               <Group
                 title="Morning"

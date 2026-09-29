@@ -332,7 +332,7 @@ export type Me = {
   note_count?: number; // for milestones; absent from an older server
   faith_enabled?: boolean; // ADR 0042; off by default
   bible_translation?: string; // what Bible links open in; NIV by default
-  habits_enabled?: boolean; // ADR 0043; off by default
+  habits_enabled?: boolean; // always true since ADR 0054, unless an operator turned it off
   morning_push_at?: string | null; // "07:30:00", or null for no morning push (ADR 0047)
 };
 
@@ -439,7 +439,6 @@ export class Api {
     auto_accept?: boolean;
     faith_enabled?: boolean;
     bible_translation?: string;
-    habits_enabled?: boolean;
     morning_push_at?: string | null;
   }) {
     return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });

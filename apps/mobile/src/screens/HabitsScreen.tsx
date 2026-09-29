@@ -119,7 +119,7 @@ export function HabitsScreen({
 
         {habits && !habits.enabled && (
           <Text style={[ui.bodyMuted, styles.hint]}>
-            Habits is off, so memo isn&apos;t reading your notes for what you do. Turn it on in Settings.
+            Habits is switched off for this account, so memo isn&apos;t reading your notes for what you do.
           </Text>
         )}
 

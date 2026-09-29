@@ -10,7 +10,6 @@ import Animated, {
   useReducedMotion,
   useSharedValue,
   withRepeat,
-  withSpring,
   withTiming,
 } from "react-native-reanimated";
 import { haptic } from "../haptics";
@@ -42,7 +41,11 @@ export function Places({ places, bottom, right }: { places: Place[]; bottom: num
   const height = useSharedValue(SIZE);
 
   useEffect(() => {
-    height.value = withSpring(open ? SIZE + places.length * (SIZE + GAP) : SIZE, { damping: 18, stiffness: 220 });
+    // Quick and without a bounce: an overshoot kept the top icon moving under the thumb.
+    height.value = withTiming(open ? SIZE + places.length * (SIZE + GAP) : SIZE, {
+      duration: 170,
+      easing: Easing.out(Easing.cubic),
+    });
   }, [open, places.length, height]);
   const capsule = useAnimatedStyle(() => ({ height: height.value }));
 
@@ -104,8 +107,8 @@ export function Places({ places, bottom, right }: { places: Place[]; bottom: num
           {anyFresh && !open && <View style={[styles.dot, { backgroundColor: colors.record }]} />}
         </Pressable>
         {open &&
-          places.map((place, i) => (
-            <Animated.View key={place.key} entering={FadeIn.duration(160).delay(40 + i * 30)}>
+          places.map((place) => (
+            <Animated.View key={place.key} entering={FadeIn.duration(120)}>
               <Pressable
                 onPress={() => go(place)}
                 accessibilityRole="button"

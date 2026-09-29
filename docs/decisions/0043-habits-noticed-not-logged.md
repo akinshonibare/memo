@@ -1,6 +1,7 @@
 # 0043 — Habits: noticed in your notes, suggested when they repeat, counted by rhythm
 
-**Status:** active; amended by [0050](0050-health-milestones-and-apple-health.md): activities
+**Status:** active; its Settings switch superseded by [0054](0054-habits-is-always-on.md)
+(always on); amended by [0050](0050-health-milestones-and-apple-health.md): activities
 keep the numbers a note gives, milestones are shown, and workouts can come from Apple Health
 **Date:** 2026-09-29
 

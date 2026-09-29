@@ -55,7 +55,7 @@ class MeOut(BaseModel):
 	# Faith (ADR 0042): off by default. The translation Bible links open in.
 	faith_enabled: bool = False
 	bible_translation: str = "NIV"
-	habits_enabled: bool = False  # ADR 0043
+	habits_enabled: bool = True  # ADR 0054: always on
 	# The morning push's local time, or None for none (ADR 0047).
 	morning_push_at: dt.time | None = None
 
@@ -77,7 +77,9 @@ class MePatch(BaseModel):
 	bible_translation: (
 		Literal["NIV", "ESV", "KJV", "NKJV", "NLT", "CSB", "NASB", "MSG"] | None
 	) = None
-	habits_enabled: bool | None = None
+	# Habits is always on (ADR 0054). `true` is still accepted, as a no-op, from an
+	# app built with the old switch; nothing turns it off.
+	habits_enabled: Literal[True] | None = None
 	# "07:30", or null to turn the morning push off (ADR 0047).
 	morning_push_at: dt.time | None = None
 
@@ -176,12 +178,11 @@ async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> 
 	if "habits_enabled" in fields:
 		if body.habits_enabled is None:
 			raise HTTPException(
-				status.HTTP_422_UNPROCESSABLE_CONTENT,
-				"habits_enabled must be true or false",
+				status.HTTP_422_UNPROCESSABLE_CONTENT, "Habits is always on"
 			)
-		# On: the next note is read for what you did, and a background sweep reads the
-		# last 60 days. Off: nothing is read; what was found and tracked stays.
-		user.habits_enabled = body.habits_enabled
+		# Only ever true now (ADR 0054). If it was off, the next note is read for what
+		# you did, and a background sweep reads the last 60 days.
+		user.habits_enabled = True
 	if "morning_push_at" in fields:
 		# null turns it off; a phone's token stays, for when it comes back on.
 		user.morning_push_at = body.morning_push_at

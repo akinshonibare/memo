@@ -150,6 +150,8 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 		await conn.execute(
 			text("DELETE FROM users WHERE id <> :seed"), {"seed": str(SEED_USER_ID)}
 		)
+		# Habits starts switched off here (the operator's switch; ADR 0054 made it on
+		# for everyone), so a note's stages are only the ones each test sets up.
 		await conn.execute(
 			text(
 				"UPDATE users SET timezone = 'UTC', apple_sub = NULL, email = NULL, "

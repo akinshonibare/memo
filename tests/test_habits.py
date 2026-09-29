@@ -126,17 +126,30 @@ async def _track(client: AsyncClient, name: str, **extra: object) -> dict[str, A
 # --- the switch -----------------------------------------------------------------------
 
 
-async def test_habits_are_off_until_turned_on(client: AsyncClient) -> None:
-	assert (await client.get("/v1/me")).json()["habits_enabled"] is False
+async def test_habits_is_on_for_a_new_account_and_nothing_turns_it_off(
+	client: AsyncClient, admin_engine: AsyncEngine
+) -> None:
+	async with admin_engine.begin() as conn:
+		new = uuid.uuid4()
+		await conn.execute(
+			text("INSERT INTO users (id, timezone) VALUES (:id, 'UTC')"), {"id": new}
+		)
+		assert await conn.scalar(
+			text("SELECT habits_enabled FROM users WHERE id = :id"), {"id": new}
+		)
+		await conn.execute(text("DELETE FROM users WHERE id = :id"), {"id": new})
+	# The seeded account starts switched off (the operator's switch, conftest). An app
+	# with the old switch may still send true: accepted, and it's on.
 	await _habits(client, True)
-	assert (
-		await client.patch("/v1/me", json={"habits_enabled": None})
-	).status_code == 422
+	for value in (False, None):
+		refused = await client.patch("/v1/me", json={"habits_enabled": value})
+		assert refused.status_code == 422, value
+	assert (await client.get("/v1/me")).json()["habits_enabled"] is True
 	listed = (await client.get("/v1/habits")).json()
 	assert listed == {"enabled": True, "habits": [], "suggestion": None}
 
 
-async def test_with_habits_off_nothing_is_read_and_no_ledger_row_is_left(
+async def test_switched_off_nothing_is_read_and_no_ledger_row_is_left(
 	client: AsyncClient, session: AsyncSession, admin_engine: AsyncEngine
 ) -> None:
 	reader = _did(("gym", 0))
@@ -494,8 +507,6 @@ async def test_a_quiet_habit_with_a_target_gets_one_gentle_nudge(
 	assert nudge["kind"] == "nudge" and nudge["habit_id"] == habit["id"]
 	assert nudge["last_done"] == str(_ago(7))
 	await client.post(f"/v1/habits/{habit['id']}/log", json={})
-	assert (await client.get("/v1/morning")).json()["habit"] is None
-	await _habits(client, False)
 	assert (await client.get("/v1/morning")).json()["habit"] is None
 
 

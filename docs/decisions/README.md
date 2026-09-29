@@ -94,7 +94,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0040](0040-on-this-day.md) | On this day: one note from this date in another year, read live | active |
 | [0041](0041-easter-eggs-are-rare-and-earned.md) | Easter eggs: rare, earned, never a score | active |
 | [0042](0042-faith-a-space-of-its-own.md) | Faith: a space of its own, off until turned on; prayers answered, not done; a plan by position (plan superseded by 0044) | active |
-| [0043](0043-habits-noticed-not-logged.md) | Habits: noticed in your notes, suggested when they repeat, counted by rhythm, never a streak | active; amended by 0050 (numbers, Apple Health) |
+| [0043](0043-habits-noticed-not-logged.md) | Habits: noticed in your notes, suggested when they repeat, counted by rhythm, never a streak | active; amended by 0050; its switch superseded by 0054 |
 | [0044](0044-readings-you-choose.md) | Readings you choose: set what you're reading, log what you read, no fixed plan (supersedes 0042's plan) | active |
 | [0045](0045-ask-reads-dates-and-people-before-it-searches.md) | Ask reads dates and people from the records before it searches; names go to Deepgram as keyterms | active |
 | [0047](0047-a-morning-push-only-when-the-day-has-something.md) | A morning push, only when the day has something in it: once a day, signed-in phones only, measured from the first send (supersedes 0023) | active |
@@ -104,6 +104,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0051](0051-live-words-while-recording.md) | Live words while a voice note records: display only, over Ask's socket, with a patched expo-audio | active |
 | [0052](0052-memos-own-dialogs-and-the-places-circle.md) | memo's own dialogs, one Places circle with new-item marks, notes open once saved | active |
 | [0053](0053-deleting-a-note-deletes-what-came-from-it.md) | Deleting a note deletes everything taken from it, enforced by a cascade | active |
+| [0054](0054-habits-is-always-on.md) | Habits is always on; the column stays as an operator's switch | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes
