@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -156,6 +156,37 @@ export function confirmDelete(title: string, onDelete: () => void, onCancel?: ()
   ]);
 }
 
+// Closing a sheet with something unsaved in it - typed text, an edit, a recording -
+// asks first, whether it was the close button or a swipe down.
+export function confirmDiscard(title: string, discard: string, onDiscard: () => void, keep = "Keep editing") {
+  haptic.warn();
+  if (Platform.OS === "ios") {
+    ActionSheetIOS.showActionSheetWithOptions(
+      { title, options: [discard, keep], destructiveButtonIndex: 0, cancelButtonIndex: 1 },
+      (index) => index === 0 && onDiscard(),
+    );
+    return;
+  }
+  Alert.alert(title, undefined, [
+    { text: keep, style: "cancel" },
+    { text: discard, style: "destructive", onPress: onDiscard },
+  ]);
+}
+
+// The top of a sheet that saves something: close on the left and the action on the
+// right, where iOS puts Cancel and Save. A sheet with nothing to save keeps a single
+// close button on the right.
+export function SheetHeader({ onClose, action }: { onClose: () => void; action: ReactNode }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.sheetHeader}>
+      <IconCircle name="close" onPress={onClose} />
+      <View style={{ flex: 1 }} />
+      {action}
+    </View>
+  );
+}
+
 // The "Ask anything" bar that sits at the bottom of the home and detail screens.
 export function AskBar({ onPress }: { onPress: () => void }) {
   const styles = useStyles();
@@ -254,5 +285,6 @@ const useStyles = makeStyles((colors) => ({
   },
   askText: { color: colors.muted, fontSize: 16 },
   handleWrap: { alignItems: "center", paddingTop: 8 },
+  sheetHeader: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   handle: { width: 40, height: 5, borderRadius: 3, backgroundColor: colors.faint },
 }));

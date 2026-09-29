@@ -257,7 +257,7 @@ export function AskSheet({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" allowSwipeDismissal onRequestClose={onClose}>
       <View style={[styles.sheet, { paddingBottom: keyboard }]}>
         <View style={styles.header}>
           <View style={styles.headerSide}>

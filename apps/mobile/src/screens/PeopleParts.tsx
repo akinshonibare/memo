@@ -60,7 +60,7 @@ export function PersonPicker({
   );
 
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible animationType="slide" presentationStyle="pageSheet" allowSwipeDismissal onRequestClose={onClose}>
       <View style={styles.sheet}>
         <SheetHandle />
         <View style={styles.sheetTop}>

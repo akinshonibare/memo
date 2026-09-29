@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal, Text, TextInput, View } from "react-native";
 import { Api, ApiError } from "../api";
-import { IconCircle, Pill, SheetHandle } from "../components";
+import { confirmDiscard, Pill, SheetHandle, SheetHeader } from "../components";
 import { useKeyboardHeight } from "../keyboard";
 import { useUi } from "../ui";
 import { makeStyles, useTheme } from "../theme";
@@ -28,6 +28,14 @@ export function ComposeSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const keyboard = useKeyboardHeight();
+  // Something typed (beyond what the share sheet brought in) is asked about before
+  // it's thrown away, by the close button or a swipe down.
+  const dirty = !!text.trim() && text.trim() !== (initialText ?? "").trim();
+  const close = () => {
+    if (busy) return;
+    if (!dirty) onClose();
+    else confirmDiscard("Discard this note?", "Discard", onClose);
+  };
 
   const save = async () => {
     const body = text.trim();
@@ -45,13 +53,19 @@ export function ComposeSheet({
   };
 
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal
+      visible
+      animationType="slide"
+      presentationStyle="pageSheet"
+      allowSwipeDismissal={!dirty && !busy}
+      onRequestClose={close}
+    >
       <View style={[styles.sheet, { paddingBottom: 24 + keyboard }]}>
         <SheetHandle />
-        <View style={styles.top}>
-          <View style={{ flex: 1 }} />
-          <IconCircle name="close" onPress={onClose} />
-        </View>
+        <SheetHeader
+          onClose={close}
+          action={<Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!text.trim()} />}
+        />
         <Text style={[ui.h2, styles.title]}>New note</Text>
         <TextInput
           style={styles.input}
@@ -64,9 +78,6 @@ export function ComposeSheet({
           scrollEnabled
         />
         {error && <Text style={[ui.danger, { marginBottom: 12 }]}>{error}</Text>}
-        <View style={styles.actions}>
-          <Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!text.trim()} />
-        </View>
         <LockCover />
       </View>
     </Modal>
@@ -75,7 +86,6 @@ export function ComposeSheet({
 
 const useStyles = makeStyles((colors) => ({
   sheet: { flex: 1, backgroundColor: colors.surface, paddingHorizontal: 24, paddingBottom: 24 },
-  top: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   title: { marginTop: 12, marginBottom: 12 },
   input: {
     flex: 1,
@@ -84,5 +94,4 @@ const useStyles = makeStyles((colors) => ({
     lineHeight: 24,
     textAlignVertical: "top",
   },
-  actions: { flexDirection: "row", justifyContent: "flex-end", paddingTop: 12 },
 }));
