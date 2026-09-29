@@ -8,7 +8,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Modal, Text, View } from "react-native";
 import { Api, ApiError } from "../api";
-import { IconCircle, Pill, SheetHandle } from "../components";
+import { confirmDiscard, IconCircle, Pill, SheetHandle } from "../components";
 import { formatClock } from "../format";
 import {
   endRecordingActivity,
@@ -145,9 +145,24 @@ export function RecordSheet({
     }
   };
 
+  // A swipe down closes the sheet like the close button, except that a recording in
+  // progress is asked about first: a stray swipe shouldn't cost a take.
+  const recordingNow = phase === "recording" || phase === "paused";
+  const requestClose = () => {
+    if (phase === "saving") return;
+    if (recordingNow) confirmDiscard("Discard this recording?", "Discard", () => void discard(), "Keep recording");
+    else void discard();
+  };
+
   const live = phase === "recording";
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={discard}>
+    <Modal
+      visible
+      animationType="slide"
+      presentationStyle="pageSheet"
+      allowSwipeDismissal={!recordingNow && phase !== "saving"}
+      onRequestClose={requestClose}
+    >
       <View style={styles.sheet}>
         <SheetHandle />
         <View style={styles.top}>

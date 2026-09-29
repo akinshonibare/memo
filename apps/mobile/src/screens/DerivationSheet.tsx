@@ -1,8 +1,9 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
-import { Modal, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Api, ApiError, type Derivation } from "../api";
-import { IconCircle, Pill, SheetHandle } from "../components";
+import { confirmDiscard, Pill, SheetHandle, SheetHeader } from "../components";
 import { toIsoDate, toLocalIso } from "../format";
 import { useKeyboardHeight } from "../keyboard";
 import { useUi } from "../ui";
@@ -65,6 +66,16 @@ export function DerivationSheet({
   };
 
   const canSave = !!title.trim() && (kind !== "idea" || !!body.trim());
+  // What the form held when it opened: closing it unchanged needs no question.
+  const [pristine] = useState(() => JSON.stringify(payload()));
+  const dirty = JSON.stringify(payload()) !== pristine;
+  const close = () => {
+    if (!dirty || busy) {
+      if (!busy) onClose();
+      return;
+    }
+    confirmDiscard(existing ? "Discard your changes?" : `Discard this ${kind}?`, "Discard", onClose);
+  };
 
   const save = async () => {
     if (!canSave || busy) return;
@@ -99,13 +110,19 @@ export function DerivationSheet({
   const noteId = existing?.capture_id ?? null;
 
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal
+      visible
+      animationType="slide"
+      presentationStyle="pageSheet"
+      allowSwipeDismissal={!dirty && !busy}
+      onRequestClose={close}
+    >
       <View style={[styles.sheet, { paddingBottom: 24 + keyboard }]}>
         <SheetHandle />
-        <View style={styles.top}>
-          <View style={{ flex: 1 }} />
-          <IconCircle name="close" onPress={onClose} />
-        </View>
+        <SheetHeader
+          onClose={close}
+          action={<Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!canSave} />}
+        />
         <Text style={[ui.h2, styles.heading]}>
           {existing ? `Edit ${kind}` : `Add ${kind === "todo" ? "a" : "an"} ${kind}`}
         </Text>
@@ -185,25 +202,62 @@ export function DerivationSheet({
               />
             </>
           )}
-        </ScrollView>
-        {error && <Text style={[ui.danger, { marginBottom: 12 }]}>{error}</Text>}
-        <View style={styles.actions}>
-          {existing && <Pill label="Remove" tone="danger" onPress={remove} disabled={busy} />}
-          {noteId && onOpenNote && (
-            <Pill
-              label="Open note"
-              onPress={() => {
-                onClose();
-                onOpenNote(noteId);
-              }}
-            />
+
+          {((noteId && onOpenNote) || existing) && (
+            <View style={styles.more}>
+              {noteId && onOpenNote && (
+                <SheetRow
+                  icon="document-text-outline"
+                  label="Open the note"
+                  onPress={() => {
+                    onClose();
+                    onOpenNote(noteId);
+                  }}
+                />
+              )}
+              {noteId && onOpenNote && existing && <View style={styles.moreRule} />}
+              {existing && (
+                <SheetRow icon="trash-outline" label={`Remove this ${kind}`} danger busy={busy} onPress={remove} />
+              )}
+            </View>
           )}
-          <View style={{ flex: 1 }} />
-          <Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!canSave} />
-        </View>
+        </ScrollView>
+        {error && <Text style={[ui.danger, { marginTop: 12 }]}>{error}</Text>}
         <LockCover />
       </View>
     </Modal>
+  );
+}
+
+// A row at the end of the form for what isn't saving: opening the note it came from,
+// removing it. Part of the form rather than a button bar under it.
+function SheetRow({
+  icon,
+  label,
+  danger,
+  busy,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  danger?: boolean;
+  busy?: boolean;
+  onPress: () => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const color = danger ? colors.danger : colors.text;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={busy}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.moreRow, pressed && { opacity: 0.6 }]}
+    >
+      <Ionicons name={icon} size={19} color={danger ? colors.danger : colors.muted} />
+      <Text style={[styles.moreLabel, { color }]}>{label}</Text>
+      {busy && <ActivityIndicator color={colors.muted} />}
+    </Pressable>
   );
 }
 
@@ -249,7 +303,6 @@ function describe(e: unknown): string {
 
 const useStyles = makeStyles((colors) => ({
   sheet: { flex: 1, backgroundColor: colors.surface, paddingHorizontal: 24 },
-  top: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   heading: { marginTop: 12, marginBottom: 20 },
   input: {
     fontSize: 16,
@@ -262,5 +315,14 @@ const useStyles = makeStyles((colors) => ({
   },
   multiline: { minHeight: 110, textAlignVertical: "top" },
   row: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
-  actions: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 12 },
+  more: { backgroundColor: colors.surfaceAlt, borderRadius: 16, overflow: "hidden", marginTop: 8 },
+  moreRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 15,
+  },
+  moreRule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: 49 },
+  moreLabel: { flex: 1, fontSize: 16 },
 }));

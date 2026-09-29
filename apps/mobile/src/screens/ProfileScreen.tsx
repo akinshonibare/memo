@@ -338,7 +338,7 @@ export function ProfileSheet({
   const since = me ? new Date(me.created_at).toLocaleDateString(undefined, { month: "long", year: "numeric" }) : null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" allowSwipeDismissal onRequestClose={onClose}>
       <View style={styles.sheet} ref={hostRef}>
         <SheetHandle />
         <View style={styles.top}>

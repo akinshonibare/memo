@@ -43,6 +43,14 @@ screen:
 - ticking something off sends up fireflies, a swarm for the last thing on Today; the
   particles follow the season (leaves, snow, petals)
 
+**Sheets:** a sheet that saves something has close on the left and Save on the right,
+at the top, where iOS puts them; removing or opening related things are rows at the end
+of the form, not a button bar. Every sheet closes with a swipe down. Unsaved work (typed
+text, an edit, a recording) asks before it's discarded, whether by swipe or by close.
+
+**Home's controls** sit on the page: the list fades out above them, and notes never show
+between the buttons.
+
 **Delight** (ADR 0041): rare, and never a score. A milestone note, memo's birthday, a
 "Still up?" after 1am, and two hidden toys (tap the dot; search "fireflies"). No streaks,
 no badges, nothing that counts against you.

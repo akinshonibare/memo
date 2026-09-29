@@ -31,6 +31,8 @@ import { haptic } from "../haptics";
 import { captureOrQueue, useOutbox } from "../outbox";
 
 const POLL_MS = 3000;
+// How tall the fade above the bottom controls is.
+const BAR_FADE = 28;
 // "Not now" on a reach-out suggestion hides it for a week (PATCH snoozed_until).
 const SNOOZE_DAYS = 7;
 
@@ -321,6 +323,11 @@ export function HomeScreen({
                   }}
                 />
               )}
+              {shown.length > 0 && (
+                <Text style={[ui.label, styles.notesLabel]} accessibilityRole="header">
+                  Notes
+                </Text>
+              )}
             </>
           )
         }
@@ -336,9 +343,19 @@ export function HomeScreen({
           ) : null
         }
       />
+      {/* The controls sit on the page rather than over the notes: the list fades out
+          above them, and nothing shows between the buttons. The fade lets touches
+          through to the list; the buttons' row does not. */}
       <View
-        style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) }]}
+        pointerEvents="box-none"
+        style={[
+          styles.bottomWrap,
+          {
+            experimental_backgroundImage: `linear-gradient(to bottom, ${colors.bg}00 0px, ${colors.bg} ${BAR_FADE}px, ${colors.bg} 100%)`,
+          },
+        ]}
       >
+        <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <AskBar onPress={onAsk} />
         {uploading ? (
           <View style={styles.uploading}>
@@ -357,6 +374,7 @@ export function HomeScreen({
           accessibilityRole="button"
           accessibilityLabel="Record a voice note"
         />
+        </View>
       </View>
     </View>
   );
@@ -534,6 +552,8 @@ function MomentBanner({ moment, onDone }: { moment: Moment; onDone: () => void }
 }
 
 const useStyles = makeStyles((colors) => ({
+  // Where Today ends and the notes begin; the same label style as Today's date.
+  notesLabel: { paddingHorizontal: 20, paddingTop: 16 },
   wordmark: { marginTop: 12, marginBottom: 2 },
   moment: {
     backgroundColor: colors.surface,
@@ -592,14 +612,13 @@ const useStyles = makeStyles((colors) => ({
   },
   actionInner: { alignItems: "center", gap: 4 },
   actionText: { color: colors.danger, fontSize: 13, fontWeight: "600" },
+  bottomWrap: { position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: BAR_FADE },
   bottom: {
-    position: "absolute",
-    left: 20,
-    right: 20,
-    bottom: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
+    paddingHorizontal: 20,
+    paddingTop: 6,
   },
   record: {
     width: 64,
