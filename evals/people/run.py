@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 from anthropic import AsyncAnthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from evals.people.scoring import Expected, Report, score_example
 from memo.config import get_settings
@@ -57,9 +57,11 @@ async def run(
 	for example in examples:
 		if replay is not None:
 			raw = replay.get(example.id)
-			predicted = (
-				PeopleExtraction.model_validate_json(raw) if raw else PeopleExtraction()
-			)
+			try:
+				predicted = PeopleExtraction.model_validate_json(raw or "{}")
+			except ValidationError:
+				# A recorded ExtractionFailed keeps the invalid raw output: a miss.
+				predicted = PeopleExtraction()
 		else:
 			assert reader is not None
 			try:

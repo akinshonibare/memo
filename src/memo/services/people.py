@@ -39,6 +39,7 @@ from memo.prompts.people_v1 import (
 from memo.schemas.derivations import MENTION, UNREVIEWED
 from memo.schemas.people import (
 	IN_TOUCH,
+	MAX_ALIASES,
 	MentionOut,
 	MentionPayload,
 	PeopleExtraction,
@@ -263,9 +264,12 @@ def resolve(payload: MentionPayload, people: Sequence[Person]) -> Resolution:
 def with_alias(person: Person, name: str) -> list[str]:
 	"""The person's aliases plus `name`, unless memo would already match it. Linking
 	"Mum" to Folake teaches memo that "Mum" is Folake; linking "Tunde" to "Tunde
-	Bakare" teaches it nothing it didn't know."""
+	Bakare" teaches it nothing it didn't know. Capped at MAX_ALIASES, the most a
+	PATCH accepts, so a person merged many times can still be edited in the app."""
 	aliases = list(person.aliases or [])
 	if not normalize(name) or compatible(name, person.name):
+		return aliases
+	if len(aliases) >= MAX_ALIASES:
 		return aliases
 	if any(normalize(a) == normalize(name) for a in aliases):
 		return aliases
@@ -356,6 +360,23 @@ async def unread_notes(
 		},
 	)
 	return [(r[0], r[1]) for r in rows.all()]
+
+
+async def count_unreadable_notes(session: AsyncSession, user_id: uuid.UUID) -> int:
+	"""Notes the people stage gave up on after BACKLOG_MAX_ATTEMPTS real failures.
+	Shown, not dropped: a note that quietly left the "to go" count would look read."""
+	count = await session.scalar(
+		text(
+			"SELECT count(DISTINCT r.capture_id) FROM job_runs r "
+			"WHERE r.user_id = CAST(:user_id AS uuid) AND r.stage = 'people' "
+			"AND r.status = 'failed' AND r.attempt >= :max_attempts "
+			"AND NOT EXISTS (SELECT 1 FROM job_runs ok "
+			"WHERE ok.capture_id = r.capture_id "
+			"AND ok.stage = 'people' AND ok.status = 'succeeded')"
+		),
+		{"user_id": str(user_id), "max_attempts": BACKLOG_MAX_ATTEMPTS},
+	)
+	return int(count or 0)
 
 
 async def count_unread_notes(session: AsyncSession, user_id: uuid.UUID) -> int:
@@ -449,6 +470,59 @@ async def apply_mentions(
 			written[person_id] = mention
 	await session.flush()
 	return out
+
+
+# Which of two mentions of one person in one note to keep: the more trusted review.
+_REVIEW_RANK = {"user_created": 0, "confirmed": 1, "accepted": 2, "pending_review": 3}
+
+
+async def collapse_duplicates(
+	session: AsyncSession, user_id: uuid.UUID, person_id: uuid.UUID
+) -> set[uuid.UUID]:
+	"""One mention per person per note, as apply_mentions writes them. A merge, or
+	linking a mention to someone the note already names, can make two; this keeps the
+	one that says they were in touch (else the more trusted review), gives it the best
+	review of the group, and deletes the rest. Returns the ids deleted."""
+	rows = (
+		await session.scalars(
+			select(Derivation)
+			.where(
+				Derivation.user_id == user_id,
+				Derivation.person_id == person_id,
+				Derivation.kind == MENTION,
+				Derivation.status != "rejected",
+				Derivation.capture_id.is_not(None),
+			)
+			.order_by(Derivation.created_at, Derivation.id)
+		)
+	).all()
+	by_note: dict[uuid.UUID, list[Derivation]] = {}
+	for d in rows:
+		assert d.capture_id is not None
+		by_note.setdefault(d.capture_id, []).append(d)
+	deleted: set[uuid.UUID] = set()
+	for group in by_note.values():
+		if len(group) < 2:
+			continue
+
+		def rank(d: Derivation) -> tuple[bool, int]:
+			return (
+				d.payload.get("contact") not in IN_TOUCH,
+				_REVIEW_RANK.get(d.status, 9),
+			)
+
+		keep = min(group, key=rank)
+		best = min((d.status for d in group), key=lambda st: _REVIEW_RANK.get(st, 9))
+		if _REVIEW_RANK.get(best, 9) < _REVIEW_RANK.get(keep.status, 9):
+			keep.status = best
+		for d in group:
+			if d is not keep:
+				await session.delete(d)
+				deleted.add(d.id)
+	if deleted:
+		await session.flush()
+		log.info("people.collapsed_duplicates", removed=len(deleted))
+	return deleted
 
 
 async def prune_if_empty(

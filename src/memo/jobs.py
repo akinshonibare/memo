@@ -199,5 +199,7 @@ async def read_people_backlog_task(ctx: dict[str, Any]) -> int:
 			)
 			outcome = await read_people_in_old_note(pipeline, capture_id, user_id)
 		outcomes[outcome] = outcomes.get(outcome, 0) + 1
+		if outcome == "retry_later":
+			break  # the provider is struggling: the next sweep, not the next note
 	log.info("sweep.people_backlog", notes=len(backlog), **outcomes)
 	return len(backlog)
