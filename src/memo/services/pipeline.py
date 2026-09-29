@@ -168,9 +168,17 @@ async def _record_calls(
 		)
 
 
+def _skip(stage: str, capture: Capture) -> None:
+	"""A note with no words - a voice note where nothing was said - is not a failure.
+	There is nothing to read, so no model is paid to read it, and the note goes on
+	to `ready` with nothing extracted, like any other note that had nothing in it."""
+	log.info(f"stage.{stage}.skipped", capture_id=str(capture.id), reason="no_text")
+
+
 async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 	if not capture.text or not capture.text.strip():
-		raise TerminalError("nothing to extract: the capture has no text")
+		_skip("extract", capture)
+		return
 	user = await ctx.session.get(User, capture.user_id)
 	timezone = user.timezone if user is not None else "UTC"
 	# Auto-accept (ADR 0030): kept at once, but as 'accepted', never 'confirmed'.
@@ -225,7 +233,8 @@ async def _people(ctx: PipelineContext, capture: Capture) -> None:
 	"""Who the note is about (ADR 0029). Its own model call, after extraction and
 	before embedding, so each mention gets a chunk in the same pass as the rest."""
 	if not capture.text or not capture.text.strip():
-		raise TerminalError("nothing to read for people: the capture has no text")
+		_skip("people", capture)
+		return
 	user = await ctx.session.get(User, capture.user_id)
 	timezone = user.timezone if user is not None else "UTC"
 	author = user.display_name if user is not None else None
@@ -277,7 +286,8 @@ async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 	).all()
 	texts = [p.text for p in pieces] + [derivation_text(d) for d in derivations]
 	if not texts:
-		raise TerminalError("nothing to embed: the capture has no text")
+		_skip("embed", capture)
+		return
 
 	result = await ctx.embedder.embed_documents(texts)
 

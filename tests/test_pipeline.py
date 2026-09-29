@@ -434,19 +434,34 @@ async def test_rerunning_extraction_replaces_only_unreviewed_rows(
 	)
 
 
-async def test_capture_with_no_text_fails_extraction_visibly(
+async def test_a_capture_with_no_words_is_ready_and_costs_nothing(
 	client: AsyncClient,
 	admin_engine: AsyncEngine,
 	session: AsyncSession,
 	store: FakeObjectStore,
 ) -> None:
+	"""A voice note where nothing was said is not a failure: nothing to read, so no
+	model call, and the note is ready with nothing extracted."""
 	capture_id = await _audio_capture(client, admin_engine, store, "tok-ext-4")
-	ctx = _ctx(session, store, transcriber=FakeTranscriber(text="   "))
+	extractor, people, embedder = FakeExtractor(), FakePeopleReader(), FakeEmbedder()
+	ctx = _ctx(
+		session,
+		store,
+		transcriber=FakeTranscriber(text="   "),
+		extractor=extractor,
+		embedder=embedder,
+	)
+	ctx.people = people
 
 	outcome = await process_capture(ctx, capture_id, SEED_USER_ID)
 
-	assert outcome.status == "failed"
+	assert outcome.status == "ready"
 	row = await _capture_row(admin_engine, capture_id)
-	assert (
-		row["failure_reason"] == "extract: nothing to extract: the capture has no text"
-	)
+	assert row["status"] == "ready" and row["failure_reason"] is None
+	assert (extractor.calls, people.calls, embedder.calls) == (0, 0, 0)
+	async with admin_engine.connect() as conn:
+		costed = await conn.scalar(
+			text("SELECT count(*) FROM llm_calls WHERE capture_id = :id"),
+			{"id": capture_id},
+		)
+	assert costed == 0
