@@ -244,7 +244,7 @@ export function HomeScreen({
   // the same question before anything is deleted.
   const remove = (c: Capture, onCancel?: () => void) =>
     confirmDelete(
-      "Delete this note? Its todos, events and ideas are kept.",
+      "Delete this note and everything memo took from it?",
       async () => {
         if (playingId === c.id) stopPlayback();
         setLeaving((prev) => new Set(prev).add(c.id));

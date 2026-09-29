@@ -73,7 +73,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0019](0019-sign-in-with-apple-and-server-sessions.md) | Sign in with Apple; server-issued sessions, hashed | active |
 | [0020](0020-morning-view-pins-the-idea-reads-items-live.md) | Morning view pins the idea, reads todos and events live | active |
 | [0021](0021-ask-reads-derivations-live.md) | Ask reads retrieved notes' derivations live; knows today | active |
-| [0022](0022-deleting-a-note-keeps-its-derivations.md) | Deleting a note keeps its derivations; citations cascade | active |
+| [0022](0022-deleting-a-note-keeps-its-derivations.md) | Deleting a note keeps its derivations; citations cascade | superseded by 0053 |
 | [0023](0023-no-daily-morning-push.md) | No daily morning push; push waits for V4's quality bar | superseded by 0047 |
 | [0024](0024-photos-become-text-then-flow-through.md) | A photo becomes text, then flows through the pipeline | active |
 | [0025](0025-voice-conversation-own-pipeline-in-two-steps.md) | Voice conversation: our own pipeline, in two steps | active |
@@ -99,9 +99,11 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0045](0045-ask-reads-dates-and-people-before-it-searches.md) | Ask reads dates and people from the records before it searches; names go to Deepgram as keyterms | active |
 | [0047](0047-a-morning-push-only-when-the-day-has-something.md) | A morning push, only when the day has something in it: once a day, signed-in phones only, measured from the first send (supersedes 0023) | active |
 | [0048](0048-a-later-note-can-answer-a-prayer-or-carry-on-an-idea.md) | A later note can answer a prayer or carry on an idea: candidates cheaply, a model decides, the author says yes | active |
-| [0049](0049-a-map-of-one-thing.md) | A map of one thing (an ego-graph over existing links), not a map of everything | active |
+| [0049](0049-a-map-of-one-thing.md) | A map of one thing (an ego-graph over existing links), not a map of everything | active on the server; out of the app (0052) |
 | [0050](0050-health-milestones-and-apple-health.md) | Health as milestones noticed from notes and Apple Health, never a training log | active |
 | [0051](0051-live-words-while-recording.md) | Live words while a voice note records: display only, over Ask's socket, with a patched expo-audio | active |
+| [0052](0052-memos-own-dialogs-and-the-places-circle.md) | memo's own dialogs, one Places circle with new-item marks, notes open once saved | active |
+| [0053](0053-deleting-a-note-deletes-what-came-from-it.md) | Deleting a note deletes everything taken from it, enforced by a cascade | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

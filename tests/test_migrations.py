@@ -3,6 +3,8 @@ would pass: 0014 changes production rows, and 0008's downgrade once failed on da
 
 import asyncio
 import uuid
+from collections.abc import Callable
+from typing import Any
 
 from alembic.config import Config
 from fastapi import FastAPI
@@ -66,11 +68,15 @@ async def test_0014_readies_only_notes_that_failed_for_having_no_words(
 
 
 async def test_0008_downgrades_with_a_cited_item_whose_note_was_deleted(
-	app: FastAPI, client: AsyncClient, admin_engine: AsyncEngine
+	app: FastAPI,
+	client: AsyncClient,
+	admin_engine: AsyncEngine,
+	delete_keeping_items: Callable[..., Any],
 ) -> None:
-	"""A note is deleted but its item is kept (ADR 0022), so the item's chunk has no
-	capture; an answer then cites that chunk. 0008's downgrade deleted such chunks after
-	dropping the cascading key, then re-added a plain key the citation violated."""
+	"""A note was deleted but its item kept (ADR 0022, before 0053), so the item's
+	chunk has no capture; an answer then cites that chunk. 0008's downgrade deleted
+	such chunks after dropping the cascading key, then re-added a plain key the
+	citation violated."""
 	async with app.state.session_factory() as session:
 		ctx = PipelineContext(
 			session=session,
@@ -87,7 +93,7 @@ async def test_0008_downgrades_with_a_cited_item_whose_note_was_deleted(
 		)
 		capture_id = created.json()["id"]
 		await process_capture(ctx, uuid.UUID(capture_id), SEED_USER_ID)
-	await client.delete(f"/v1/captures/{capture_id}")
+	await delete_keeping_items(capture_id)
 	conversation = (await client.post("/v1/conversations")).json()["id"]
 	asked = (
 		await client.post(

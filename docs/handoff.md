@@ -237,6 +237,15 @@ mobile-release-eas.md, "Apple Health"). Build 17 gets no OTA from the new finger
    person's page, a note's page and each idea. No new data, no model; JavaScript only
    (fingerprint `79d9bbf7`). Next step when there are enough notes: themes.
 
+7. **Polish from using it** ([ADR 0052](decisions/0052-memos-own-dialogs-and-the-places-circle.md),
+   [ADR 0053](decisions/0053-deleting-a-note-deletes-what-came-from-it.md), migration 0022),
+   stacked on the one build. _Built:_ recording during a call waits for the call to end
+   (or "Type it instead") instead of erroring; memo's own menus and dialogs replace every
+   system one; the header's icons became one Places circle above the record button, which
+   breathes when a place has something new (`GET /v1/news`); a saved note opens at once;
+   the map is out of the app; deleting a note deletes everything taken from it (a cascade).
+   _Open question for Akin:_ whether Habits should stop being a switch at all.
+
 Not now: **Sentry** (Akin, 2026-09-29). Still Akin's to do: the PITR drill (#57), a
 payment method on Voyage/Atlas (3 requests a minute until then).
 

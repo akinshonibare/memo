@@ -202,7 +202,7 @@ export function DetailScreen({
   };
 
   const remove = () =>
-    confirmDelete("Delete this note? Its todos, events and ideas are kept.", async () => {
+    confirmDelete("Delete this note and everything memo took from it?", async () => {
       if (!capture) return;
       if (playingId === capture.id) stopPlayback();
       try {

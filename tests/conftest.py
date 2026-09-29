@@ -2,6 +2,7 @@ import asyncio
 import datetime as dt
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
+from typing import Any
 
 import pytest
 from alembic.config import Config
@@ -90,6 +91,38 @@ async def admin_engine(settings: Settings) -> AsyncIterator[AsyncEngine]:
 	engine = create_async_engine(settings.database_admin_url)
 	yield engine
 	await engine.dispose()
+
+
+@pytest.fixture
+def delete_keeping_items(admin_engine: AsyncEngine) -> Callable[..., Any]:
+	"""Delete a note the way memo did before ADR 0053: its rejected items go, the rest
+	stay detached (capture_id NULL), with their chunks. Such items are still in real
+	data, so every route has to keep coping with them."""
+
+	async def run(capture_id: uuid.UUID | str) -> None:
+		ids = {"id": str(capture_id)}
+		async with admin_engine.begin() as conn:
+			await conn.execute(
+				text(
+					"DELETE FROM derivations WHERE capture_id = :id "
+					"AND status = 'rejected'"
+				),
+				ids,
+			)
+			await conn.execute(
+				text("UPDATE derivations SET capture_id = NULL WHERE capture_id = :id"),
+				ids,
+			)
+			await conn.execute(
+				text(
+					"UPDATE chunks SET capture_id = NULL WHERE capture_id = :id "
+					"AND derivation_id IS NOT NULL"
+				),
+				ids,
+			)
+			await conn.execute(text("DELETE FROM captures WHERE id = :id"), ids)
+
+	return run
 
 
 @pytest.fixture(autouse=True)

@@ -20,7 +20,9 @@ type IconName = ComponentProps<typeof Ionicons>["name"];
 // `fresh`: something was added there since you last looked (src/news).
 export type Place = { key: string; icon: IconName; label: string; onPress: () => void; fresh?: boolean };
 
-const SIZE = 48;
+// The same as the + button beside the record button: a 56 circle, a 28 icon.
+const SIZE = 56;
+const ICON = SIZE / 2;
 const GAP = 4;
 
 // Where memo's other screens are (Planner, People, Review, Faith, Habits): one circle
@@ -98,7 +100,7 @@ export function Places({ places, bottom, right }: { places: Place[]; bottom: num
           accessibilityState={{ expanded: open }}
           style={({ pressed }) => [styles.slot, pressed && styles.pressed]}
         >
-          <Ionicons name={open ? "close" : "compass-outline"} size={22} color={colors.text} />
+          <Ionicons name={open ? "close" : "compass-outline"} size={ICON} color={colors.text} />
           {anyFresh && !open && <View style={[styles.dot, { backgroundColor: colors.record }]} />}
         </Pressable>
         {open &&
@@ -111,7 +113,7 @@ export function Places({ places, bottom, right }: { places: Place[]; bottom: num
                 style={({ pressed }) => [styles.slot, { marginBottom: GAP }, pressed && styles.pressed]}
               >
                 <Pulse on={!!place.fresh && !reduced}>
-                  <Ionicons name={place.icon} size={21} color={place.fresh ? colors.record : colors.text} />
+                  <Ionicons name={place.icon} size={ICON} color={place.fresh ? colors.record : colors.text} />
                 </Pulse>
                 {place.fresh && <View style={[styles.dot, { backgroundColor: colors.record }]} />}
               </Pressable>
@@ -150,7 +152,7 @@ const useStyles = makeStyles((colors) => ({
   },
   slot: { width: SIZE, height: SIZE, alignItems: "center", justifyContent: "center" },
   ring: { position: "absolute", width: SIZE, height: SIZE, borderRadius: SIZE / 2, borderWidth: 2 },
-  dot: { position: "absolute", top: 9, right: 9, width: 8, height: 8, borderRadius: 4 },
+  dot: { position: "absolute", top: 11, right: 11, width: 9, height: 9, borderRadius: 4.5 },
   pressed: { opacity: 0.55 },
 }));
 

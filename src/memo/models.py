@@ -317,8 +317,9 @@ class Derivation(Base):
 			["capture_id", "user_id"],
 			["captures.id", "captures.user_id"],
 			name="fk_derivations_capture_same_user",
-			# Really ON DELETE SET NULL (capture_id), set in migration 0008: the
-			# column-list form keeps user_id, and SQLAlchemy can't express it.
+			# Deleting a note deletes what was taken from it (ADR 0053, migration
+			# 0022). capture_id stays nullable for items detached before that.
+			ondelete="CASCADE",
 		),
 		ForeignKeyConstraint(
 			["person_id", "user_id"],
