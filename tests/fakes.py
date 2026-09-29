@@ -9,10 +9,12 @@ from dataclasses import dataclass, field
 from anthropic.types import MessageParam
 
 from memo.schemas.derivations import Extraction
+from memo.schemas.faith import FaithExtraction
 from memo.schemas.people import PeopleExtraction
 from memo.services.apple import AppleIdentity, InvalidIdentityToken
 from memo.services.embeddings import EmbedResult
 from memo.services.extraction import ExtractResult, RawCompletion
+from memo.services.faith import FaithResult
 from memo.services.llm import LLMCall
 from memo.services.people import PeopleResult
 from memo.services.transcription import Transcript
@@ -200,6 +202,37 @@ class FakePeopleReader:
 			extraction=extraction,
 			raw=extraction.model_dump_json(),
 			calls=[fake_llm_call("people")],
+		)
+
+
+class FakeFaithReader:
+	"""Scripted prayers (ADR 0042): a fixed answer for every note it reads."""
+
+	model = "fake"
+	version = "faith-v1/fake"
+
+	def __init__(
+		self,
+		extraction: FaithExtraction | None = None,
+		*,
+		fail_with: Exception | None = None,
+	) -> None:
+		self.extraction = extraction or FaithExtraction()
+		self.fail_with = fail_with
+		self.calls = 0
+		self.seen: list[str] = []
+
+	async def read(
+		self, text: str, *, captured_at: dt.datetime, timezone: str
+	) -> FaithResult:
+		self.calls += 1
+		self.seen.append(text)
+		if self.fail_with is not None:
+			raise self.fail_with
+		return FaithResult(
+			extraction=self.extraction,
+			raw=self.extraction.model_dump_json(),
+			calls=[fake_llm_call("faith")],
 		)
 
 

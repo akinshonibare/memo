@@ -1,5 +1,5 @@
-"""Faith (ADR 0042): passages found in faith notes, prayers, the reading plan's
-position, the one thing a day the Faith screen remembers, and the week's facts.
+"""Faith (ADR 0042): passages and prayers found in notes, the reading plan's position,
+the one thing a day the Faith screen remembers, and the week's facts.
 
 No score anywhere. The plan keeps time by position, so a week away is a week paused;
 open prayers are never overdue; the weekly section lists what happened and counts
@@ -7,17 +7,30 @@ nothing against anyone.
 """
 
 import datetime as dt
+import re
 import uuid
 from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+from typing import Protocol
 
+import structlog
+from anthropic import AsyncAnthropic
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from memo.config import Settings
 from memo.ids import uuid7
 from memo.models import Capture, Derivation, FaithReading, Person, User
-from memo.schemas.derivations import PASSAGE, PRAYER, UNREVIEWED
+from memo.prompts.faith_v1 import (
+	FAITH_VERSION,
+	SYSTEM_PROMPT,
+	repair_message,
+	user_message,
+)
+from memo.schemas.derivations import MENTION, PASSAGE, PRAYER, UNREVIEWED
 from memo.schemas.faith import (
+	FaithExtraction,
 	FaithWeek,
 	MomentOut,
 	PassageOut,
@@ -26,8 +39,14 @@ from memo.schemas.faith import (
 	PrayerOut,
 	ReadingOut,
 )
+from memo.services.extraction import AnthropicExtractionProvider, complete_validated
+from memo.services.llm import LLMCall
 from memo.services.morning import local_day_range, look_back_days, tz_or_utc
+from memo.services.people import normalize
+from memo.services.retry import TerminalError
 from memo.services.scripture import CANONICAL, PLAN_TITLES, Reading, find_passages, plan
+
+log = structlog.get_logger("memo.faith")
 
 # Stamped on passage rows. Found by code, not a model, so it is not an extractor
 # version in the evals' sense; a change to the rules is still a new version.
@@ -39,6 +58,10 @@ ANSWERED_SHOWN = 20
 FAITH = "faith"
 
 
+def faith_on(user: User | None) -> bool:
+	return bool(user is not None and user.faith_enabled)
+
+
 def faith_hidden(user: User | None) -> bool:
 	"""Whether faith notes are kept out of Home, search, Ask and On this day. Only
 	while Faith is on: turned off, they are ordinary notes again."""
@@ -48,9 +71,12 @@ def faith_hidden(user: User | None) -> bool:
 # --- passages -------------------------------------------------------------------------
 
 
-async def replace_passages(session: AsyncSession, capture: Capture) -> int:
-	"""The passages a faith note is about, found again from its text. Idempotent by
-	replacement, like extraction. A note that isn't in Faith has none."""
+async def replace_passages(
+	session: AsyncSession, capture: Capture, *, enabled: bool = False
+) -> int:
+	"""The passages a note is about, found again from its text. Idempotent by
+	replacement, like extraction. A faith note always has them; any other note only
+	while Faith is on (`enabled`), since that is when memo files them into Faith."""
 	await session.execute(
 		delete(Derivation).where(
 			Derivation.capture_id == capture.id,
@@ -59,7 +85,7 @@ async def replace_passages(session: AsyncSession, capture: Capture) -> int:
 			Derivation.status.in_(UNREVIEWED),
 		)
 	)
-	if capture.space != FAITH:
+	if capture.space != FAITH and not enabled:
 		return 0
 	found = find_passages(capture.text or "")
 	for passage in found:
@@ -81,6 +107,187 @@ async def replace_passages(session: AsyncSession, capture: Capture) -> int:
 
 def passage_out(d: Derivation) -> PassageOut:
 	return PassageOut.model_validate(d.payload)
+
+
+# --- prayers found in notes ----------------------------------------------------------
+
+# Only a note with one of these words is read for prayers: most notes have none, and
+# this keeps the model call to the notes that might. A prayer that names none of them
+# ("asking for wisdom about the move") is missed; the eval's recall bar watches for it.
+_PRAYERISH = re.compile(
+	r"\b(pray\w*|god|lord|jesus|christ|holy spirit|father in heaven|amen|bless\w*)\b",
+	re.IGNORECASE,
+)
+# A todo the extractor made from the same words ("Pray for Tunde's mum"): with Faith on
+# it is the prayer, so it goes rather than sit in the Planner and Reminders twice.
+_PRAYER_TODO = re.compile(r"^\s*(keep\s+)?pray(ing)?\b", re.IGNORECASE)
+
+
+def might_pray(text: str | None) -> bool:
+	return bool(text and _PRAYERISH.search(text))
+
+
+@dataclass(frozen=True)
+class FaithResult:
+	extraction: FaithExtraction
+	raw: str
+	calls: list[LLMCall]
+
+
+class FaithReaderLike(Protocol):
+	@property
+	def model(self) -> str: ...
+
+	@property
+	def version(self) -> str: ...
+
+	async def read(
+		self, text: str, *, captured_at: dt.datetime, timezone: str
+	) -> FaithResult: ...
+
+
+class FaithReader:
+	def __init__(self, provider: AnthropicExtractionProvider, *, max_repairs: int = 1):
+		self._provider = provider
+		self._max_repairs = max_repairs
+
+	@property
+	def model(self) -> str:
+		return self._provider.model
+
+	@property
+	def version(self) -> str:
+		return f"{FAITH_VERSION}/{self.model}"
+
+	async def read(
+		self, text: str, *, captured_at: dt.datetime, timezone: str
+	) -> FaithResult:
+		extraction, raw, calls = await complete_validated(
+			self._provider,
+			system=SYSTEM_PROMPT,
+			first=user_message(text, captured_at=captured_at, timezone=timezone),
+			parse=FaithExtraction.model_validate_json,
+			repair=repair_message,
+			stage="faith",
+			max_repairs=self._max_repairs,
+		)
+		return FaithResult(extraction=extraction, raw=raw, calls=calls)
+
+
+class UnconfiguredFaithReader:
+	"""Stands in when no Anthropic key is set, so the stage fails visibly."""
+
+	model = "unconfigured"
+	version = f"{FAITH_VERSION}/unconfigured"
+
+	async def read(
+		self, text: str, *, captured_at: dt.datetime, timezone: str
+	) -> FaithResult:
+		raise TerminalError("the faith stage is not configured (no ANTHROPIC_API_KEY)")
+
+
+def make_faith_reader(settings: Settings) -> FaithReaderLike:
+	if settings.anthropic_api_key is None:
+		return UnconfiguredFaithReader()
+	client = AsyncAnthropic(
+		api_key=settings.anthropic_api_key.get_secret_value(), max_retries=0
+	)
+	return FaithReader(
+		AnthropicExtractionProvider(
+			client, model=settings.extraction_model, schema=FaithExtraction
+		)
+	)
+
+
+async def _people_in_note(
+	session: AsyncSession, capture: Capture
+) -> dict[str, uuid.UUID]:
+	"""The names the people stage linked in this note, normalised, to whom. A prayer is
+	linked only by an exact match here: "Tunde's mum" never becomes Tunde."""
+	rows = (
+		await session.execute(
+			select(
+				Derivation.payload, Derivation.person_id, Person.name, Person.aliases
+			)
+			.join(
+				Person,
+				and_(
+					Person.id == Derivation.person_id,
+					Person.user_id == Derivation.user_id,
+				),
+			)
+			.where(
+				Derivation.capture_id == capture.id,
+				Derivation.user_id == capture.user_id,
+				Derivation.kind == MENTION,
+				Derivation.status != "rejected",
+			)
+		)
+	).all()
+	names: dict[str, uuid.UUID] = {}
+	for payload, person_id, name, aliases in rows:
+		for said in (payload.get("name"), payload.get("full_name"), name, *aliases):
+			if said:
+				names.setdefault(normalize(str(said)), person_id)
+	return names
+
+
+async def apply_prayers(
+	session: AsyncSession,
+	capture: Capture,
+	extraction: FaithExtraction,
+	*,
+	version: str,
+	extract_version: str,
+) -> list[Derivation]:
+	"""File the prayers found in a note into Faith. Idempotent by replacement: a re-run
+	of this version drops only prayers nobody has touched. A "Pray for..." todo from the
+	same note, untouched, goes: with Faith on, it is the prayer."""
+	await session.execute(
+		delete(Derivation).where(
+			Derivation.capture_id == capture.id,
+			Derivation.user_id == capture.user_id,
+			Derivation.kind == PRAYER,
+			Derivation.extractor_version == version,
+			Derivation.status.in_(UNREVIEWED),
+		)
+	)
+	people = await _people_in_note(session, capture) if extraction.prayers else {}
+	made = []
+	for found in extraction.prayers:
+		person_id = (
+			people.get(normalize(found.for_person)) if found.for_person else None
+		)
+		prayer = Derivation(
+			id=uuid7(),
+			user_id=capture.user_id,
+			capture_id=capture.id,
+			kind=PRAYER,
+			payload={"title": found.title, "notes": None, "answer": None},
+			# Shown in Faith at once, like a passage; removing one is the "wrong" label.
+			status="accepted",
+			extractor_version=version,
+			confidence=found.confidence,
+			person_id=person_id,
+		)
+		session.add(prayer)
+		made.append(prayer)
+	if made:
+		todos = (
+			await session.scalars(
+				select(Derivation).where(
+					Derivation.capture_id == capture.id,
+					Derivation.user_id == capture.user_id,
+					Derivation.kind == "todo",
+					Derivation.extractor_version == extract_version,
+					Derivation.status.in_(UNREVIEWED),
+				)
+			)
+		).all()
+		for todo in todos:
+			if _PRAYER_TODO.match(str(todo.payload.get("title", ""))):
+				await session.delete(todo)
+	return made
 
 
 # --- prayers --------------------------------------------------------------------------
@@ -271,7 +478,6 @@ async def moment(
 				Derivation.user_id == user.id,
 				Derivation.kind == PASSAGE,
 				Derivation.status != "rejected",
-				Capture.space == FAITH,
 				Capture.created_at < cutoff,
 			)
 			.order_by(Capture.created_at, Derivation.id)
@@ -344,7 +550,6 @@ async def week(
 				Derivation.user_id == user_id,
 				Derivation.kind == PASSAGE,
 				Derivation.status != "rejected",
-				Capture.space == FAITH,
 				Capture.created_at >= since,
 				Capture.created_at < until,
 			)

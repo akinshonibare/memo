@@ -35,7 +35,15 @@ from memo.services.chunking import CHUNKER_VERSION, chunk_text
 from memo.services.derivation_index import derivation_text, reembed_derivation
 from memo.services.embeddings import Embedder
 from memo.services.extraction import ExtractionFailed, ExtractorLike
-from memo.services.faith import SCRIPTURE_VERSION, replace_passages
+from memo.services.faith import (
+	SCRIPTURE_VERSION,
+	FaithReaderLike,
+	UnconfiguredFaithReader,
+	apply_prayers,
+	faith_on,
+	might_pray,
+	replace_passages,
+)
 from memo.services.llm import LLMCall
 from memo.services.people import PeopleReaderLike, apply_mentions
 from memo.services.retry import RetryableError, TerminalError, backoff_delay
@@ -72,6 +80,9 @@ class PipelineContext:
 	people: PeopleReaderLike
 	max_attempts: int = 5
 	describer: Describer = field(default_factory=UnconfiguredDescriber)
+	# Faith (ADR 0042). Defaulted, unlike people: it only ever runs for someone who has
+	# turned Faith on, and an unconfigured reader fails the (optional) stage visibly.
+	faith: FaithReaderLike = field(default_factory=UnconfiguredFaithReader)
 
 
 @dataclass(frozen=True)
@@ -281,10 +292,40 @@ async def _people(ctx: PipelineContext, capture: Capture) -> None:
 	)
 
 
+async def _faith(ctx: PipelineContext, capture: Capture) -> None:
+	"""The prayers in a note (ADR 0042), filed into Faith. Only for someone with Faith
+	on, and only when the note has a prayer-ish word in it: most notes cost nothing."""
+	user = await ctx.session.get(User, capture.user_id)
+	if not faith_on(user) or not might_pray(capture.text):
+		_skip("faith", capture)
+		return
+	assert user is not None
+	result = await ctx.faith.read(
+		capture.text or "", captured_at=capture.created_at, timezone=user.timezone
+	)
+	await _record_calls(ctx, capture, result.calls)
+	made = await apply_prayers(
+		ctx.session,
+		capture,
+		result.extraction,
+		version=ctx.faith.version,
+		extract_version=ctx.extractor.version,
+	)
+	log.info(
+		"stage.faith",
+		capture_id=str(capture.id),
+		version=ctx.faith.version,
+		prayers=len(made),
+		linked=sum(1 for p in made if p.person_id is not None),
+	)
+
+
 async def _scripture(ctx: PipelineContext, capture: Capture) -> None:
-	"""The Bible passages a faith note is about (ADR 0042). No model call: references
-	have a regular shape, and services/scripture parses and checks them."""
-	found = await replace_passages(ctx.session, capture)
+	"""The Bible passages a note is about (ADR 0042): every faith note, and any note
+	while Faith is on. No model call: references have a regular shape, and
+	services/scripture parses and checks them."""
+	user = await ctx.session.get(User, capture.user_id)
+	found = await replace_passages(ctx.session, capture, enabled=faith_on(user))
 	log.info("stage.scripture", capture_id=str(capture.id), passages=found)
 
 
@@ -400,11 +441,19 @@ STAGES: tuple[Stage, ...] = (
 		optional=True,
 	),
 	Stage(
+		name="faith",
+		status=CaptureStatus.EXTRACTING,
+		version=lambda ctx: ctx.faith.version,
+		run=_faith,
+		applies=lambda c: True,
+		optional=True,
+	),
+	Stage(
 		name="scripture",
 		status=CaptureStatus.EXTRACTING,
 		version=lambda ctx: SCRIPTURE_VERSION,
 		run=_scripture,
-		applies=lambda c: c.space == "faith",
+		applies=lambda c: True,
 		optional=True,
 	),
 	Stage(

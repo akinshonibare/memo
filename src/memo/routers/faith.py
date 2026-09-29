@@ -16,7 +16,12 @@ from memo.auth import CurrentUser
 from memo.db import DbSession, commit_and_rebind
 from memo.ids import uuid7
 from memo.models import Derivation, Person, User
-from memo.schemas.derivations import PRAYER, PrayerPayload, validation_detail
+from memo.schemas.derivations import (
+	PRAYER,
+	UNREVIEWED,
+	PrayerPayload,
+	validation_detail,
+)
 from memo.schemas.faith import FaithOut, PlanOut, PrayerCreate, PrayerOut, PrayerPatch
 from memo.services.faith import (
 	ANSWERED_SHOWN,
@@ -145,6 +150,10 @@ async def update_prayer(
 			prayer.completed_at = None
 	if body.removed:
 		prayer.status = "rejected"
+	elif prayer.status in UNREVIEWED:
+		# Acting on a prayer memo found says it was real, as for any item; and a
+		# re-read of its note then leaves it alone.
+		prayer.status = "confirmed"
 	prayer.reviewed_at = dt.datetime.now(dt.UTC)
 	await commit_and_rebind(session, user_id)
 	names = await names_for(session, user_id, [prayer.person_id])

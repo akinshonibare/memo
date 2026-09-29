@@ -168,6 +168,9 @@ async def test_audio_capture_becomes_text_and_ready(
 		("transcribe", "succeeded", 1),
 		("extract", "succeeded", 1),
 		("people", "succeeded", 1),
+		# Faith (ADR 0042) is off: both stages record a skip, and cost nothing.
+		("faith", "succeeded", 1),
+		("scripture", "succeeded", 1),
 		("embed", "succeeded", 1),
 	]
 
@@ -212,7 +215,8 @@ async def test_running_twice_transcribes_and_extracts_once(
 
 	assert transcriber.calls == 1
 	assert extractor.calls == 1
-	assert len(await _runs(admin_engine, capture_id)) == 4
+	# transcribe, extract, people, faith, scripture, embed: once each.
+	assert len(await _runs(admin_engine, capture_id)) == 6
 
 
 async def test_retryable_failure_schedules_a_retry_and_keeps_the_stage(
@@ -323,6 +327,8 @@ async def test_text_capture_never_calls_the_transcriber(
 	assert [r[0] for r in await _runs(admin_engine, capture_id)] == [
 		"extract",
 		"people",
+		"faith",
+		"scripture",
 		"embed",
 	]
 

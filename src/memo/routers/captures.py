@@ -35,7 +35,7 @@ from memo.schemas.derivations import (
 )
 from memo.schemas.faith import CaptureMove, Space
 from memo.services.derivation_index import enqueue_reembed
-from memo.services.faith import faith_hidden, passage_out, replace_passages
+from memo.services.faith import faith_hidden, faith_on, passage_out, replace_passages
 from memo.services.people import last_contacts, load_people, mention_out
 from memo.services.queue import Queue
 from memo.services.storage import ObjectStore
@@ -450,7 +450,9 @@ async def move_capture(
 			)
 			.values(space=body.space)
 		)
-		await replace_passages(session, capture)
+		await replace_passages(
+			session, capture, enabled=faith_on(await session.get(User, user_id))
+		)
 		await commit_and_rebind(session, user_id)
 	(item,) = await _with_durations(session, [capture], user_id)
 	return item

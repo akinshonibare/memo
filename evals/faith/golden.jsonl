@@ -1,0 +1,24 @@
+{"id": "f01", "text": "pray for Tunde's mum, her surgery is on Thursday", "expected": [{"match": "surgery", "for": "Tunde's mum"}], "note": "the classic; the person is Tunde's mum, never Tunde"}
+{"id": "f02", "text": "praying for patience with the kids this week, it's been a lot", "expected": [{"match": "patience"}], "note": "for the author"}
+{"id": "f03", "text": "Lord, give me wisdom about whether to take the Lagos job", "expected": [{"match": "job"}], "note": "addressed to God, no 'pray' in it"}
+{"id": "f04", "text": "need to call Tunde about the pricing before Thursday", "expected": [], "note": "a plan to talk to a person is not a prayer"}
+{"id": "f05", "text": "church at 10 on Sunday, bring the projector for the youth group", "expected": [], "note": "church logistics"}
+{"id": "f06", "text": "Kemi asked me to pray for her exams next week", "expected": [{"match": "exam", "for": "Kemi"}], "note": "asked to pray: now the author's to pray"}
+{"id": "f07", "text": "thank God the flight landed safely, the turbulence was mad", "expected": [], "note": "an idiom of relief"}
+{"id": "f08", "text": "God came through!! the offer arrived this morning", "expected": [], "note": "an answered prayer's news is not a new request"}
+{"id": "f09", "text": "keep praying for Dad's recovery, the physio says another month", "expected": [{"match": "recovery", "for": "Dad"}]}
+{"id": "f10", "text": "I pray the meeting with the investors goes well tomorrow", "expected": [{"match": "meeting"}]}
+{"id": "f11", "text": "read Romans 8 this morning. all things work together for good. felt calm", "expected": [], "note": "a reflection that asks for nothing"}
+{"id": "f12", "text": "pray about the house move, and for Ada's new job starting Monday", "expected": [{"match": "move"}, {"match": "job", "for": "Ada"}], "note": "two prayers in one line"}
+{"id": "f13", "text": "my prayer this week: that the team would actually get along", "expected": [{"match": "team"}]}
+{"id": "f14", "text": "oh my God this traffic, 40 minutes to go two miles", "expected": [], "note": "an exclamation"}
+{"id": "f15", "text": "praying Tunde finds a flat before his lease runs out", "expected": [{"match": "flat", "for": "Tunde"}]}
+{"id": "f16", "text": "remind me to buy a prayer journal for Mum's birthday", "expected": [], "note": "an errand that contains the word"}
+{"id": "f17", "text": "asking God for strength for the interview on Friday", "expected": [{"match": "interview"}]}
+{"id": "f18", "text": "pray for the families caught up in the earthquake", "expected": [{"match": "earthquake"}], "note": "for a situation: no one person"}
+{"id": "f19", "text": "Lord have mercy, the deadline is tomorrow and nothing works", "expected": [], "note": "an exclamation, even with Lord in it"}
+{"id": "f20", "text": "prayed for Mum this morning, and for peace in the family", "expected": [{"match": "mum", "for": "Mum"}, {"match": "peace"}], "note": "prayed today still counts"}
+{"id": "f21", "text": "Bola's dad is back in hospital. praying for him and for Bola", "expected": [{"match": "hospital", "for": "Bola's dad"}, {"match": "bola", "for": "Bola"}], "note": "two people, one of them named through another; titles vary, so the match is loose"}
+{"id": "f22", "text": "God is good. finished the proposal, sent it to Sam", "expected": [], "note": "a statement, and a done task"}
+{"id": "f23", "text": "please Jesus let the scan results be clear on Wednesday", "expected": [{"match": "scan"}], "note": "a plea with no 'pray'"}
+{"id": "f24", "text": "bless you Ada for the soup, texted her thank you", "expected": [], "note": "'bless' as thanks, not a prayer"}

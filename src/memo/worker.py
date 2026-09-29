@@ -23,6 +23,7 @@ from memo.jobs import (
 from memo.logging import configure_logging
 from memo.services.embeddings import make_embedder
 from memo.services.extraction import make_extractor
+from memo.services.faith import make_faith_reader
 from memo.services.people import make_people_reader
 from memo.services.storage import S3ObjectStore
 from memo.services.transcription import make_transcriber
@@ -45,6 +46,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 		transcriber=make_transcriber(settings, http),
 		extractor=make_extractor(settings),
 		people=make_people_reader(settings),
+		faith=make_faith_reader(settings),
 		describer=make_describer(settings),
 		embedder=make_embedder(settings, http),
 	)

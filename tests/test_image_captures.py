@@ -108,7 +108,14 @@ async def test_a_photo_is_described_then_extracted_like_any_note(
 		costed = await conn.scalar(
 			text("SELECT count(*) FROM llm_calls WHERE stage = 'describe'")
 		)
-	assert list(stages) == ["describe", "embed", "extract", "people"]
+	assert list(stages) == [
+		"describe",
+		"embed",
+		"extract",
+		"faith",
+		"people",
+		"scripture",
+	]
 	assert costed == 1, "the vision call is priced and logged like every other"
 
 

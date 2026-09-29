@@ -105,6 +105,8 @@ anywhere.**
 - **A broader extraction prompt puts todos and events at risk.** Adding two kinds to the
   reader can lower its precision on the existing ones. The extraction eval is a merge gate
   and must stay green, with new cases for prayers and passages.
+- **One more model call per prayer-ish note for someone with Faith on,** about a cent,
+  and none for anyone else. Notes written before Faith was turned on are not re-read.
 - **"Mark" and "John" are both people and books.** "Mark said…" versus "Mark 4" is exactly
   where people and passages collide. It needs its own eval cases, and a wrong guess costs
   either a bogus person or a lost passage.
@@ -143,11 +145,24 @@ these are the details that only building settles.
    spoken forms ("John chapter 3 verse 16", "Psalm chapter twenty three") are rewritten
    first. That makes the Mark/John collision a unit test instead of an eval case, and
    costs no model call. Passages are found in faith notes only.
-4. **Not built yet: the reader filing prayers and passages from notes written elsewhere.**
-   Doing it properly means a new extraction prompt version, new eval cases and the gate
-   staying green, which is its own piece of work. For now a note goes into Faith by being
-   written or recorded there, or moved there from its page ("Move to Faith"). Prayers are
-   added by hand.
+4. **Prayers said anywhere are filed into Faith, by a reader of their own** (`faith-v1`,
+   `prompts/faith_v1.py`), built the same day after Akin asked for the feature to be
+   complete. Like the people reader, not a fourth list on the extraction prompt: it runs
+   only for someone with Faith on, so extraction and its eval are untouched for everyone
+   else. Three deterministic guards around the model:
+   - **A prayer-word gate** (`might_pray`: pray, God, Lord, Jesus, amen, bless...): a
+     note without one is never read, so most notes cost nothing.
+   - **People are linked by exact name only**, against the people the same note names:
+     "Tunde's mum" never becomes Tunde. A wrong link is the expensive error here, as it
+     is for people.
+   - **The duplicate todo goes:** an untouched "Pray for..." todo from the same note is
+     removed when a prayer is found, so it isn't in the Planner and Reminders twice.
+   A prayer found in a note is shown at once (`accepted`); answering or editing it
+   confirms it, so a re-read of the note leaves it alone, and removing it is the
+   precision label. Its eval (`evals/faith`, 24 cases, recorded live and replayed in CI)
+   gates recall 0.85, precision 0.90 and person accuracy 0.85, and fails if the gate
+   would skip a case that has a prayer. Passages likewise come from **any** note while
+   Faith is on, not only notes written in Faith; the note stays where it was written.
 5. **Reflections don't make ideas.** The extractor still runs on a faith note, and its
    todos and events are kept (they're commitments), but its ideas are dropped: a
    reflection is full of thoughts, and Home's Ideas shouldn't fill with them.
@@ -170,8 +185,10 @@ includes the readings, and "delete all data" removes them.
   less.
 - **Habit tracking** (open question Q11) arrives: prayer and Bible reading are likely its
   first habits, and the two must not count the same thing twice.
-- **Akin says a prayer said in a Home note got lost:** build item 4 above, with its eval
-  cases.
+- **A prayer is missed because it names none of the prayer words** ("asking for
+  wisdom about the move"): widen the gate, and add the note to the golden set.
+- **The faith eval's precision drops on real notes:** tighten the prompt before
+  anything else; a phantom prayer also costs a todo.
 
 ## Interview angle
 

@@ -150,9 +150,9 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
 1. **Faith**: built ([ADR 0042](decisions/0042-faith-a-space-of-its-own.md), migration 0016).
    Off until turned on in Settings → Faith. Prayers (answered, not done, linked to people),
    one thing a day to remember, a reading plan by position, passages found in faith notes
-   and opened in YouVersion (NIV by default), a Faith section in the weekly review. Not
-   built yet: the reader filing prayers from notes written on Home (needs a prompt version
-   and eval cases).
+   and opened in YouVersion (NIV by default), a Faith section in the weekly review.
+   Prayers said in any note are filed into Faith by the `faith-v1` reader, gated by its
+   own eval (`evals/faith`, armed, replayed in CI).
 2. **Habit tracking**: [Q11](open-questions.md), not decided. The question is what a habit
    looks like without a streak.
 3. **Still open from build 17:** a gap Akin sees after deleting a note, not reproduced in

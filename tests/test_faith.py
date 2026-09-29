@@ -13,12 +13,18 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from memo.config import SEED_USER_ID
 from memo.db import bind_user
+from memo.models import Capture
 from memo.schemas.derivations import Extraction, IdeaPayload, TodoPayload
+from memo.schemas.faith import FaithExtraction, PrayerFound
+from memo.schemas.people import MentionPayload, PeopleExtraction
+from memo.services.faith import apply_prayers
 from memo.services.pipeline import PipelineContext, process_capture
+from memo.services.retry import TerminalError
 from memo.services.scripture import plan
 from tests.fakes import (
 	FakeEmbedder,
 	FakeExtractor,
+	FakeFaithReader,
 	FakeObjectStore,
 	FakePeopleReader,
 	FakeTranscriber,
@@ -42,6 +48,8 @@ async def _note(
 	*,
 	space: str = "main",
 	extraction: Extraction | None = None,
+	people: PeopleExtraction | None = None,
+	faith: FakeFaithReader | None = None,
 ) -> str:
 	made = await client.post(
 		"/v1/captures",
@@ -55,7 +63,8 @@ async def _note(
 		object_store=FakeObjectStore(),
 		extractor=FakeExtractor(extraction or Extraction()),
 		embedder=FakeEmbedder(),
-		people=FakePeopleReader(),
+		people=FakePeopleReader(people),
+		faith=faith or FakeFaithReader(),
 	)
 	outcome = await process_capture(ctx, uuid.UUID(cid), SEED_USER_ID)
 	assert outcome.status == "ready", outcome
@@ -468,3 +477,130 @@ async def test_export_carries_the_readings_and_delete_removes_them(
 	async with admin_engine.connect() as conn:
 		left = await conn.scalar(text("SELECT count(*) FROM faith_readings"))
 	assert left == 0
+
+
+# --- prayers found in notes ----------------------------------------------------------
+
+KEMI_NOTE = "Kemi asked me to pray for her exams next week"
+KEMI = PeopleExtraction(people=[MentionPayload(name="Kemi", contact="none")])
+PRAYER_TODO = Extraction(todos=[TodoPayload(title="Pray for Kemi's exams")])
+
+
+def _found(title: str, for_person: str | None = None) -> FakeFaithReader:
+	return FakeFaithReader(
+		FaithExtraction(prayers=[PrayerFound(title=title, for_person=for_person)])
+	)
+
+
+async def test_a_prayer_said_on_home_is_filed_into_faith_for_the_person_named(
+	client: AsyncClient, session: AsyncSession
+) -> None:
+	await _faith(client, True)
+	reader = _found("Kemi's exams next week", "Kemi")
+	cid = await _note(
+		client, session, KEMI_NOTE, extraction=PRAYER_TODO, people=KEMI, faith=reader
+	)
+	assert reader.calls == 1
+	(prayer,) = (await client.get("/v1/faith")).json()["open"]
+	assert prayer["title"] == "Kemi's exams next week"
+	assert prayer["person_name"] == "Kemi", "linked to the person the note names"
+	assert prayer["capture_id"] == cid
+	detail = (await client.get(f"/v1/captures/{cid}")).json()
+	assert detail["derivations"] == [], "the 'Pray for...' todo is the prayer: it goes"
+	assert detail["space"] == "main", "the note itself stays on Home"
+
+
+async def test_with_faith_off_nothing_is_read_and_the_todo_stays(
+	client: AsyncClient, session: AsyncSession
+) -> None:
+	reader = _found("Kemi's exams", "Kemi")
+	cid = await _note(
+		client, session, KEMI_NOTE, extraction=PRAYER_TODO, people=KEMI, faith=reader
+	)
+	assert reader.calls == 0, "Faith off: no model call"
+	detail = (await client.get(f"/v1/captures/{cid}")).json()
+	assert [d["payload"]["title"] for d in detail["derivations"]] == [
+		"Pray for Kemi's exams"
+	]
+
+
+async def test_a_note_with_no_prayer_words_is_never_read(
+	client: AsyncClient, session: AsyncSession
+) -> None:
+	await _faith(client, True)
+	reader = _found("should not happen")
+	await _note(client, session, "need to call Tunde about pricing", faith=reader)
+	assert reader.calls == 0
+
+
+async def test_a_name_that_is_only_close_is_not_linked(
+	client: AsyncClient, session: AsyncSession
+) -> None:
+	""" "Tunde's mum" is not Tunde: an exact match or nothing."""
+	await _faith(client, True)
+	await _note(
+		client,
+		session,
+		"pray for Tunde's mum, surgery on Thursday",
+		people=PeopleExtraction(people=[MentionPayload(name="Tunde", contact="none")]),
+		faith=_found("Tunde's mum's surgery", "Tunde's mum"),
+	)
+	(prayer,) = (await client.get("/v1/faith")).json()["open"]
+	assert prayer["person_id"] is None
+
+
+async def test_a_prayer_you_acted_on_survives_its_note_being_read_again(
+	client: AsyncClient, session: AsyncSession
+) -> None:
+	await _faith(client, True)
+	cid = await _note(
+		client, session, KEMI_NOTE, people=KEMI, faith=_found("Kemi's exams", "Kemi")
+	)
+	(prayer,) = (await client.get("/v1/faith")).json()["open"]
+	await client.patch(
+		f"/v1/faith/prayers/{prayer['id']}", json={"answered": True, "answer": "passed"}
+	)
+	capture = await session.get(Capture, uuid.UUID(cid))
+	assert capture is not None
+	await apply_prayers(
+		session,
+		capture,
+		FaithExtraction(prayers=[PrayerFound(title="Kemi's exams")]),
+		version="faith-v1/fake",
+		extract_version="extract-v1.1/fake",
+	)
+	await session.commit()
+	await bind_user(session, SEED_USER_ID)
+	faith = (await client.get("/v1/faith")).json()
+	assert [p["answer"] for p in faith["answered"]] == ["passed"], "kept, answered"
+	assert [p["title"] for p in faith["open"]] == ["Kemi's exams"], "and a fresh one"
+
+
+async def test_a_reader_failure_never_costs_the_note(
+	client: AsyncClient, session: AsyncSession
+) -> None:
+	await _faith(client, True)
+	cid = await _note(
+		client,
+		session,
+		KEMI_NOTE,
+		extraction=PRAYER_TODO,
+		faith=FakeFaithReader(fail_with=TerminalError("model declined")),
+	)
+	detail = (await client.get(f"/v1/captures/{cid}")).json()
+	assert detail["status"] == "ready"
+	assert len(detail["derivations"]) == 1, "no prayer, so the todo stays"
+
+
+async def test_passages_come_from_any_note_while_faith_is_on(
+	client: AsyncClient, session: AsyncSession
+) -> None:
+	off = await _note(client, session, "Psalm 23 on the train")
+	assert (await client.get(f"/v1/captures/{off}")).json()["passages"] == []
+	await _faith(client, True)
+	on = await _note(client, session, "Psalm 23 on the train again")
+	detail = (await client.get(f"/v1/captures/{on}")).json()
+	assert [p["ref"] for p in detail["passages"]] == ["Psalm 23"]
+	assert detail["space"] == "main"
+	week = (await client.get("/v1/review/week")).json()["faith"]
+	assert [p["passage"]["ref"] for p in week["passages"]] == ["Psalm 23"]

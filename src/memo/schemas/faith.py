@@ -5,9 +5,47 @@ import datetime as dt
 import uuid
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from memo.schemas.derivations import no_leaked_field
 
 Space = Literal["main", "faith"]
+
+
+class PrayerFound(BaseModel):
+	"""One prayer the faith reader found in a note (prompts/faith_v1). Every field is
+	required in the output schema, for the reason given on derivations._Item."""
+
+	model_config = ConfigDict(
+		extra="forbid", json_schema_serialization_defaults_required=True
+	)
+
+	title: str = Field(min_length=1, max_length=200)
+	for_person: str | None = Field(default=None, max_length=120)
+	confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+	@field_validator("title")
+	@classmethod
+	def _title_has_content(cls, value: str) -> str:
+		stripped = value.strip()
+		if not stripped:
+			raise ValueError("title must not be blank")
+		return stripped
+
+	@field_validator("title", "for_person", mode="after")
+	@classmethod
+	def _no_leaked_fields(cls, value: str | None) -> str | None:
+		return no_leaked_field(value)  # type: ignore[no-any-return]
+
+
+class FaithExtraction(BaseModel):
+	"""What the faith reader returns for one note. An empty list is the usual answer."""
+
+	model_config = ConfigDict(
+		extra="forbid", json_schema_serialization_defaults_required=True
+	)
+
+	prayers: list[PrayerFound] = Field(default_factory=list)
 
 
 class PrayerOut(BaseModel):
