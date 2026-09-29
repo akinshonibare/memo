@@ -1,7 +1,7 @@
 import { InstrumentSerif_400Regular, useFonts } from "@expo-google-fonts/instrument-serif";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Linking, StyleSheet, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Api, type Me } from "./src/api";
 import { type Config, clearSession, loadConfig, loadOnboarded, saveOnboarded } from "./src/config";
@@ -18,6 +18,14 @@ import { ProfileSheet } from "./src/screens/ProfileScreen";
 import { colors } from "./src/ui";
 
 type Back = "home" | "planner" | "ideas";
+
+// memo://record, memo://write, memo://ask: what an iOS Shortcut opens, so the Action
+// Button or a Siri phrase goes straight to a capture (ADR 0027).
+type LinkAction = "record" | "write" | "ask";
+function linkAction(url: string | null): LinkAction | null {
+  const match = url?.match(/^memo:\/\/(record|write|ask)\b/);
+  return match ? (match[1] as LinkAction) : null;
+}
 type View_ = { name: Back } | { name: "detail"; id: string; back: Back };
 
 export default function App() {
@@ -35,6 +43,19 @@ export default function App() {
 
   useEffect(() => {
     loadOnboarded().then(setOnboarded).catch(() => setOnboarded(true));
+  }, []);
+
+  // A link can arrive before sign-in or onboarding finish (a cold start from the Action
+  // Button): it waits as pending and runs once the app is ready for it.
+  const [pending, setPending] = useState<LinkAction | null>(null);
+  useEffect(() => {
+    const take = (url: string | null) => {
+      const action = linkAction(url);
+      if (action) setPending(action);
+    };
+    Linking.getInitialURL().then(take).catch(() => {});
+    const sub = Linking.addEventListener("url", (event) => take(event.url));
+    return () => sub.remove();
   }, []);
 
   useEffect(() => {
@@ -61,6 +82,20 @@ export default function App() {
   }, [config?.baseUrl, config?.token]);
 
   const bump = () => setRefreshKey((k) => k + 1);
+
+  const ready = !!api && onboarded === true;
+  useEffect(() => {
+    if (!ready || !pending) return;
+    const run = setTimeout(() => {
+      setView({ name: "home" });
+      setSettings(false);
+      if (pending === "record") setRecord(true);
+      if (pending === "write") setCompose(true);
+      if (pending === "ask") setAsk(true);
+      setPending(null);
+    }, 0);
+    return () => clearTimeout(run);
+  }, [ready, pending]);
 
   // Who is signed in, for the avatar on Home; refreshed from Profile on every change.
   useEffect(() => {

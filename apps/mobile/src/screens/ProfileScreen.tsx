@@ -7,6 +7,7 @@ import {
   ActionSheetIOS,
   ActivityIndicator,
   Alert,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -233,6 +234,22 @@ export function ProfileSheet({
       ],
     );
 
+  const showShortcutHelp = () =>
+    Alert.alert(
+      "Siri & Action Button",
+      [
+        "1. In Shortcuts, make a new shortcut with one action: Open URLs → memo://record",
+        '2. Name it, e.g. "memo note". Saying "Hey Siri, memo note" now starts recording.',
+        "3. Settings → Action Button → Shortcut → pick it, to record with one press.",
+        "",
+        "memo://write opens a new note, and memo://ask opens Ask.",
+      ].join("\n"),
+      [
+        { text: "Close", style: "cancel" },
+        { text: "Open Shortcuts", onPress: () => void Linking.openURL("shortcuts://") },
+      ],
+    );
+
   const saveServer = () =>
     run("server", async () => {
       const next = baseUrl.trim().replace(/\/+$/, "");
@@ -284,6 +301,13 @@ export function ProfileSheet({
                 <Row icon="volume-high-outline" label="Voice" onPress={pickVoice} chevron busy={busy === "voice"}>
                   <Text style={styles.value}>{voiceLabel(me?.voice)}</Text>
                 </Row>
+              </Group>
+
+              <Group
+                title="Quick capture"
+                footer="Start a voice note from the Action Button, or by asking Siri, without opening memo first."
+              >
+                <Row icon="flash-outline" label="Siri & Action Button" onPress={showShortcutHelp} chevron />
               </Group>
 
               <Group title="Preferences" footer="Your morning view is built at 04:00 in this timezone.">
