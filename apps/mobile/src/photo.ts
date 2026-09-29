@@ -22,10 +22,17 @@ export async function pickPhoto(source: "camera" | "library"): Promise<string | 
   if (result.canceled || !result.assets[0]) return null;
 
   const asset = result.assets[0];
-  const landscape = asset.width >= asset.height;
-  const context = ImageManipulator.ImageManipulator.manipulate(asset.uri);
-  if (Math.max(asset.width, asset.height) > LONG_EDGE) {
-    context.resize(landscape ? { width: LONG_EDGE, height: null } : { width: null, height: LONG_EDGE });
+  return preparePhoto(asset.uri, asset.width, asset.height);
+}
+
+// Resize to the long edge and re-encode as JPEG. Shared from the picker and from the
+// share sheet (a photo shared from Photos arrives as HEIC, just like a picked one).
+export async function preparePhoto(uri: string, width?: number | null, height?: number | null): Promise<string> {
+  const context = ImageManipulator.ImageManipulator.manipulate(uri);
+  if (width && height && Math.max(width, height) > LONG_EDGE) {
+    context.resize(width >= height ? { width: LONG_EDGE, height: null } : { width: null, height: LONG_EDGE });
+  } else if (!width || !height) {
+    context.resize({ width: LONG_EDGE, height: null }); // unknown size: cap it anyway
   }
   const rendered = await context.renderAsync();
   const saved = await rendered.saveAsync({ format: ImageManipulator.SaveFormat.JPEG, compress: 0.8 });

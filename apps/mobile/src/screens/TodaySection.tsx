@@ -4,6 +4,16 @@ import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import type { Api, MorningView } from "../api";
 import { formatDay, formatTime } from "../format";
 import { colors, ui } from "../ui";
+import { publishToday, type TodayProps } from "../widgets";
+
+// What the Today widget shows: events by time, then todos, in the same order as here.
+function widgetProps(view: MorningView): TodayProps {
+  const lines: TodayProps["lines"] = [
+    ...view.events.map((e) => ({ time: formatTime(e.starts_at), title: e.title, kind: "event" as const })),
+    ...view.todos.map((t) => ({ time: null, title: t.title, kind: "todo" as const })),
+  ];
+  return { heading: formatDay(view.local_date), lines, more: Math.max(0, lines.length - 4) };
+}
 
 // The morning view (issue #38), fetched when Home mounts, when something changes, and
 // when the app comes back to the foreground: the phone sleeps through the 04:00 build,
@@ -13,7 +23,9 @@ export function useMorning(api: Api, refreshKey: number): MorningView | null {
 
   const load = useCallback(async () => {
     try {
-      setView(await api.getMorning());
+      const morning = await api.getMorning();
+      setView(morning);
+      publishToday(widgetProps(morning));
     } catch {
       // Secondary to the capture list: on failure the section keeps its last state
       // (or stays hidden) rather than pushing a second error banner onto Home.

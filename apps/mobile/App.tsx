@@ -1,7 +1,11 @@
 import { InstrumentSerif_400Regular, useFonts } from "@expo-google-fonts/instrument-serif";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
+import { useShareIntent } from "expo-share-intent";
 import { Linking, StyleSheet, View } from "react-native";
+import { haptic } from "./src/haptics";
+import { preparePhoto } from "./src/photo";
+import { publishRecord } from "./src/widgets";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Api, type Me } from "./src/api";
 import { type Config, clearSession, loadConfig, loadOnboarded, saveOnboarded } from "./src/config";
@@ -21,9 +25,9 @@ type Back = "home" | "planner" | "ideas";
 
 // memo://record, memo://write, memo://ask: what an iOS Shortcut opens, so the Action
 // Button or a Siri phrase goes straight to a capture (ADR 0027).
-type LinkAction = "record" | "write" | "ask";
+type LinkAction = "record" | "write" | "ask" | "planner";
 function linkAction(url: string | null): LinkAction | null {
-  const match = url?.match(/^memo:\/\/(record|write|ask)\b/);
+  const match = url?.match(/^memo:\/\/(record|write|ask|planner)\b/);
   return match ? (match[1] as LinkAction) : null;
 }
 type View_ = { name: Back } | { name: "detail"; id: string; back: Back };
@@ -84,10 +88,43 @@ export default function App() {
   const bump = () => setRefreshKey((k) => k + 1);
 
   const ready = !!api && onboarded === true;
+
+  // Shared into memo from another app (ADR 0027). A photo becomes a photo capture at
+  // once; a link or text opens a new note prefilled, so you can say why you kept it.
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent();
+  const [composeText, setComposeText] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!ready || !api || !hasShareIntent) return;
+    const image = shareIntent.files?.find((f) => f.mimeType.startsWith("image/"));
+    const text = [shareIntent.meta?.title, shareIntent.text].filter(Boolean).join("\n").trim();
+    resetShareIntent();
+    const run = setTimeout(() => {
+      setView({ name: "home" });
+      if (image) {
+        preparePhoto(image.path, image.width, image.height)
+          .then((uri) => api.createImageCapture(uri))
+          .then(() => {
+            haptic.done();
+            bump();
+          })
+          .catch(() => {});
+      } else if (text) {
+        setComposeText(text);
+        setCompose(true);
+      }
+    }, 0);
+    return () => clearTimeout(run);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, api, hasShareIntent]);
+
+  // The Record widget needs one snapshot from the app before it can render.
+  useEffect(() => {
+    publishRecord();
+  }, []);
   useEffect(() => {
     if (!ready || !pending) return;
     const run = setTimeout(() => {
-      setView({ name: "home" });
+      setView({ name: pending === "planner" ? "planner" : "home" });
       setSettings(false);
       if (pending === "record") setRecord(true);
       if (pending === "write") setCompose(true);
@@ -184,7 +221,17 @@ export default function App() {
           />
         )}
         {api && record && <RecordSheet api={api} onClose={() => setRecord(false)} onSaved={bump} />}
-        {api && compose && <ComposeSheet api={api} onClose={() => setCompose(false)} onSaved={bump} />}
+        {api && compose && (
+          <ComposeSheet
+            api={api}
+            initialText={composeText}
+            onClose={() => {
+              setCompose(false);
+              setComposeText(undefined);
+            }}
+            onSaved={bump}
+          />
+        )}
         <ProfileSheet
           visible={settings}
           config={config}

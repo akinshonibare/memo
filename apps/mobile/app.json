@@ -56,6 +56,50 @@
           "resizeMode": "contain",
           "backgroundColor": "#0B241A"
         }
+      ],
+      [
+        "expo-widgets",
+        {
+          "groupIdentifier": "group.com.akinshonibare.memo",
+          "widgets": [
+            {
+              "name": "TodayWidget",
+              "displayName": "Today",
+              "description": "Today's events and todos from memo.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium",
+                  "accessoryRectangular"
+                ]
+              }
+            },
+            {
+              "name": "RecordWidget",
+              "displayName": "Record",
+              "description": "Start a voice note in one tap.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "accessoryCircular"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "iosAppGroupIdentifier": "group.com.akinshonibare.memo",
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsText": true,
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
+            "NSExtensionActivationSupportsImageWithMaxCount": 1
+          },
+          "disableAndroid": true
+        }
       ]
     ],
     "backgroundColor": "#0B1410",
