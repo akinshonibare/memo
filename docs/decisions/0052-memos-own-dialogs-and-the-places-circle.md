@@ -61,6 +61,9 @@ Three things Akin raised about how memo feels, after using it:
   polls). One kept offline stays on Home.
 - **The map is out of the app** (Akin: not good enough yet). `GET /v1/map` and ADR 0049
   stay for a better design.
+- **The custom palette is out of Appearance** (Akin asked for it gone): the two hue
+  sliders and the "Custom" swatch. System/Light/Dark and the five themes stay (ADR
+  0031). A phone that had Custom falls back to Forest.
 
 ## What we're accepting
 

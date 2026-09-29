@@ -82,7 +82,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0028](0028-search-related-review-offline-siri.md) | Meaning search, related notes, weekly review, offline outbox, Siri | active |
 | [0029](0029-people-last-contact-and-reach-out.md) | People: mentions, deterministic resolution that asks, last contact, reach-out | active |
 | [0030](0030-auto-accept-is-not-confirmation.md) | Auto-accept keeps extractions as `accepted`, never `confirmed` | active |
-| [0031](0031-themes-are-data-derived-with-a-contrast-guard.md) | Themes are data: two hand-tuned Forest palettes, the rest derived behind a contrast check | active |
+| [0031](0031-themes-are-data-derived-with-a-contrast-guard.md) | Themes are data: two hand-tuned Forest palettes, the rest derived behind a contrast check | active; custom palette removed (0052) |
 | [0032](0032-motion-means-something.md) | Motion: Reanimated 4, a vocabulary paired with the haptics | active |
 | [0033](0033-native-stack-navigation.md) | React Navigation's native stack, not Expo Router | active |
 | [0034](0034-memo-on-the-phone-calendar-and-reminders.md) | Calendar and Reminders: Settings switches that sync, memo → phone only | active; Apple Health read is the one exception (0050) |
