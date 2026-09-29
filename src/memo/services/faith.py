@@ -1,9 +1,10 @@
-"""Faith (ADR 0042): passages and prayers found in notes, the reading plan's position,
-the one thing a day the Faith screen remembers, and the week's facts.
+"""Faith (ADR 0042): passages and prayers found in notes, the passages as a reference,
+what you're reading and what you read, the one thing a day the Faith screen
+remembers, and the week's facts.
 
-No score anywhere. The plan keeps time by position, so a week away is a week paused;
-open prayers are never overdue; the weekly section lists what happened and counts
-nothing against anyone.
+No score anywhere: open prayers are never overdue, and the weekly section lists what
+happened and counts nothing against anyone. There is no fixed plan (removed at Akin's
+request, 2026-09-29): you set what you're reading, and memo offers its next chapter.
 """
 
 import datetime as dt
@@ -15,36 +16,43 @@ from typing import Protocol
 
 import structlog
 from anthropic import AsyncAnthropic
-from sqlalchemy import and_, delete, func, or_, select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.config import Settings
 from memo.ids import uuid7
-from memo.models import Capture, Derivation, FaithReading, Person, User
+from memo.models import Capture, Derivation, Person, User
 from memo.prompts.faith_v1 import (
 	FAITH_VERSION,
 	SYSTEM_PROMPT,
 	repair_message,
 	user_message,
 )
-from memo.schemas.derivations import MENTION, PASSAGE, PRAYER, UNREVIEWED
+from memo.schemas.derivations import MENTION, PASSAGE, PRAYER, READING, UNREVIEWED
 from memo.schemas.faith import (
 	FaithExtraction,
 	FaithWeek,
 	MomentOut,
+	PassageMention,
 	PassageOut,
+	PassageRef,
 	PassageWritten,
-	PlanOut,
 	PrayerOut,
-	ReadingOut,
+	ReadingLogOut,
+	ReadingState,
 )
 from memo.services.extraction import AnthropicExtractionProvider, complete_validated
 from memo.services.llm import LLMCall
 from memo.services.morning import local_day_range, look_back_days, tz_or_utc
 from memo.services.people import normalize
 from memo.services.retry import TerminalError
-from memo.services.scripture import CANONICAL, PLAN_TITLES, Reading, find_passages, plan
+from memo.services.scripture import (
+	Passage,
+	find_passages,
+	next_reading,
+	parse_reading,
+	passage_from_payload,
+)
 
 log = structlog.get_logger("memo.faith")
 
@@ -55,6 +63,9 @@ SCRIPTURE_VERSION = "scripture-v1"
 PASSAGE_MIN_AGE = dt.timedelta(days=7)
 EXCERPT_CHARS = 280
 ANSWERED_SHOWN = 20
+PASSAGES_SHOWN = 100  # distinct passages on the Faith screen
+MENTIONS_SHOWN = 5  # notes under each
+RECENT_READINGS = 10
 FAITH = "faith"
 
 
@@ -107,6 +118,56 @@ async def replace_passages(
 
 def passage_out(d: Derivation) -> PassageOut:
 	return PassageOut.model_validate(d.payload)
+
+
+async def passage_index(session: AsyncSession, user: User) -> list[PassageRef]:
+	"""Every passage the user's notes name, most recently written about first, each
+	with the notes that name it. A reference, not a record of reading: nothing here
+	is marked done or counted against anyone."""
+	zone = tz_or_utc(user.timezone)
+	rows = (
+		await session.execute(
+			select(Derivation.payload, Capture.id, Capture.created_at, Capture.text)
+			.join(
+				Capture,
+				and_(
+					Capture.id == Derivation.capture_id,
+					Capture.user_id == Derivation.user_id,
+				),
+			)
+			.where(
+				Derivation.user_id == user.id,
+				Derivation.kind == PASSAGE,
+				Derivation.status != "rejected",
+			)
+			.order_by(Capture.created_at.desc(), Derivation.id)
+		)
+	).all()
+	by_ref: dict[str, PassageRef] = {}
+	for payload, capture_id, created_at, body in rows:
+		ref = str(payload.get("ref"))
+		entry = by_ref.get(ref)
+		if entry is None:
+			if len(by_ref) >= PASSAGES_SHOWN:
+				continue
+			entry = by_ref[ref] = PassageRef(
+				passage=PassageOut.model_validate(payload),
+				count=0,
+				last_on=created_at.astimezone(zone).date(),
+				notes=[],
+			)
+		if any(n.capture_id == capture_id for n in entry.notes):
+			continue  # a note naming it twice is one note
+		entry.count += 1
+		if len(entry.notes) < MENTIONS_SHOWN:
+			entry.notes.append(
+				PassageMention(
+					capture_id=capture_id,
+					on=created_at.astimezone(zone).date(),
+					excerpt=(body or "").strip()[:EXCERPT_CHARS] or None,
+				)
+			)
+	return list(by_ref.values())
 
 
 # --- prayers found in notes ----------------------------------------------------------
@@ -336,87 +397,108 @@ def live_prayers(user_id: uuid.UUID):  # type: ignore[no-untyped-def]
 	)
 
 
-# --- the reading plan -----------------------------------------------------------------
+# --- what you're reading -------------------------------------------------------------
 
 
-def reading_out(r: Reading) -> ReadingOut:
-	return ReadingOut(
-		index=r.index,
-		label=r.label,
-		book=r.usfm,
-		chapter=r.chapter,
-		end_chapter=r.end_chapter,
+class NotAPassage(ValueError):
+	"""Typed text that names no Bible passage memo can find."""
+
+
+def reading_log_out(d: Derivation) -> ReadingLogOut:
+	return ReadingLogOut(
+		id=d.id,
+		passage=passage_out(d),
+		on=dt.date.fromisoformat(str(d.payload["read_on"])),
 	)
 
 
-async def plan_state(
-	session: AsyncSession, user_id: uuid.UUID, name: str = CANONICAL
-) -> PlanOut:
-	"""Where the user is. The latest time through that isn't finished; once one is,
-	the next begins at Genesis without anyone pressing anything."""
-	readings = plan(name)
-	row = (
-		await session.execute(
-			select(FaithReading.cycle, FaithReading.position, FaithReading.read_at)
-			.where(FaithReading.user_id == user_id, FaithReading.plan == name)
-			.order_by(FaithReading.cycle.desc(), FaithReading.position.desc())
-			.limit(1)
+def _readings(user_id: uuid.UUID):  # type: ignore[no-untyped-def]
+	"""The user's readings, newest first (by the day read, then when logged)."""
+	return (
+		select(Derivation)
+		.where(Derivation.user_id == user_id, Derivation.kind == READING)
+		.order_by(
+			Derivation.payload["read_on"].astext.desc(),
+			Derivation.created_at.desc(),
+			Derivation.id.desc(),
 		)
-	).first()
-	if row is None:
-		cycle, position, last, last_read_at = 1, 0, None, None
+	)
+
+
+async def reading_state(session: AsyncSession, user: User) -> ReadingState:
+	current = passage_from_payload(user.bible_reading) if user.bible_reading else None
+	rows = (await session.scalars(_readings(user.id))).all()
+	last_here: Passage | None = None
+	if current is not None:
+		for d in rows:
+			read = passage_from_payload(d.payload)
+			if (
+				read is not None
+				and read.book == current.book
+				and current.chapter <= read.end_chapter <= current.end_chapter
+			):
+				last_here = read
+				break
+	nxt = next_reading(current, last_here)
+	return ReadingState(
+		current=PassageOut.model_validate(current.payload()) if current else None,
+		next=PassageOut.model_validate(nxt.payload()) if nxt else None,
+		last=reading_log_out(rows[0]) if rows else None,
+		recent=[reading_log_out(d) for d in rows[:RECENT_READINGS]],
+	)
+
+
+def set_reading(user: User, ref: str | None) -> None:
+	"""What you're reading now; None clears it. Raises NotAPassage for text that names
+	no passage."""
+	if ref is None or not ref.strip():
+		user.bible_reading = None
+		return
+	passage = parse_reading(ref)
+	if passage is None:
+		raise NotAPassage(ref)
+	user.bible_reading = passage.payload()
+
+
+async def log_reading(
+	session: AsyncSession, user: User, *, ref: str | None, on: dt.date
+) -> None:
+	"""A passage read on a day: what was typed, or else the next chapter of what
+	you're reading. Once per passage per day, so a double tap is one reading."""
+	if ref is not None and ref.strip():
+		passage = parse_reading(ref)
+		if passage is None:
+			raise NotAPassage(ref)
+		payload = passage.payload()
 	else:
-		cycle, position = row.cycle, row.position + 1
-		last, last_read_at = readings[row.position], row.read_at
-		if position >= len(readings):
-			cycle, position = cycle + 1, 0
-	return PlanOut(
-		plan=name,
-		title=PLAN_TITLES[name],
-		cycle=cycle,
-		position=position,
-		total=len(readings),
-		next=reading_out(readings[position]),
-		last=reading_out(last) if last is not None else None,
-		last_read_at=last_read_at,
-	)
-
-
-async def mark_read(
-	session: AsyncSession, user_id: uuid.UUID, name: str = CANONICAL
-) -> PlanOut:
-	"""The next reading, marked read. A double tap is one reading: the insert names the
-	position it expects, and a second one for the same position does nothing."""
-	state = await plan_state(session, user_id, name)
-	await session.execute(
-		insert(FaithReading)
-		.values(
-			id=uuid7(),
-			user_id=user_id,
-			plan=name,
-			cycle=state.cycle,
-			position=state.position,
+		state = await reading_state(session, user)
+		if state.next is None:
+			raise NotAPassage("nothing to read next: set what you're reading")
+		payload = state.next.model_dump()
+	existing = await session.scalar(
+		select(Derivation.id).where(
+			Derivation.user_id == user.id,
+			Derivation.kind == READING,
+			Derivation.payload["ref"].astext == str(payload["ref"]),
+			Derivation.payload["read_on"].astext == on.isoformat(),
 		)
-		.on_conflict_do_nothing(constraint="uq_faith_readings_position")
+	)
+	if existing is not None:
+		return
+	session.add(
+		Derivation(
+			id=uuid7(),
+			user_id=user.id,
+			capture_id=None,
+			kind=READING,
+			payload={**payload, "read_on": on.isoformat()},
+			status="user_created",
+			extractor_version="user",
+			confidence=None,
+			reviewed_at=dt.datetime.now(dt.UTC),
+		)
 	)
 	await session.flush()
-	return await plan_state(session, user_id, name)
-
-
-async def undo_read(
-	session: AsyncSession, user_id: uuid.UUID, name: str = CANONICAL
-) -> PlanOut:
-	"""Take back the last reading marked read. Nothing marked: nothing to undo."""
-	latest = await session.scalar(
-		select(FaithReading)
-		.where(FaithReading.user_id == user_id, FaithReading.plan == name)
-		.order_by(FaithReading.cycle.desc(), FaithReading.position.desc())
-		.limit(1)
-	)
-	if latest is not None:
-		await session.delete(latest)
-		await session.flush()
-	return await plan_state(session, user_id, name)
 
 
 # --- the one thing a day --------------------------------------------------------------
@@ -510,24 +592,14 @@ async def week(
 	session: AsyncSession, user_id: uuid.UUID, *, since: dt.datetime, until: dt.datetime
 ) -> FaithWeek:
 	"""What was read, which prayers were answered, and which passages were written
-	about, in [since, until). Facts, nothing to beat."""
-	reads = (
-		await session.scalars(
-			select(FaithReading)
-			.where(
-				FaithReading.user_id == user_id,
-				FaithReading.read_at >= since,
-				FaithReading.read_at < until,
-			)
-			.order_by(FaithReading.read_at, FaithReading.position)
-		)
-	).all()
-	read = []
-	for r in reads:
-		readings = plan(r.plan)
-		if 0 <= r.position < len(readings):
-			read.append(reading_out(readings[r.position]))
-
+	about, in [since, until) - local midnights, so their dates are the week's days.
+	Facts, nothing to beat."""
+	first, after = since.date(), until.date()
+	read = [
+		reading_log_out(d)
+		for d in reversed((await session.scalars(_readings(user_id))).all())
+		if first <= dt.date.fromisoformat(str(d.payload["read_on"])) < after
+	]
 	answered_rows = (
 		await session.scalars(
 			live_prayers(user_id)
@@ -570,15 +642,4 @@ async def week(
 		read=read,
 		answered=await prayers_out(session, user_id, answered_rows),
 		passages=passages,
-	)
-
-
-async def readings_count(session: AsyncSession, user_id: uuid.UUID) -> int:
-	return int(
-		await session.scalar(
-			select(func.count())
-			.select_from(FaithReading)
-			.where(FaithReading.user_id == user_id)
-		)
-		or 0
 	)

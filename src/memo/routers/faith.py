@@ -18,22 +18,34 @@ from memo.ids import uuid7
 from memo.models import Derivation, Person, User
 from memo.schemas.derivations import (
 	PRAYER,
+	READING,
 	UNREVIEWED,
 	PrayerPayload,
 	validation_detail,
 )
-from memo.schemas.faith import FaithOut, PlanOut, PrayerCreate, PrayerOut, PrayerPatch
+from memo.schemas.faith import (
+	FaithOut,
+	LogReading,
+	PrayerCreate,
+	PrayerOut,
+	PrayerPatch,
+	ReadingState,
+	SetReading,
+)
 from memo.services.faith import (
 	ANSWERED_SHOWN,
+	NotAPassage,
 	live_prayers,
-	mark_read,
+	log_reading,
 	moment,
 	names_for,
-	plan_state,
+	passage_index,
 	prayer_out,
 	prayers_out,
-	undo_read,
+	reading_state,
+	set_reading,
 )
+from memo.services.morning import tz_or_utc
 
 router = APIRouter(prefix="/faith", tags=["faith"])
 
@@ -66,8 +78,9 @@ def _payload(values: dict[str, object]) -> dict[str, object]:
 
 @router.get("", response_model=FaithOut)
 async def faith(session: DbSession, user_id: CurrentUser) -> FaithOut:
-	"""The Faith screen: where the plan is, the one thing to remember today, open
-	prayers (newest first), and recently answered ones."""
+	"""The Faith screen: the one thing to remember today, what you're reading, the
+	passages your notes talk about, open prayers (newest first), and recently
+	answered ones."""
 	user = await _user(session, user_id)
 	open_rows = (
 		await session.scalars(
@@ -87,8 +100,9 @@ async def faith(session: DbSession, user_id: CurrentUser) -> FaithOut:
 	return FaithOut(
 		enabled=user.faith_enabled,
 		translation=user.bible_translation,
-		plan=await plan_state(session, user_id),
 		moment=await moment(session, user),
+		reading=await reading_state(session, user),
+		passages=await passage_index(session, user),
 		open=await prayers_out(session, user_id, open_rows),
 		answered=await prayers_out(session, user_id, answered_rows),
 	)
@@ -160,17 +174,64 @@ async def update_prayer(
 	return prayer_out(prayer, names)
 
 
-@router.post("/readings", response_model=PlanOut)
-async def read_next(session: DbSession, user_id: CurrentUser) -> PlanOut:
-	"""Mark the next reading read. The plan moves on by one; it never skips ahead to
-	catch up with a calendar."""
-	state = await mark_read(session, user_id)
-	await commit_and_rebind(session, user_id)
-	return state
+def _not_a_passage(exc: NotAPassage) -> HTTPException:
+	return HTTPException(
+		status.HTTP_422_UNPROCESSABLE_CONTENT,
+		f"memo couldn't find a Bible passage in {str(exc)!r}",
+	)
 
 
-@router.delete("/readings/last", response_model=PlanOut)
-async def undo_last(session: DbSession, user_id: CurrentUser) -> PlanOut:
-	state = await undo_read(session, user_id)
+@router.put("/reading", response_model=ReadingState)
+async def choose_reading(
+	body: SetReading, session: DbSession, user_id: CurrentUser
+) -> ReadingState:
+	"""Set what you're reading: a book ("John"), a chapter or a few ("Romans 8"), or
+	some verses. Null clears it. Nothing you read before is touched."""
+	user = await _user(session, user_id)
+	try:
+		set_reading(user, body.ref)
+	except NotAPassage as exc:
+		raise _not_a_passage(exc) from exc
 	await commit_and_rebind(session, user_id)
-	return state
+	return await reading_state(session, await _user(session, user_id))
+
+
+@router.post(
+	"/readings", status_code=status.HTTP_201_CREATED, response_model=ReadingState
+)
+async def read(
+	body: LogReading, session: DbSession, user_id: CurrentUser
+) -> ReadingState:
+	"""You read something: what you typed, or else the next chapter of what you're
+	reading. Once per passage per day."""
+	user = await _user(session, user_id)
+	today = dt.datetime.now(tz_or_utc(user.timezone)).date()
+	on = body.on or today
+	if on > today:
+		raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "not a future day")
+	try:
+		await log_reading(session, user, ref=body.ref, on=on)
+	except NotAPassage as exc:
+		raise _not_a_passage(exc) from exc
+	await commit_and_rebind(session, user_id)
+	return await reading_state(session, await _user(session, user_id))
+
+
+@router.delete("/readings/{reading_id}", response_model=ReadingState)
+async def unread(
+	reading_id: uuid.UUID, session: DbSession, user_id: CurrentUser
+) -> ReadingState:
+	"""Undo a reading. Gone, not rejected: no model found it, so there is no label to
+	keep."""
+	reading = await session.scalar(
+		select(Derivation).where(
+			Derivation.id == reading_id,
+			Derivation.user_id == user_id,
+			Derivation.kind == READING,
+		)
+	)
+	if reading is None:
+		raise HTTPException(status.HTTP_404_NOT_FOUND)
+	await session.delete(reading)
+	await commit_and_rebind(session, user_id)
+	return await reading_state(session, await _user(session, user_id))

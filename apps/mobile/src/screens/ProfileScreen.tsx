@@ -451,7 +451,7 @@ export function ProfileSheet({
 
               <Group
                 title="Faith"
-                footer="A space of its own for prayers, a reading plan through the Bible, and the notes you write there. While it's on, faith notes stay out of Home, search and Ask; turn it off and they're ordinary notes again. Passages open in your Bible app."
+                footer="A space of its own for prayers, what you're reading in the Bible, the passages your notes mention, and the notes you write there. While it's on, faith notes stay out of Home, search and Ask; turn it off and they're ordinary notes again. Passages open in your Bible app."
               >
                 <Row icon="book-outline" label="Faith" busy={busy === "faith"}>
                   <Switch

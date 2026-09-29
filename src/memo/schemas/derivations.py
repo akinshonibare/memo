@@ -27,7 +27,9 @@ MENTION = "mention"
 # so the Planner, the phone sync and an app built before Faith never meet one.
 PRAYER = "prayer"
 PASSAGE = "passage"
-FAITH_KINDS: tuple[str, ...] = (PRAYER, PASSAGE)
+# A passage you read, on a day (ADR 0042, revised): logged in Faith, no note.
+READING = "reading"
+FAITH_KINDS: tuple[str, ...] = (PRAYER, PASSAGE, READING)
 # Kinds that may name a person: who a note is about, and who a prayer is for.
 PERSON_KINDS: tuple[str, ...] = (MENTION, PRAYER)
 # Something the author did (ADR 0043): "gym this morning". Counted towards habits, and,

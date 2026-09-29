@@ -1,6 +1,8 @@
 # 0042 — Faith: a space of its own, prayers that get answered, a reading plan that never falls behind
 
-**Status:** active (built 2026-09-29; see "What changed when it was built")
+**Status:** active (built 2026-09-29; see "What changed when it was built"). Its reading
+plan (choice 7) is superseded by [0044](0044-readings-you-choose.md): you set what you're
+reading.
 **Date:** 2026-09-29
 
 ## Problem
@@ -79,7 +81,8 @@ anywhere.**
   from a year or more ago, chosen the same way On this day is (ADR 0040).
 - **From your own history (4)** shares that card: on days with nothing to remember, a
   passage he wrote about, with what he wrote. One item, never a feed.
-- **The reading plan (7)** is position-based. Straight through the Bible is 1,189
+- **The reading plan (7)** *(superseded by [ADR 0044](0044-readings-you-choose.md):
+  you set what you're reading, memo offers its next chapter)* is position-based. Straight through the Bible is 1,189
   chapters, 3–4 a day for a year. memo generates the plan itself from the chapter counts,
   so there's nothing to license. "You're in Exodus 12", today's reading, a tap to open it,
   a tap to mark it read.

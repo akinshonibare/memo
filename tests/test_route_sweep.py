@@ -247,7 +247,10 @@ async def test_every_route_survives_every_kind_of_row(
 		f"/v1/faith/prayers/{answered.json()['id']}",
 		json={"answered": True, "answer": "Offer came Friday"},
 	)
-	assert (await client.post("/v1/faith/readings")).status_code == 200
+	assert (
+		await client.put("/v1/faith/reading", json={"ref": "John"})
+	).status_code == 200
+	assert (await client.post("/v1/faith/readings", json={})).status_code == 201
 
 	conversation = (await client.post("/v1/conversations")).json()["id"]
 	asked = (

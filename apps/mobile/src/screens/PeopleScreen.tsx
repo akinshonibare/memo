@@ -7,6 +7,7 @@ import { formatAgo } from "../format";
 import { haptic } from "../haptics";
 import { fonts, useUi } from "../ui";
 import { makeStyles, useTheme } from "../theme";
+import { usePullToRefresh } from "../refresh";
 import { MentionCard } from "./PeopleParts";
 
 type Order = "recent" | "name";
@@ -49,6 +50,7 @@ export function PeopleScreen({
       setError(String(e));
     }
   }, [api]);
+  const pull = usePullToRefresh(load);
 
   useEffect(() => {
     const first = setTimeout(load, 0);
@@ -146,6 +148,7 @@ export function PeopleScreen({
       <FlatList
         data={people}
         keyExtractor={(p) => p.id}
+        refreshControl={pull}
         contentContainerStyle={{ padding: 20, paddingBottom: 40 + insets.bottom }}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={header}

@@ -2,8 +2,8 @@
 the days each one counts.
 
 Counts are computed on every read, never stored: from activities (found in notes or
-logged with a tap), from People's contacts with family, and from Faith's readings and
-passages. A stored count would have to follow every rejection, edit and merge.
+logged with a tap), from People's contacts with family, and from the passages Faith
+finds in notes. A stored count would have to follow every rejection, edit and merge.
 
 Rhythm, never a streak: a habit shows this week's days against an optional target, the
 last time, and eight weeks of bars. Nothing resets and nothing is overdue.
@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.config import Settings
 from memo.ids import uuid7
-from memo.models import Capture, Derivation, FaithReading, Habit, Person, User
+from memo.models import Capture, Derivation, Habit, Person, User
 from memo.prompts.habits_v1 import (
 	HABITS_VERSION,
 	KEYS,
@@ -34,7 +34,7 @@ from memo.prompts.habits_v1 import (
 	repair_message,
 	user_message,
 )
-from memo.schemas.derivations import ACTIVITY, MENTION, PASSAGE, UNREVIEWED
+from memo.schemas.derivations import ACTIVITY, MENTION, PASSAGE, READING, UNREVIEWED
 from memo.schemas.habits import (
 	DayOut,
 	Evidence,
@@ -51,7 +51,6 @@ from memo.schemas.people import IN_TOUCH
 from memo.services.extraction import AnthropicExtractionProvider, complete_validated
 from memo.services.llm import LLMCall
 from memo.services.retry import TerminalError
-from memo.services.scripture import plan
 
 log = structlog.get_logger("memo.habits")
 
@@ -469,19 +468,21 @@ async def family_days(session: AsyncSession, user_id: uuid.UUID) -> Days:
 
 
 async def bible_days(session: AsyncSession, user_id: uuid.UUID, zone: ZoneInfo) -> Days:
-	"""Faith's side of reading the Bible (ADR 0042): readings marked, and notes that
-	named a passage."""
+	"""Faith's side of reading the Bible (ADR 0042): the days you logged a reading,
+	and the days a note named a passage."""
 	days = Days()
 	for r in (
 		await session.scalars(
-			select(FaithReading).where(FaithReading.user_id == user_id)
+			select(Derivation).where(
+				Derivation.user_id == user_id, Derivation.kind == READING
+			)
 		)
 	).all():
-		readings = plan(r.plan)
-		label = readings[r.position].label if 0 <= r.position < len(readings) else None
-		days.add(
-			r.read_at.astimezone(zone).date(), Evidence(kind="reading", text=label)
-		)
+		try:
+			day = dt.date.fromisoformat(str(r.payload.get("read_on")))
+		except ValueError:
+			continue
+		days.add(day, Evidence(kind="reading", text=str(r.payload.get("ref"))))
 	rows = (
 		await session.execute(
 			select(Derivation.payload, Capture.id, Capture.created_at)

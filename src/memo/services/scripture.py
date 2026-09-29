@@ -1,4 +1,4 @@
-"""Bible references and the reading plan (ADR 0042).
+"""Bible references (ADR 0042).
 
 Finding a reference is deterministic, not a model call. References have a regular
 shape (a book, a chapter, maybe verses), `pythonbible` already parses and validates
@@ -16,7 +16,6 @@ the user's Bible app, in the translation they chose.
 
 import re
 from dataclasses import dataclass
-from functools import cache
 
 import pythonbible as bible
 
@@ -74,11 +73,14 @@ def book_title(book: bible.Book, *, single_chapter: bool = False) -> str:
 
 
 def label(p: Passage) -> str:
-	"""How a reference reads: "Romans 8:28–30", "Genesis 1–3", "Psalm 23", "Jude 5"."""
+	"""How a reference reads: "Romans 8:28–30", "Genesis 1–3", "Psalm 23", "Jude 5",
+	and a whole book as just its name: "John", "Psalms"."""
 	one_chapter_book = _one_chapter(p.book)
 	name = book_title(p.book, single_chapter=p.chapter == p.end_chapter)
 	if p.verse is None:
 		if one_chapter_book:
+			return name
+		if p.chapter == 1 and p.end_chapter == bible.get_number_of_chapters(p.book):
 			return name
 		if p.end_chapter == p.chapter:
 			return f"{name} {p.chapter}"
@@ -193,47 +195,65 @@ def find_passages(text: str) -> list[Passage]:
 	return found
 
 
-# --- the reading plan -----------------------------------------------------------------
-
-CANONICAL = "canonical"
-PLAN_TITLES = {CANONICAL: "Genesis to Revelation"}
-# 1,189 chapters over a year is about 3.26 a day.
-DAYS_PER_YEAR = 365
+# --- what you're reading --------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class Reading:
-	index: int
-	book: bible.Book
-	chapter: int
-	end_chapter: int
+def parse_reading(text: str) -> Passage | None:
+	"""What someone typed as what they're reading, or what they read: the first
+	reference in it. A bare book name counts here ("John" is the whole book), unlike
+	in a note, where "Mark said" must not become a Gospel: typed into this box, it can
+	only mean the book."""
+	found = find_passages(text)
+	if found:
+		return found[0]
+	if not text or not text.strip():
+		return None
+	try:
+		refs = bible.get_references(normalise(text))
+	except Exception:  # noqa: BLE001 - a parser bug is an answer of "not found"
+		return None
+	for r in refs:
+		if r.book.value > 66 or (r.end_book is not None and r.end_book != r.book):
+			continue
+		chapters = int(bible.get_number_of_chapters(r.book))
+		return Passage(r.book, 1, None, chapters, None)
+	return None
 
-	@property
-	def usfm(self) -> str:
-		return USFM[int(self.book.value) - 1]
 
-	@property
-	def label(self) -> str:
-		return str(
-			label(Passage(self.book, self.chapter, None, self.end_chapter, None))
-		)
+def next_reading(current: Passage | None, last: Passage | None) -> Passage | None:
+	"""The chapter to read next in what you're reading: the one after the last you
+	read in it, or its first. None once you've read to its end, or when nothing is
+	set. A few verses you set ("Romans 8:28–39") are read as they are."""
+	if current is None:
+		return None
+	if current.verse is not None:
+		return current
+	within = (
+		last is not None
+		and last.book == current.book
+		and current.chapter <= last.end_chapter <= current.end_chapter
+	)
+	chapter = last.end_chapter + 1 if within and last is not None else current.chapter
+	if chapter > current.end_chapter:
+		return None
+	return Passage(current.book, chapter, None, chapter, None)
 
 
-@cache
-def plan(name: str = CANONICAL) -> tuple[Reading, ...]:
-	"""Genesis to Revelation in about a year. A reading never crosses a book, so each
-	opens with one link; each book is split into near-equal readings of 3-4 chapters."""
-	if name != CANONICAL:
-		raise KeyError(name)
-	total = sum(bible.get_number_of_chapters(b) for b in BOOKS)
-	per_day = total / DAYS_PER_YEAR
-	readings: list[Reading] = []
-	for book in BOOKS:
-		chapters = int(bible.get_number_of_chapters(book))
-		parts = max(1, round(chapters / per_day))
-		start = 1
-		for part in range(parts):
-			size = chapters // parts + (1 if part < chapters % parts else 0)
-			readings.append(Reading(len(readings), book, start, start + size - 1))
-			start += size
-	return tuple(readings)
+def passage_from_payload(payload: dict[str, object]) -> Passage | None:
+	"""A stored passage payload back into a Passage; None if it names no book memo
+	knows."""
+	try:
+		book = bible.Book(USFM.index(str(payload["book"])) + 1)
+		chapter = int(str(payload["chapter"]))
+		end_chapter = int(str(payload.get("end_chapter") or chapter))
+	except (KeyError, ValueError):
+		return None
+	verse = payload.get("verse")
+	end_verse = payload.get("end_verse")
+	return Passage(
+		book,
+		chapter,
+		int(str(verse)) if verse is not None else None,
+		end_chapter,
+		int(str(end_verse)) if end_verse is not None else None,
+	)

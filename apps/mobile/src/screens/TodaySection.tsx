@@ -23,7 +23,7 @@ function widgetProps(view: MorningView): TodayProps {
 // The morning view (issue #38), fetched when Home mounts, when something changes, and
 // when the app comes back to the foreground: the phone sleeps through the 04:00 build,
 // so "today" has usually moved on since the last fetch.
-export function useMorning(api: Api, refreshKey: number): MorningView | null {
+export function useMorning(api: Api, refreshKey: number): { view: MorningView | null; reload: () => Promise<void> } {
   const [view, setView] = useState<MorningView | null>(null);
 
   const load = useCallback(async () => {
@@ -49,7 +49,7 @@ export function useMorning(api: Api, refreshKey: number): MorningView | null {
     return () => sub.remove();
   }, [load]);
 
-  return view;
+  return { view, reload: load };
 }
 
 // A ticked todo stays a moment, checked, before it leaves the list.

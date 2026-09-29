@@ -147,12 +147,14 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
 
 ## Next up (Akin, 2026-09-29)
 
-1. **Faith**: built ([ADR 0042](decisions/0042-faith-a-space-of-its-own.md), migration 0016).
+1. **Faith**: built and shipped ([ADR 0042](decisions/0042-faith-a-space-of-its-own.md)).
    Off until turned on in Settings → Faith. Prayers (answered, not done, linked to people),
-   one thing a day to remember, a reading plan by position, passages found in faith notes
-   and opened in YouVersion (NIV by default), a Faith section in the weekly review.
-   Prayers said in any note are filed into Faith by the `faith-v1` reader, gated by its
-   own eval (`evals/faith`, armed, replayed in CI).
+   one thing a day to remember, passages found in notes and opened in YouVersion (NIV by
+   default), a Faith section in the weekly review, and a `faith-v1` reader that files
+   prayers from any note (its own eval). **Revised the same day**
+   ([ADR 0044](decisions/0044-readings-you-choose.md), migration 0018): no fixed plan. You
+   set what you're reading ("John"), memo offers the next chapter, "Read" logs it, and
+   any passage can be logged; the passages your notes name are listed as a reference.
 2. **Habits**: built ([ADR 0043](decisions/0043-habits-noticed-not-logged.md), migration 0017).
    Off until turned on in Settings → Habits. The `habits-v1` reader picks out what each
    note says you did (gym, running, reading, the Bible, prayer, and so on, or a habit you
@@ -165,8 +167,11 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    the weekly review. The last 60 days of notes are read in the background when it's
    turned on. Gated by its own eval (`evals/habits`, 32 cases, armed at 1.00, replayed
    in CI).
-3. **Still open from build 17:** a gap Akin sees after deleting a note, not reproduced in
-   the simulator. Waiting on his build number and how he deleted.
+3. **The gap after deleting a note** (Akin's screenshot, build 17): Home's rows were
+   moved by Reanimated layout animations, which can be left stranded in a virtualized
+   list. Home no longer animates positions ([ADR 0032](decisions/0032-motion-means-something.md),
+   "What changed"). Not reproducible in a debug build, so confirm on the phone.
+4. **Pull to refresh** on every list screen (`src/refresh.tsx`).
 
 ## Filed for later
 
