@@ -238,11 +238,11 @@ export function ProfileSheet({
     Alert.alert(
       "Siri & Action Button",
       [
-        "1. In Shortcuts, make a new shortcut with one action: Open URLs → memo://record",
-        '2. Name it, e.g. "memo note". Saying "Hey Siri, memo note" now starts recording.',
-        "3. Settings → Action Button → Shortcut → pick it, to record with one press.",
+        'Siri: say "Take a note in memo" and dictate it, or "Record in memo" to start a voice note. It works right away.',
         "",
-        "memo://write opens a new note, and memo://ask opens Ask.",
+        'Action Button: Settings → Action Button → Shortcut → memo → "Record".',
+        "",
+        "In your own Shortcuts: memo://record, memo://write, memo://ask and memo://planner open memo where you want.",
       ].join("\n"),
       [
         { text: "Close", style: "cancel" },

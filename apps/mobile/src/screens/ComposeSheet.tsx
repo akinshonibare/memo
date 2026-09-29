@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Modal, StyleSheet, Text, TextInput, View } from "react-native";
-import { Api, ApiError, type Capture } from "../api";
+import { Api, ApiError } from "../api";
 import { IconCircle, Pill, SheetHandle } from "../components";
 import { useKeyboardHeight } from "../keyboard";
 import { colors, ui } from "../ui";
 import { haptic } from "../haptics";
+import { captureOrQueue } from "../outbox";
 
 export function ComposeSheet({
   api,
@@ -16,7 +17,7 @@ export function ComposeSheet({
   initialText?: string; // from the share sheet: a link or text to annotate
 
   onClose: () => void;
-  onSaved: (capture: Capture) => void;
+  onSaved: () => void;
 }) {
   const [text, setText] = useState(initialText ?? "");
   const [busy, setBusy] = useState(false);
@@ -28,9 +29,9 @@ export function ComposeSheet({
     if (!body || busy) return;
     setBusy(true);
     try {
-      const saved = await api.createTextCapture(body);
+      await captureOrQueue(api, { kind: "text", text: body }); // offline: kept, synced later
       haptic.done();
-      onSaved(saved);
+      onSaved();
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));

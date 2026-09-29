@@ -71,6 +71,12 @@ export type MorningView = {
   built_at: string;
 };
 
+export type Once = { clientToken: string; capturedAt: string };
+
+export function newOnce(): Once {
+  return { clientToken: Crypto.randomUUID(), capturedAt: new Date().toISOString() };
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -93,6 +99,19 @@ export type Me = {
 export type Voice = { id: string; label: string };
 
 export type Usage = { window_days: number; total_cost_usd: string };
+
+export type SearchHit = { snippet: string; capture: Capture | null; derivation: Derivation | null };
+
+export type Week = {
+  start: string;
+  end: string;
+  captured: { notes: number; voice: number; photos: number };
+  done: Derivation[];
+  still_open: Derivation[];
+  still_open_total: number;
+  coming_up: Derivation[];
+  new_ideas: Derivation[];
+};
 
 export class Api {
   // Called once when the server says the session is gone (401): the app signs out.
@@ -195,18 +214,26 @@ export class Api {
 
   // --- captures -----------------------------------------------------------------
 
-  createTextCapture(text: string) {
+  // `once` identifies a capture across retries (the server's idempotency key) and
+  // carries the time it was actually taken, for one synced later from the outbox.
+  createTextCapture(text: string, once: Once = newOnce()) {
     return this.request<Capture>("/v1/captures", {
       method: "POST",
-      body: JSON.stringify({ text, client_token: Crypto.randomUUID() }),
+      body: JSON.stringify({ text, client_token: once.clientToken, captured_at: once.capturedAt }),
     });
   }
 
-  async createAudioCapture(fileUri: string, mime = "audio/m4a", durationMs?: number) {
-    const presigned = await this.request<{
-      recording_id: string;
-      upload_url: string;
-    }>("/v1/recordings", {
+  createAudioCapture(fileUri: string, mime = "audio/m4a", durationMs?: number, once: Once = newOnce()) {
+    return this.uploadCapture(fileUri, mime, once, durationMs);
+  }
+
+  // A photo (ADR 0024): resized JPEG, uploaded like a recording, described on the server.
+  createImageCapture(fileUri: string, once: Once = newOnce()) {
+    return this.uploadCapture(fileUri, "image/jpeg", once);
+  }
+
+  private async uploadCapture(fileUri: string, mime: string, once: Once, durationMs?: number) {
+    const presigned = await this.request<{ recording_id: string; upload_url: string }>("/v1/recordings", {
       method: "POST",
       body: JSON.stringify({ mime, duration_ms: durationMs }),
     });
@@ -222,31 +249,27 @@ export class Api {
       method: "POST",
       body: JSON.stringify({
         recording_id: presigned.recording_id,
-        client_token: Crypto.randomUUID(),
+        client_token: once.clientToken,
+        captured_at: once.capturedAt,
       }),
     });
   }
 
-  // A photo (ADR 0024): resized JPEG, uploaded like a recording, described on the server.
-  async createImageCapture(fileUri: string) {
-    const presigned = await this.request<{ recording_id: string; upload_url: string }>(
-      "/v1/recordings",
-      { method: "POST", body: JSON.stringify({ mime: "image/jpeg" }) },
-    );
-    const upload = await FileSystem.uploadAsync(presigned.upload_url, fileUri, {
-      httpMethod: "PUT",
-      headers: { "Content-Type": "image/jpeg" },
-    });
-    if (upload.status < 200 || upload.status >= 300) {
-      throw new ApiError(upload.status, "upload to storage failed");
-    }
-    return this.request<Capture>("/v1/captures", {
+  // Meaning search over everything (ADR 0028), the same retrieval Ask uses.
+  // The query goes in the body: it is a piece of your notes, and URLs get logged.
+  search(q: string) {
+    return this.request<SearchHit[]>("/v1/search", {
       method: "POST",
-      body: JSON.stringify({
-        recording_id: presigned.recording_id,
-        client_token: Crypto.randomUUID(),
-      }),
+      body: JSON.stringify({ q, limit: 20 }),
     });
+  }
+
+  related(captureId: string) {
+    return this.request<{ capture: Capture; similarity: number }[]>(`/v1/captures/${captureId}/related`);
+  }
+
+  weekReview(weeksAgo = 0) {
+    return this.request<Week>(`/v1/review/week?weeks_ago=${weeksAgo}`);
   }
 
   listCaptures(limit = 50) {

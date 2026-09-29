@@ -100,7 +100,8 @@
           },
           "disableAndroid": true
         }
-      ]
+      ],
+      "./plugins/withAppIntents"
     ],
     "backgroundColor": "#0B1410",
     "extra": {

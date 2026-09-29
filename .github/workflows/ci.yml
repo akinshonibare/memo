@@ -102,3 +102,22 @@ jobs:
           else
             echo "::warning::evals/extraction/recorded.json missing - extraction gate not armed"
           fi
+
+  app:
+    # The Expo app: a clean `npm ci` (what EAS runs first - a broken peer dependency
+    # once failed a TestFlight build here instead of a PR), then types and lint.
+    name: app (npm ci, tsc, lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit
+      - run: npx expo lint

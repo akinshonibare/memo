@@ -1,7 +1,7 @@
 import datetime as dt
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from memo.schemas.derivations import DerivationOut
 
@@ -15,6 +15,25 @@ class CaptureCreate(BaseModel):
 	client_token: str = Field(
 		min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._~-]+$"
 	)
+
+	# When the note was actually taken, for one queued offline and synced later
+	# (ADR 0028). Its date is what "tomorrow" in the note resolves against, so the
+	# sync time would be wrong. Bounded: not in the future, not older than 90 days.
+	captured_at: dt.datetime | None = None
+
+	@field_validator("captured_at")
+	@classmethod
+	def _plausible(cls, value: dt.datetime | None) -> dt.datetime | None:
+		if value is None:
+			return value
+		if value.tzinfo is None:
+			raise ValueError("captured_at needs a timezone offset")
+		now = dt.datetime.now(dt.UTC)
+		if value > now + dt.timedelta(minutes=5):
+			raise ValueError("captured_at is in the future")
+		if value < now - dt.timedelta(days=90):
+			raise ValueError("captured_at is more than 90 days ago")
+		return value
 
 	@model_validator(mode="after")
 	def exactly_one_source(self) -> "CaptureCreate":

@@ -2,7 +2,7 @@ import { InstrumentSerif_400Regular, useFonts } from "@expo-google-fonts/instrum
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import { useShareIntent } from "expo-share-intent";
-import { Linking, StyleSheet, View } from "react-native";
+import { AppState, Linking, StyleSheet, View } from "react-native";
 import { haptic } from "./src/haptics";
 import { preparePhoto } from "./src/photo";
 import { publishRecord } from "./src/widgets";
@@ -19,16 +19,27 @@ import { LoginScreen } from "./src/screens/LoginScreen";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
 import { RecordSheet } from "./src/screens/RecordSheet";
 import { ProfileSheet } from "./src/screens/ProfileScreen";
+import { ReviewScreen } from "./src/screens/ReviewScreen";
 import { colors } from "./src/ui";
+import { captureOrQueue, flushOutbox, useOutbox } from "./src/outbox";
 
-type Back = "home" | "planner" | "ideas";
+type Back = "home" | "planner" | "ideas" | "review";
 
-// memo://record, memo://write, memo://ask: what an iOS Shortcut opens, so the Action
-// Button or a Siri phrase goes straight to a capture (ADR 0027).
-type LinkAction = "record" | "write" | "ask" | "planner";
+// memo://record, write, ask, planner: what a Shortcut or widget opens (ADR 0027).
+// memo://capture?text=...: a note dictated to Siri (ADR 0028), saved as it is.
+type LinkAction = "record" | "write" | "ask" | "planner" | `capture:${string}`;
 function linkAction(url: string | null): LinkAction | null {
-  const match = url?.match(/^memo:\/\/(record|write|ask|planner)\b/);
-  return match ? (match[1] as LinkAction) : null;
+  const match = url?.match(/^memo:\/\/(record|write|ask|planner|capture)\b(?:\?(.*))?/);
+  if (!match) return null;
+  if (match[1] !== "capture") return match[1] as LinkAction;
+  const param = /(?:^|&)text=([^&]*)/.exec(match[2] ?? "");
+  let text = "";
+  try {
+    text = param ? decodeURIComponent(param[1].replace(/\+/g, " ")).trim() : "";
+  } catch {
+    return null; // malformed escape: ignore rather than save garbage
+  }
+  return text ? `capture:${text}` : null;
 }
 type View_ = { name: Back } | { name: "detail"; id: string; back: Back };
 
@@ -102,7 +113,7 @@ export default function App() {
       setView({ name: "home" });
       if (image) {
         preparePhoto(image.path, image.width, image.height)
-          .then((uri) => api.createImageCapture(uri))
+          .then((uri) => captureOrQueue(api, { kind: "image", file: uri }))
           .then(() => {
             haptic.done();
             bump();
@@ -117,6 +128,21 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, api, hasShareIntent]);
 
+  // The outbox (ADR 0028) empties whenever it can: on sign-in, on returning to the app,
+  // and every 20 seconds while something is waiting.
+  const waiting = useOutbox().filter((i) => !i.failed).length;
+  useEffect(() => {
+    if (!api) return;
+    const flush = () => void flushOutbox(api).then(bump);
+    flush();
+    const sub = AppState.addEventListener("change", (s) => s === "active" && flush());
+    const timer = waiting > 0 ? setInterval(flush, 20_000) : null;
+    return () => {
+      sub.remove();
+      if (timer) clearInterval(timer);
+    };
+  }, [api, waiting]);
+
   // The Record widget needs one snapshot from the app before it can render.
   useEffect(() => {
     publishRecord();
@@ -126,6 +152,13 @@ export default function App() {
     const run = setTimeout(() => {
       setView({ name: pending === "planner" ? "planner" : "home" });
       setSettings(false);
+      if (pending.startsWith("capture:")) {
+        // Straight to the outbox path: saved now, or kept until there's a network.
+        void captureOrQueue(api!, { kind: "text", text: pending.slice("capture:".length) }).then(() => {
+          haptic.done();
+          bump();
+        });
+      }
       if (pending === "record") setRecord(true);
       if (pending === "write") setCompose(true);
       if (pending === "ask") setAsk(true);
@@ -174,6 +207,7 @@ export default function App() {
             refreshKey={refreshKey}
             onOpen={(id) => setView({ name: "detail", id, back: "home" })}
             onPlanner={() => setView({ name: "planner" })}
+            onReview={() => setView({ name: "review" })}
             onAsk={() => setAsk(true)}
             onRecord={() => setRecord(true)}
             onCompose={() => setCompose(true)}
@@ -191,6 +225,14 @@ export default function App() {
             onChanged={bump}
           />
         )}
+        {api && view.name === "review" && (
+          <ReviewScreen
+            api={api}
+            onBack={() => setView({ name: "home" })}
+            onOpenCapture={(id) => setView({ name: "detail", id, back: "review" })}
+            onChanged={bump}
+          />
+        )}
         {api && view.name === "ideas" && (
           <IdeasScreen
             api={api}
@@ -202,11 +244,13 @@ export default function App() {
         )}
         {api && view.name === "detail" && (
           <DetailScreen
+            key={view.id}
             api={api}
             id={view.id}
             onBack={() => setView({ name: view.back })}
             onAsk={() => setAsk(true)}
             onChanged={bump}
+            onOpen={(id) => setView({ name: "detail", id, back: view.back })}
           />
         )}
         {api && (
