@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from anthropic import AsyncAnthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from evals.extraction.matching import (
 	LLMMatcher,
@@ -72,7 +72,11 @@ async def run(
 	for example in examples:
 		if replay is not None:
 			raw = replay.get(example.id)
-			predicted = Extraction.model_validate_json(raw) if raw else Extraction()
+			try:
+				predicted = Extraction.model_validate_json(raw or "{}")
+			except ValidationError:
+				# A recorded ExtractionFailed keeps the invalid raw output: a miss.
+				predicted = Extraction()
 		else:
 			assert extractor is not None
 			try:

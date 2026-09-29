@@ -32,7 +32,9 @@ from memo.schemas.people import (
 from memo.services.derivation_index import enqueue_reembed
 from memo.services.morning import tz_or_utc
 from memo.services.people import (
+	collapse_duplicates,
 	count_unread_notes,
+	count_unreadable_notes,
 	is_due,
 	last_contacts,
 	load_people,
@@ -107,6 +109,7 @@ async def list_people(session: DbSession, user_id: CurrentUser) -> PeopleList:
 		people=[_person_out(p, lasts, counts, today) for p in people],
 		unresolved=int(unresolved or 0),
 		unread_notes=await count_unread_notes(session, user_id),
+		unreadable_notes=await count_unreadable_notes(session, user_id),
 	)
 
 
@@ -261,6 +264,9 @@ async def log_contact(
 	"""'Spoke to them': memo only knows what it is told, and iOS gives no app your
 	calls or messages, so this is the one-tap way to say so. A mention you added,
 	with no note behind it, like an item added straight into the Planner."""
+	# The same lock as a merge: a contact logged against a person being merged away
+	# would otherwise hit the foreign key as a 500.
+	await lock_people(session, user_id)
 	person = await _person_or_404(session, user_id, person_id)
 	today, _ = await _today(session, user_id)
 	occurred_on = body.occurred_on or today
@@ -319,6 +325,8 @@ async def merge_person(
 	target.note = target.note or source.note
 	await session.delete(source)
 	await session.flush()
+	# A note that named both is now two mentions of one person.
+	await collapse_duplicates(session, user_id, target.id)
 	return await _detail(session, user_id, target)
 
 
@@ -385,6 +393,21 @@ async def resolve_mention(
 	if mention.status == "rejected" and mention.person_id is not None:
 		stale.append(mention.person_id)
 	await prune_if_empty(session, user_id, stale)
+	if mention.person_id is not None and mention.status != "rejected":
+		# Linking to someone this note already names: keep one mention of them.
+		gone = await collapse_duplicates(session, user_id, mention.person_id)
+		if mention.id in gone:
+			survivor = await session.scalar(
+				select(Derivation).where(
+					Derivation.user_id == user_id,
+					Derivation.capture_id == mention.capture_id,
+					Derivation.person_id == mention.person_id,
+					Derivation.kind == MENTION,
+					Derivation.status != "rejected",
+				)
+			)
+			assert survivor is not None
+			mention = survivor
 	await session.refresh(mention)
 
 	people = {p.id: p for p in await load_people(session, user_id)}

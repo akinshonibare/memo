@@ -89,6 +89,10 @@ class Stage:
 	version: Callable[[PipelineContext], str]
 	run: StageFn
 	applies: Callable[[Capture], bool]
+	# An optional stage's failure never fails the note: it is recorded on the ledger
+	# and the note goes on to `ready`. Only the people stage (ADR 0029) is optional:
+	# who a note is about is secondary to the note being saved and searchable.
+	optional: bool = False
 
 
 async def _transcribe(ctx: PipelineContext, capture: Capture) -> None:
@@ -375,6 +379,7 @@ STAGES: tuple[Stage, ...] = (
 		version=lambda ctx: ctx.people.version,
 		run=_people,
 		applies=lambda c: True,
+		optional=True,
 	),
 	Stage(
 		name="embed",
@@ -437,6 +442,21 @@ async def _finish_run(
 	)
 
 
+async def _set_aside(
+	session: AsyncSession, run_id: uuid.UUID, exc: RetryableError | TerminalError
+) -> None:
+	"""An optional stage that failed. A terminal failure is a failed attempt on the
+	ledger, and the backlog tries again up to people.BACKLOG_MAX_ATTEMPTS. A transient
+	one (a 429, an outage) is not an attempt at all: the row is removed, so the note is
+	simply still unread and the next backlog sweep picks it up."""
+	if isinstance(exc, RetryableError):
+		await session.execute(
+			text("DELETE FROM job_runs WHERE id = :id"), {"id": run_id}
+		)
+	else:
+		await _finish_run(session, run_id, "failed", repr(exc))
+
+
 async def process_capture(
 	ctx: PipelineContext, capture_id: uuid.UUID, user_id: uuid.UUID
 ) -> Outcome:
@@ -470,7 +490,20 @@ async def process_capture(
 			continue
 
 		try:
-			await stage.run(ctx, capture)
+			try:
+				await stage.run(ctx, capture)
+			except (RetryableError, TerminalError) as exc:
+				if not stage.optional:
+					raise  # to the handlers below: this note fails or retries
+				await _set_aside(session, run_id, exc)
+				await commit_and_rebind(session, user_id)
+				log.warning(
+					"stage.optional_failed",
+					capture_id=str(capture.id),
+					stage=stage.name,
+					error=repr(exc),
+				)
+				continue
 		except RetryableError as exc:
 			await _finish_run(session, run_id, "failed", repr(exc))
 			capture.attempt_count += 1
@@ -518,11 +551,14 @@ async def read_people_in_old_note(
 	index its mentions. The same ledger row (capture, "people", version) as the
 	pipeline, so a note is read once however it gets there.
 
-	A failed read is logged and its ledger row marked failed (with the calls it paid
-	for); the backlog sweep tries it again, up to people.BACKLOG_MAX_ATTEMPTS. The note
-	itself is untouched: it stays ready and searchable whatever happens here.
+	Failures are set aside the same way as in the pipeline (`_set_aside`): a terminal
+	one is a failed attempt, retried up to people.BACKLOG_MAX_ATTEMPTS; a transient one
+	is not an attempt and returns "retry_later", which stops the sweep, since a
+	provider that is down for one note is down for the next forty. A bug is logged and
+	counted as a failed attempt rather than aborting the batch. The note itself is
+	untouched: it stays ready and searchable whatever happens here.
 
-	Returns what happened: missing | done | read | failed."""
+	Returns what happened: missing | done | read | failed | retry_later."""
 	session = ctx.session
 	await bind_user(session, user_id)
 	capture = await session.scalar(
@@ -539,11 +575,18 @@ async def read_people_in_old_note(
 		await _people(ctx, capture)
 	except (RetryableError, TerminalError) as exc:
 		# Raised by the read, before anything was written but the paid-for calls.
-		await _finish_run(session, run_id, "failed", repr(exc))
+		await _set_aside(session, run_id, exc)
 		await commit_and_rebind(session, user_id)
 		log.warning(
 			"people.backlog_failed", capture_id=str(capture_id), error=repr(exc)
 		)
+		return "retry_later" if isinstance(exc, RetryableError) else "failed"
+	except Exception as exc:
+		log.exception("people.backlog_crashed", capture_id=str(capture_id))
+		await session.rollback()
+		await bind_user(session, user_id)
+		await _finish_run(session, run_id, "failed", repr(exc))
+		await commit_and_rebind(session, user_id)
 		return "failed"
 	await _finish_run(session, run_id, "succeeded")
 	await commit_and_rebind(session, user_id)

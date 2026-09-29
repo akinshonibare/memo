@@ -26,6 +26,9 @@ CONTACTS: tuple[str, ...] = ("in_person", "call", "message", "unspecified", "non
 # Every value but "none" means the author and the person were actually in touch.
 # "none" - mentioned, heard about, planned - never moves the last-contact date.
 IN_TOUCH: frozenset[str] = frozenset(CONTACTS) - {"none"}
+# The most names a person carries besides their own; merges and learned aliases stop
+# adding at this, and a PATCH may send up to this many.
+MAX_ALIASES = 50
 
 
 def _clean(value: str | None) -> str | None:
@@ -156,6 +159,7 @@ class PeopleList(BaseModel):
 	people: list[PersonOut]
 	unresolved: int  # mentions waiting for "which one?"
 	unread_notes: int  # older notes the people stage has not read yet
+	unreadable_notes: int = 0  # notes it gave up on after repeated real failures
 
 
 class PersonDetail(PersonOut):
@@ -171,7 +175,7 @@ class PersonPatch(BaseModel):
 	model_config = ConfigDict(extra="forbid")
 
 	name: str | None = Field(default=None, min_length=1, max_length=120)
-	aliases: list[str] | None = Field(default=None, max_length=20)
+	aliases: list[str] | None = Field(default=None, max_length=MAX_ALIASES)
 	note: str | None = Field(default=None, max_length=120)
 	reach_out_every_days: int | None = Field(default=None, ge=1, le=365)
 	snoozed_until: dt.date | None = None
