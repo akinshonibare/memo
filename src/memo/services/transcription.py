@@ -13,10 +13,36 @@ log = structlog.get_logger("memo.transcription")
 DEEPGRAM_URL = "https://api.deepgram.com/v1/listen"
 
 
+# When each word was said: (start_ms, end_ms, word as written in the transcript).
+Word = tuple[int, int, str]
+
+
 class Transcript(BaseModel):
 	text: str
 	duration_ms: int | None
 	model: str
+	# Kept so the app can follow the transcript as the recording plays (ADR 0039).
+	words: list[Word] = []
+
+
+def _words(alternative: dict[str, object]) -> list[Word]:
+	"""Deepgram's per-word timings, in milliseconds, with smart_format's punctuation
+	and capitals. A malformed entry is skipped rather than failing the transcript: the
+	words are a nicety on top of the text, never a reason to lose it."""
+	out: list[Word] = []
+	raw = alternative.get("words")
+	if not isinstance(raw, list):
+		return out
+	for w in raw:
+		if not isinstance(w, dict):
+			continue
+		word = w.get("punctuated_word") or w.get("word")
+		start, end = w.get("start"), w.get("end")
+		if not isinstance(word, str) or not isinstance(start, int | float):
+			continue
+		end_s = end if isinstance(end, int | float) else start
+		out.append((round(start * 1000), round(end_s * 1000), word))
+	return out
 
 
 class Transcriber(Protocol):
@@ -58,7 +84,8 @@ class DeepgramTranscriber:
 
 		data = response.json()
 		try:
-			text = data["results"]["channels"][0]["alternatives"][0]["transcript"]
+			alternative = data["results"]["channels"][0]["alternatives"][0]
+			text = alternative["transcript"]
 		except (KeyError, IndexError, TypeError) as exc:
 			raise TerminalError(
 				f"deepgram response missing transcript: {exc!r}"
@@ -68,6 +95,7 @@ class DeepgramTranscriber:
 			text=text,
 			duration_ms=int(duration_s * 1000) if duration_s else None,
 			model=self.model,
+			words=_words(alternative),
 		)
 		log.info(
 			"transcribed",

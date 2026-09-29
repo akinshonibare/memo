@@ -110,6 +110,10 @@ class Capture(Base):
 	)
 	kind: Mapped[str] = mapped_column(String(16))
 	text: Mapped[str | None] = mapped_column(Text)
+	# A voice note's words with their times, [[start_ms, end_ms, word], ...], written
+	# alongside `text` by the transcribe stage (ADR 0039). NULL: not a voice note, or
+	# transcribed before words were kept.
+	words: Mapped[list[Any] | None] = mapped_column(JSONB)
 	recording_id: Mapped[uuid.UUID | None]
 	status: Mapped[str] = mapped_column(
 		String(16), default=CaptureStatus.PENDING.value, server_default="pending"

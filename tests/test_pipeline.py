@@ -95,7 +95,7 @@ async def _capture_row(
 				await conn.execute(
 					text(
 						"SELECT status, text, failure_reason, attempt_count, "
-						"extraction_raw FROM captures WHERE id = :id"
+						"extraction_raw, words FROM captures WHERE id = :id"
 					),
 					{"id": capture_id},
 				)
@@ -155,6 +155,14 @@ async def test_audio_capture_becomes_text_and_ready(
 	row = await _capture_row(admin_engine, capture_id)
 	assert row["status"] == "ready"
 	assert row["text"] == "remember to book the dentist"
+	# The words come with their times, written with the text (ADR 0039).
+	assert row["words"] == [
+		[0, 350, "remember"],
+		[400, 750, "to"],
+		[800, 1150, "book"],
+		[1200, 1550, "the"],
+		[1600, 1950, "dentist"],
+	]
 	assert transcriber.calls == 1
 	assert await _runs(admin_engine, capture_id) == [
 		("transcribe", "succeeded", 1),
@@ -162,6 +170,31 @@ async def test_audio_capture_becomes_text_and_ready(
 		("people", "succeeded", 1),
 		("embed", "succeeded", 1),
 	]
+
+
+async def test_the_words_reach_the_app_on_the_note_and_not_the_list(
+	client: AsyncClient,
+	admin_engine: AsyncEngine,
+	session: AsyncSession,
+	store: FakeObjectStore,
+) -> None:
+	capture_id = await _audio_capture(client, admin_engine, store, "tok-pipe-words")
+	await process_capture(
+		_ctx(session, store, transcriber=FakeTranscriber("call Tunde")),
+		capture_id,
+		SEED_USER_ID,
+	)
+	detail = (await client.get(f"/v1/captures/{capture_id}")).json()
+	assert detail["words"] == [[0, 350, "call"], [400, 750, "Tunde"]]
+	listed = (await client.get("/v1/captures")).json()["items"]
+	assert all("words" not in c for c in listed)
+
+	typed = await client.post(
+		"/v1/captures", json={"text": "a typed note", "client_token": "tok-pipe-typed"}
+	)
+	assert (await client.get(f"/v1/captures/{typed.json()['id']}")).json()[
+		"words"
+	] is None
 
 
 async def test_running_twice_transcribes_and_extracts_once(

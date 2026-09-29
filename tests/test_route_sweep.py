@@ -3,7 +3,8 @@
 Added after 2026-09-29, when Ask crashed on a note with a linked person: each feature
 had its own tests, but no test ever put a person *in front of an older route*. This one
 builds that corpus - linked and unresolved people, auto-accepted items, a note with no
-words, a deleted note whose items and mention outlive it, a contact with no note - and
+words, a voice note with word timings, a note from this day last year, a deleted note
+whose items and mention outlive it, a contact with no note - and
 then calls every GET route in the OpenAPI spec (so a route added later is swept too)
 and the people write routes. Nothing may answer 5xx, and no answer stream may crash.
 """
@@ -163,6 +164,18 @@ async def test_every_route_survives_every_kind_of_row(
 	)
 	# A voice note where nothing was said.
 	silent = await corpus.note("", spoken="   ", admin=admin_engine)
+	# A voice note with its words' times (ADR 0039).
+	await corpus.note("", spoken="book the dentist for Friday", admin=admin_engine)
+	# A note from this day last year, for the morning view's look back (ADR 0040).
+	last_year = await corpus.note("a year ago today")
+	async with admin_engine.begin() as conn:
+		await conn.execute(
+			text(
+				"UPDATE captures SET created_at = created_at - interval '1 year' "
+				"WHERE id = :id"
+			),
+			{"id": last_year},
+		)
 	# The first note goes; its items and its mention stay (ADR 0022).
 	assert (await client.delete(f"/v1/captures/{doomed}")).status_code == 204
 

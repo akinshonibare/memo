@@ -70,6 +70,9 @@ class CaptureDetail(CaptureOut):
 	# Who the note is about (ADR 0029). A separate field so an app built before
 	# people never renders a mention as an item.
 	people: list[MentionOut] = []
+	# A voice note's words with their times (ADR 0039): detail only, since the list
+	# never plays anything. None when there are none to give.
+	words: list[tuple[int, int, str]] | None = None
 
 
 class CapturePage(BaseModel):
