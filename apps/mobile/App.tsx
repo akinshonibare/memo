@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Api, type Me } from "./src/api";
-import { type Config, clearSession, loadConfig } from "./src/config";
+import { type Config, clearSession, loadConfig, loadOnboarded, saveOnboarded } from "./src/config";
 import { AskSheet } from "./src/screens/AskScreen";
 import { ComposeSheet } from "./src/screens/ComposeSheet";
 import { DetailScreen } from "./src/screens/DetailScreen";
@@ -12,6 +12,7 @@ import { HomeScreen } from "./src/screens/HomeScreen";
 import { IdeasScreen } from "./src/screens/IdeasScreen";
 import { PlannerScreen } from "./src/screens/PlannerScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
+import { OnboardingScreen } from "./src/screens/OnboardingScreen";
 import { RecordSheet } from "./src/screens/RecordSheet";
 import { ProfileSheet } from "./src/screens/ProfileScreen";
 import { colors } from "./src/ui";
@@ -29,6 +30,12 @@ export default function App() {
   const [compose, setCompose] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [me, setMe] = useState<Me | null>(null);
+  const [meReady, setMeReady] = useState(false);
+  const [onboarded, setOnboarded] = useState<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    loadOnboarded().then(setOnboarded).catch(() => setOnboarded(true));
+  }, []);
 
   useEffect(() => {
     loadConfig().then(setConfig);
@@ -58,7 +65,11 @@ export default function App() {
   // Who is signed in, for the avatar on Home; refreshed from Profile on every change.
   useEffect(() => {
     if (!api) return;
-    api.getMe().then(setMe).catch(() => setMe(null));
+    api
+      .getMe()
+      .then(setMe)
+      .catch(() => setMe(null))
+      .finally(() => setMeReady(true));
   }, [api]);
 
   if (!fontsLoaded || config === undefined) return <View style={styles.root} />;
@@ -74,7 +85,18 @@ export default function App() {
             onChangeServer={() => setSettings(true)}
           />
         )}
-        {api && view.name === "home" && (
+        {api && meReady && onboarded === false && (
+          <OnboardingScreen
+            api={api}
+            me={me}
+            onDone={(updated) => {
+              if (updated) setMe(updated);
+              setOnboarded(true);
+              saveOnboarded().catch(() => {});
+            }}
+          />
+        )}
+        {api && onboarded !== false && view.name === "home" && (
           <HomeScreen
             api={api}
             refreshKey={refreshKey}
