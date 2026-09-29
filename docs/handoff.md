@@ -145,6 +145,18 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   **Untested by hand:** the five-tap swarm (the simulator tools are too slow for a
   two-second window); try it on the phone.
 
+## Next up (Akin, 2026-09-29)
+
+1. **Faith**: [ADR 0042](decisions/0042-faith-a-space-of-its-own.md), provisional. A space of
+   its own with prayers (answered, not done), remembering, a passage from his own history,
+   a position-based reading plan and a Faith section in the weekly review. NIV by default,
+   opened in his Bible app rather than shown in memo (licensing). Three decisions still
+   open, listed in the ADR with the defaults used until he picks.
+2. **Habit tracking**: [Q11](open-questions.md), not decided. The question is what a habit
+   looks like without a streak.
+3. **Still open from build 17:** a gap Akin sees after deleting a note, not reproduced in
+   the simulator. Waiting on his build number and how he deleted.
+
 ## Filed for later
 
 - [#57](https://github.com/akinshonibare/memo/issues/57): the first PITR restore drill.

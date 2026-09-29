@@ -143,3 +143,29 @@ Q5 (primary keys) resolved the same day in its favour — see [ADR 0011](decisio
 **Still open, tracked in 0010 rather than here:** RLS is the enforcement mechanism but lands
 at [#6](https://github.com/akinshonibare/memo/issues/6), not [#7](https://github.com/akinshonibare/memo/issues/7)
 — policies are cheap to retrofit, the column and index shapes are not.
+
+---
+
+### Q11 — Habit tracking, without a streak
+**Open.** Akin named it as the next feature after Faith ([ADR 0042](decisions/0042-faith-a-space-of-its-own.md)), 2026-09-29.
+
+The industry default for habits *is* the streak (Streaks, Duolingo, Habitica): a chain
+that a missed day breaks. memo has refused to keep score twice ([ADR 0029](decisions/0029-people-last-contact-and-reach-out.md):
+a person is a suggestion, not a debt; [ADR 0041](decisions/0041-easter-eggs-are-rare-and-earned.md):
+no streaks). So the real question is what a habit looks like when missing a day costs
+nothing. Worth weighing when it becomes load-bearing:
+
+- **Streaks.** The default, and the thing an interviewer will name. Rejecting it needs a
+  stated reason, not a vibe.
+- **Rhythm, not chains:** "4 of the last 7 days", "most weeks this month". Shows frequency
+  without anything to break.
+- **Last done, like last contact:** "last run: 3 days ago", and a gentle nudge when it's
+  been a while. The People feature (ADR 0029) already works this way, and could be the
+  template.
+- **How a habit gets logged:** a tap, or said in a note ("went for a run") and picked up
+  by the reader, which is memo's usual way in. Probably both, as with Faith.
+- **Apple Health** (steps, workouts) would be the first integration that reads the
+  phone's data into memo. Akin's rule so far is memo → phone only, so this needs his
+  explicit yes before it's proposed as a default.
+- **Overlap with Faith:** prayer and Bible reading are obvious first habits. They must be
+  one record shown in two places, not two counts that disagree.
