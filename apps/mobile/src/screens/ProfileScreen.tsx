@@ -14,7 +14,6 @@ import { makeStyles, useTheme } from "../theme";
 import { disableLock, enableLock, LockCover } from "../lock";
 import { DEFAULT_MORNING, forgetPushToken, setMorningPush } from "../push";
 import { enableReminders, LEAD_CHOICES, remindersPref } from "../reminders";
-import { healthAvailable, healthPref, setHealthSync } from "../health";
 import { setCalendarSync, setRemindersSync, syncPref } from "../sync";
 import { SpeechQueue } from "../voice";
 import { AppearanceGroup, Group, Row } from "./SettingsParts";
@@ -36,7 +35,6 @@ type Busy =
   | "lock"
   | "faith"
   | "translation"
-  | "health"
   | "morning";
 
 // You first, then how memo looks, then how the assistant treats you, then what memo may
@@ -296,7 +294,6 @@ export function ProfileSheet({
   // when turned on; a refusal leaves it off and says where to change it.
   const sync = syncPref.use();
   const notify = remindersPref.use();
-  const health = healthPref.use();
   // A switch that can't turn on says why in an alert, next to where you were looking,
   // not in the note at the foot of the sheet.
   const explain = (message: string | null) => {
@@ -426,22 +423,6 @@ export function ProfileSheet({
                   </Row>
                 )}
               </Group>
-
-              {/* Habits is always on (ADR 0054): no switch for it, only for Apple Health. */}
-              {healthAvailable() && (
-                <Group
-                  title="Habits"
-                  footer="memo notices what you do from your notes and counts it towards your habits. With Apple Health on, your workouts count too; memo only reads them, and turning it off deletes what it read."
-                >
-                  <Row icon="fitness-outline" label="Workouts from Apple Health" busy={busy === "health"}>
-                    <Switch
-                      value={health.on}
-                      onValueChange={(on) => void flip("health", () => setHealthSync(api(), on))}
-                      trackColor={{ true: colors.forest }}
-                    />
-                  </Row>
-                </Group>
-              )}
 
               <Group
                 title="Morning"

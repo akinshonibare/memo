@@ -22,7 +22,6 @@ import { LockCover, LockProvider, useLock } from "./src/lock";
 import { FirefliesHost } from "./src/motion";
 import { refreshPushToken, registerMorningCategory, useMorningPushTaps } from "./src/push";
 import { useReminderTaps } from "./src/reminders";
-import { forgetHealthOnThisPhone, useHealthSync } from "./src/health";
 import { Dialogs } from "./src/dialogs";
 import { markSeen, ROUTE_PLACE } from "./src/news";
 import { clearPhone, usePhoneSync } from "./src/sync";
@@ -135,10 +134,8 @@ function Root() {
 
   const signOut = () => {
     clearSession().catch(() => {});
-    // memo's calendar, Reminders list and notifications belong to the account, and so
-    // does reading Apple Health: the next person to sign in turns it on for themselves.
+    // memo's calendar, Reminders list and notifications belong to the account.
     void clearPhone();
-    void forgetHealthOnThisPhone();
     // The navigator unmounts with the session; the next sign-in starts again from Home.
     setNavReady(false);
     setConfig((c) => (c ? { ...c, token: null } : c));
@@ -229,9 +226,6 @@ function Root() {
   // 0034) - follows whatever memo knows; a todo ticked in Reminders comes back as a
   // change. A tapped notification opens the note the event came from.
   usePhoneSync(api, refreshKey, bump);
-  // Workouts from Apple Health (ADR 0050), when the switch is on: on launch and on
-  // coming back to memo, at most every quarter hour.
-  useHealthSync(api, bump);
   useReminderTaps(ready, (captureId) => (captureId ? openNote(captureId) : goHome("Planner")));
   // The morning push (ADR 0047): a tap opens Today, a 👍 or 👎 is recorded.
   const openToday = useCallback(() => goHome(), []);
