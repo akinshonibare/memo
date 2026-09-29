@@ -1,15 +1,34 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ActionSheetIOS,
+  Alert,
+  type GestureResponderEvent,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import ReanimatedSwipeable, {
+  SwipeDirection,
+  type SwipeableMethods,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
+import Animated, { interpolate, type SharedValue, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Api, Derivation } from "../api";
-import { IconCircle } from "../components";
+import { IconCircle, TickCircle } from "../components";
+import { useRefetchOnFocus } from "../focus";
 import { formatTime, toIsoDate } from "../format";
-import { colors, ui } from "../ui";
+import { celebrate, celebrateAt, listLayout, springs } from "../motion";
+import { makeStyles, useTheme } from "../theme";
+import { fonts, useUi } from "../ui";
 import { DerivationSheet } from "./DerivationSheet";
 import { haptic } from "../haptics";
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
+const CELL = 40;
+const DOT = 32;
 
 function startOfDay(d: Date): Date {
   const out = new Date(d);
@@ -59,6 +78,9 @@ export function PlannerScreen({
   onOpenCapture: (id: string) => void;
   onChanged: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const today = startOfDay(new Date());
   const todayKey = toIsoDate(today);
@@ -81,6 +103,7 @@ export function PlannerScreen({
     const first = setTimeout(load, 0);
     return () => clearTimeout(first);
   }, [load, refreshKey]);
+  useRefetchOnFocus(load);
 
   const week = useMemo(() => {
     const start = weekStart(selected);
@@ -111,10 +134,17 @@ export function PlannerScreen({
   const doneTodos = todos.filter((d) => d.completed_at);
   const anytime = items.filter((d) => d.kind === "todo" && dayOf(d) === null && !d.completed_at);
 
-  const toggle = async (d: Derivation) => {
+  // A tick from the checkbox (with a press, so fireflies rise from it) or from a swipe
+  // (with the row's position). Clearing the day's last open todo gets the swarm.
+  const toggle = async (d: Derivation, at?: { e?: GestureResponderEvent; x?: number; y?: number }) => {
     const completed = !d.completed_at;
-    if (completed) haptic.done();
-    else haptic.pick();
+    if (completed) {
+      setTimeout(haptic.done, 90);
+      const lastOfDay = openTodos.length === 1 && openTodos[0].id === d.id;
+      if (lastOfDay) celebrate(at?.x ?? 200, at?.y ?? 400, true);
+      else if (at?.e) celebrateAt(at.e);
+      else if (at?.x != null && at.y != null) celebrate(at.x, at.y);
+    } else haptic.pick();
     // Optimistic: the tick lands instantly; a failure puts it back.
     setItems((prev) =>
       prev.map((x) => (x.id === d.id ? { ...x, completed_at: completed ? new Date().toISOString() : null } : x)),
@@ -169,38 +199,34 @@ export function PlannerScreen({
             <Text style={styles.todayLink}>Today</Text>
           </Pressable>
         )}
-        <Pressable onPress={() => setSelected(addDays(selected, -7))} hitSlop={10} style={styles.arrow}>
+        <Pressable
+          onPress={() => setSelected(addDays(selected, -7))}
+          hitSlop={10}
+          style={styles.arrow}
+          accessibilityLabel="Previous week"
+        >
           <Ionicons name="chevron-back" size={18} color={colors.muted} />
         </Pressable>
-        <Pressable onPress={() => setSelected(addDays(selected, 7))} hitSlop={10} style={styles.arrow}>
+        <Pressable
+          onPress={() => setSelected(addDays(selected, 7))}
+          hitSlop={10}
+          style={styles.arrow}
+          accessibilityLabel="Next week"
+        >
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         </Pressable>
       </View>
 
-      <View style={[styles.week, ui.pad]}>
-        {week.map((day, i) => {
-          const key = toIsoDate(day);
-          const isSelected = key === selectedKey;
-          const isToday = key === todayKey;
-          return (
-            <Pressable key={key} onPress={() => setSelected(day)} style={styles.dayCell}>
-              <Text style={styles.dayLetter}>{DAY_LETTERS[i]}</Text>
-              <View style={[styles.dayNum, isSelected && styles.dayNumSelected]}>
-                <Text
-                  style={[
-                    styles.dayNumText,
-                    isToday && !isSelected && { color: colors.record },
-                    isSelected && { color: colors.bg },
-                  ]}
-                >
-                  {day.getDate()}
-                </Text>
-              </View>
-              <View style={[styles.dot, busyDays.has(key) && styles.dotOn]} />
-            </Pressable>
-          );
-        })}
-      </View>
+      <WeekStrip
+        week={week}
+        selectedKey={selectedKey}
+        todayKey={todayKey}
+        busyDays={busyDays}
+        onSelect={(day) => {
+          haptic.pick();
+          setSelected(day);
+        }}
+      />
       <View style={[ui.hairline, { marginHorizontal: 20 }]} />
 
       <ScrollView contentContainerStyle={[ui.pad, { paddingBottom: 40 + insets.bottom }]}>
@@ -209,29 +235,34 @@ export function PlannerScreen({
         {nothing && <Text style={[ui.bodyMuted, styles.empty]}>Nothing on this day.</Text>}
 
         {events.map((d) => (
-          <Pressable
-            key={d.id}
-            onPress={() => setSheet({ kind: d.kind, existing: d })}
-            style={({ pressed }) => [styles.eventRow, pressed && styles.pressed]}
-          >
-            <Text style={styles.time}>{formatTime(String(d.payload.starts_at))}</Text>
-            <View style={styles.eventBar} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.itemText}>{String(d.payload.title ?? "")}</Text>
-              <Meta d={d} />
-            </View>
-          </Pressable>
+          <Animated.View key={d.id} layout={listLayout}>
+            <Pressable
+              onPress={() => setSheet({ kind: "event", existing: d })}
+              style={({ pressed }) => [styles.eventRow, pressed && styles.pressed]}
+            >
+              <Text style={styles.time}>{formatTime(String(d.payload.starts_at))}</Text>
+              <View style={styles.eventBar} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemText}>{String(d.payload.title ?? "")}</Text>
+                <Meta d={d} />
+              </View>
+            </Pressable>
+          </Animated.View>
         ))}
 
         {[...openTodos, ...doneTodos].map((d) => (
-          <TodoRow key={d.id} d={d} onToggle={toggle} onPress={() => setSheet({ kind: "todo", existing: d })} />
+          <Animated.View key={d.id} layout={listLayout}>
+            <TodoRow d={d} onToggle={toggle} onPress={() => setSheet({ kind: "todo", existing: d })} />
+          </Animated.View>
         ))}
 
         {anytime.length > 0 && (
           <>
             <Text style={[ui.label, styles.section]}>Anytime</Text>
             {anytime.map((d) => (
-              <TodoRow key={d.id} d={d} onToggle={toggle} onPress={() => setSheet({ kind: "todo", existing: d })} />
+              <Animated.View key={d.id} layout={listLayout}>
+                <TodoRow d={d} onToggle={toggle} onPress={() => setSheet({ kind: "todo", existing: d })} />
+              </Animated.View>
             ))}
           </>
         )}
@@ -256,35 +287,167 @@ export function PlannerScreen({
   );
 }
 
+// The week, with a marker that slides to the chosen day rather than jumping (ADR 0032:
+// a choice between options glides).
+function WeekStrip({
+  week,
+  selectedKey,
+  todayKey,
+  busyDays,
+  onSelect,
+}: {
+  week: Date[];
+  selectedKey: string;
+  todayKey: string;
+  busyDays: Set<string>;
+  onSelect: (day: Date) => void;
+}) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const [width, setWidth] = useState(0);
+  const index = week.findIndex((d) => toIsoDate(d) === selectedKey);
+  const x = useSharedValue(0);
+  const step = width > 0 ? (width - CELL) / 6 : 0;
+  useEffect(() => {
+    if (step > 0 && index >= 0) x.set(withSpring(index * step + (CELL - DOT) / 2, springs.release));
+  }, [index, step, x]);
+  const marker = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+  // Three rows - letters, numbers, busy dots - so the marker lives in the numbers row
+  // and lines up with them exactly.
+  return (
+    <View style={[styles.week, ui.pad]}>
+      <View style={styles.weekRow}>
+        {week.map((day, i) => (
+          <Text key={toIsoDate(day)} style={[styles.dayCell, styles.dayLetter]}>
+            {DAY_LETTERS[i]}
+          </Text>
+        ))}
+      </View>
+      <View style={styles.weekRow} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+        {width > 0 && index >= 0 && <Animated.View style={[styles.marker, marker]} />}
+        {week.map((day) => {
+          const key = toIsoDate(day);
+          const isSelected = key === selectedKey;
+          const isToday = key === todayKey;
+          return (
+            <Pressable
+              key={key}
+              onPress={() => onSelect(day)}
+              style={styles.dayCell}
+              hitSlop={{ top: 18, bottom: 12 }}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              accessibilityLabel={day.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
+            >
+              <View style={styles.dayNum}>
+                <Text
+                  style={[
+                    styles.dayNumText,
+                    isToday && !isSelected && { color: colors.record },
+                    isSelected && { color: colors.bg },
+                  ]}
+                >
+                  {day.getDate()}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+      <View style={styles.weekRow}>
+        {week.map((day) => (
+          <View key={toIsoDate(day)} style={styles.dayCell}>
+            <View style={[styles.dot, busyDays.has(toIsoDate(day)) && styles.dotOn]} />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// A todo swipes right to tick (or untick), done as soon as the row opens. The same is
+// a VoiceOver action, and the checkbox and a tap still work as before.
+function SwipeToTick({ children, onTick }: { children: React.ReactNode; onTick: (x: number, y: number) => void }) {
+  const styles = useStyles();
+  const swipe = useRef<SwipeableMethods>(null);
+  const row = useRef<View>(null);
+  return (
+    <ReanimatedSwipeable
+      ref={swipe}
+      friction={1.6}
+      leftThreshold={64}
+      overshootLeft={false}
+      renderLeftActions={(progress) => <DoneAction progress={progress} />}
+      onSwipeableOpen={(direction) => {
+        if (direction !== SwipeDirection.RIGHT) return;
+        row.current?.measureInWindow((x, y, _w, h) => onTick(x + 32, y + h / 2));
+        swipe.current?.close();
+      }}
+      containerStyle={styles.swipe}
+    >
+      <View
+        ref={row}
+        accessibilityActions={[{ name: "tick", label: "Mark done" }]}
+        onAccessibilityAction={(e) => e.nativeEvent.actionName === "tick" && onTick(200, 400)}
+      >
+        {children}
+      </View>
+    </ReanimatedSwipeable>
+  );
+}
+
+function DoneAction({ progress }: { progress: SharedValue<number> }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const animated = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0, 1], [0, 1], "clamp"),
+    transform: [{ scale: interpolate(progress.value, [0, 1], [0.6, 1], "clamp") }],
+  }));
+  return (
+    <View style={styles.doneWrap}>
+      <Animated.View style={animated}>
+        <Ionicons name="checkmark-circle" size={26} color={colors.record} />
+      </Animated.View>
+    </View>
+  );
+}
+
 function TodoRow({
   d,
   onToggle,
   onPress,
 }: {
   d: Derivation;
-  onToggle: (d: Derivation) => void;
+  onToggle: (d: Derivation, at?: { e?: GestureResponderEvent; x?: number; y?: number }) => void;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const done = !!d.completed_at;
+  const title = String(d.payload.title ?? "");
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.todoRow, pressed && styles.pressed]}>
-      <Pressable onPress={() => onToggle(d)} hitSlop={10}>
-        <Ionicons
-          name={done ? "checkmark-circle" : "ellipse-outline"}
-          size={22}
-          color={done ? colors.faint : colors.muted}
+    <SwipeToTick onTick={(x, y) => onToggle(d, { x, y })}>
+      <Pressable onPress={onPress} style={({ pressed }) => [styles.todoRow, pressed && styles.pressed]}>
+        <TickCircle
+          done={done}
+          label={title}
+          color={colors.muted}
+          doneColor={colors.faint}
+          onPress={(e) => onToggle(d, { e })}
         />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.itemText, done && styles.doneText]}>{title}</Text>
+          {!done && <Meta d={d} />}
+        </View>
       </Pressable>
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.itemText, done && styles.doneText]}>{String(d.payload.title ?? "")}</Text>
-        {!done && <Meta d={d} />}
-      </View>
-    </Pressable>
+    </SwipeToTick>
   );
 }
 
 // Secondary line: where it's from, and whether it still needs a look.
 function Meta({ d }: { d: Derivation }) {
+  const ui = useUi();
   const bits = [
     d.kind === "event" && typeof d.payload.location === "string" ? d.payload.location : null,
     d.status === "pending_review" ? "to review" : null,
@@ -292,28 +455,39 @@ function Meta({ d }: { d: Derivation }) {
   return bits.length ? <Text style={ui.meta}>{bits.join(" · ")}</Text> : null;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   topBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 4 },
-  title: { fontFamily: "InstrumentSerif_400Regular", fontSize: 30, color: colors.text, marginLeft: 4 },
+  title: { fontFamily: fonts.serif, fontSize: 30, color: colors.text, marginLeft: 4 },
   monthRow: { flexDirection: "row", alignItems: "center", marginTop: 14, gap: 4 },
   month: { color: colors.text, fontSize: 15, fontWeight: "600" },
   todayLink: { color: colors.record, fontSize: 14, fontWeight: "600", marginRight: 8 },
   arrow: { padding: 4 },
-  week: { flexDirection: "row", justifyContent: "space-between", marginTop: 10, marginBottom: 10 },
-  dayCell: { alignItems: "center", width: 40, gap: 4 },
-  dayLetter: { color: colors.faint, fontSize: 11, fontWeight: "600" },
-  dayNum: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  dayNumSelected: { backgroundColor: colors.text },
+  week: { marginTop: 10, marginBottom: 10, gap: 4 },
+  weekRow: { flexDirection: "row", justifyContent: "space-between" },
+  marker: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: DOT,
+    height: DOT,
+    borderRadius: DOT / 2,
+    backgroundColor: colors.text,
+  },
+  dayCell: { alignItems: "center", width: CELL },
+  dayLetter: { color: colors.faint, fontSize: 11, fontWeight: "600", textAlign: "center" },
+  dayNum: { width: DOT, height: DOT, borderRadius: DOT / 2, alignItems: "center", justifyContent: "center" },
   dayNumText: { color: colors.text, fontSize: 15, fontWeight: "500" },
   dot: { width: 4, height: 4, borderRadius: 2 },
   dotOn: { backgroundColor: colors.muted },
   section: { marginTop: 22, marginBottom: 6 },
   empty: { marginTop: 4 },
-  eventRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 9 },
+  swipe: { backgroundColor: colors.bg },
+  eventRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, paddingVertical: 9, backgroundColor: colors.bg },
   time: { color: colors.muted, fontSize: 14, width: 46, marginTop: 1, fontVariant: ["tabular-nums"] },
   eventBar: { width: 3, alignSelf: "stretch", borderRadius: 2, backgroundColor: colors.record },
-  todoRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 9 },
+  todoRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 9, backgroundColor: colors.bg },
   itemText: { color: colors.text, fontSize: 16 },
   doneText: { color: colors.faint, textDecorationLine: "line-through" },
   pressed: { opacity: 0.6 },
-});
+  doneWrap: { width: 64, justifyContent: "center", alignItems: "center" },
+}));

@@ -1,12 +1,14 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, ScrollView, Text, TextInput, View } from "react-native";
 import { Api, ApiError, type Derivation } from "../api";
 import { IconCircle, Pill, SheetHandle } from "../components";
 import { toIsoDate, toLocalIso } from "../format";
 import { useKeyboardHeight } from "../keyboard";
-import { colors, ui } from "../ui";
+import { useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
 import { haptic } from "../haptics";
+import { LockCover } from "../lock";
 
 type Kind = Derivation["kind"];
 
@@ -33,6 +35,9 @@ export function DerivationSheet({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors, scheme } = useTheme();
   const p = existing?.payload ?? {};
   const str = (key: string) => (typeof p[key] === "string" ? (p[key] as string) : "");
 
@@ -125,7 +130,7 @@ export function DerivationSheet({
                     value={due}
                     mode="date"
                     display="compact"
-                    themeVariant="dark"
+                    themeVariant={scheme}
                     accentColor={colors.text}
                     onValueChange={(_, d) => setDue(d)}
                   />
@@ -148,7 +153,7 @@ export function DerivationSheet({
                   value={startsAt}
                   mode="datetime"
                   display="compact"
-                  themeVariant="dark"
+                  themeVariant={scheme}
                   accentColor={colors.text}
                   minuteInterval={5}
                   onValueChange={(_, d) => setStartsAt(d)}
@@ -196,6 +201,7 @@ export function DerivationSheet({
           <View style={{ flex: 1 }} />
           <Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!canSave} />
         </View>
+        <LockCover />
       </View>
     </Modal>
   );
@@ -241,7 +247,7 @@ function describe(e: unknown): string {
   return e.message;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   sheet: { flex: 1, backgroundColor: colors.surface, paddingHorizontal: 24 },
   top: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   heading: { marginTop: 12, marginBottom: 20 },
@@ -257,4 +263,4 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 110, textAlignVertical: "top" },
   row: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
   actions: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 12 },
-});
+}));

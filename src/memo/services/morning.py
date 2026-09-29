@@ -17,12 +17,12 @@ from zoneinfo import ZoneInfo
 
 import structlog
 from pydantic import BaseModel
-from sqlalchemy import select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.ids import uuid7
-from memo.models import Derivation, MorningView, Resurfacing, User
+from memo.models import Capture, Derivation, MorningView, Resurfacing, User
 from memo.schemas.people import ReachOut
 from memo.services.people import reach_out
 
@@ -61,6 +61,13 @@ class ResurfacedIdea(BaseModel):
 	captured_on: dt.date
 
 
+class OnThisDay(BaseModel):
+	capture_id: uuid.UUID
+	kind: str
+	text: str
+	captured_on: dt.date
+
+
 class MorningViewOut(BaseModel):
 	local_date: dt.date
 	timezone: str
@@ -72,6 +79,83 @@ class MorningViewOut(BaseModel):
 	# so "Spoke to them" takes someone off today's list at once. Defaulted so a view
 	# stored before this field existed still reads.
 	reach_out: list[ReachOut] = []
+	# A note from this day in another year, or six months or a month ago (ADR 0040).
+	# Read live like the items, and defaulted for views stored before it existed.
+	on_this_day: OnThisDay | None = None
+
+
+LOOK_BACK_YEARS = 10
+ON_THIS_DAY_CHARS = 600
+
+
+def _months_back(day: dt.date, months: int) -> dt.date | None:
+	"""The same day of the month `months` earlier, or None where it doesn't exist
+	(no 31 September, no 29 February in most years): that day simply has no match."""
+	month = day.month - months
+	year = day.year + (month - 1) // 12
+	month = (month - 1) % 12 + 1
+	try:
+		return day.replace(year=year, month=month)
+	except ValueError:
+		return None
+
+
+def look_back_days(today: dt.date) -> list[dt.date]:
+	"""The days "on this day" looks at, best first: whole years back, the furthest
+	first (the longer ago, the more it's worth seeing again), then six months, then
+	one month."""
+	years = [_months_back(today, 12 * n) for n in range(LOOK_BACK_YEARS, 0, -1)]
+	recent = [_months_back(today, 6), _months_back(today, 1)]
+	return [d for d in [*years, *recent] if d is not None]
+
+
+def _local_day_range(day: dt.date, zone: ZoneInfo) -> tuple[dt.datetime, dt.datetime]:
+	"""The instants a local day spans, as [start, end). Local midnight to local
+	midnight, so a day that gains or loses a DST hour is 25 or 23 hours long."""
+	start = dt.datetime.combine(day, dt.time(), tzinfo=zone)
+	end = dt.datetime.combine(day + dt.timedelta(days=1), dt.time(), tzinfo=zone)
+	return start.astimezone(dt.UTC), end.astimezone(dt.UTC)
+
+
+async def on_this_day(
+	session: AsyncSession, user_id: uuid.UUID, *, today: dt.date, zone: ZoneInfo
+) -> OnThisDay | None:
+	"""One note from a day worth looking back on - never a feed. Rationed like the
+	resurfaced idea, and for the same reason: one is a memory, five are a chore. Only
+	notes that finished processing and have words; on a day with several, the longest.
+	A pure read, so it's the same all day without being pinned.
+
+	Each local day is turned into a UTC range here, not by converting every row's
+	timestamp in SQL: plain ranges on `created_at` can use ix_captures_user_created."""
+	days = look_back_days(today)
+	ranges = [_local_day_range(d, zone) for d in days]
+	rows = (
+		await session.execute(
+			select(Capture.id, Capture.kind, Capture.text, Capture.created_at).where(
+				Capture.user_id == user_id,
+				Capture.status == "ready",
+				func.length(func.trim(Capture.text)) > 0,
+				or_(
+					*(
+						and_(Capture.created_at >= s, Capture.created_at < e)
+						for s, e in ranges
+					)
+				),
+			)
+		)
+	).all()
+	if not rows:
+		return None
+	rank = {d: i for i, d in enumerate(days)}
+	best = min(
+		rows, key=lambda r: (rank[r[3].astimezone(zone).date()], -len(r[2] or ""))
+	)
+	return OnThisDay(
+		capture_id=best[0],
+		kind=best[1],
+		text=(best[2] or "").strip()[:ON_THIS_DAY_CHARS],
+		captured_on=best[3].astimezone(zone).date(),
+	)
 
 
 def tz_or_utc(name: str) -> ZoneInfo:
@@ -202,6 +286,7 @@ async def build_morning_view(
 
 	todos, events = await _todays_items(session, user_id, today=today, zone=zone)
 	people = await reach_out(session, user_id, today=today, zone=zone)
+	looked_back = await on_this_day(session, user_id, today=today, zone=zone)
 
 	existing = await session.scalar(
 		select(MorningView).where(
@@ -235,6 +320,7 @@ async def build_morning_view(
 		resurfaced_idea=idea,
 		built_at=now,
 		reach_out=people,
+		on_this_day=looked_back,
 	)
 	payload: dict[str, Any] = view.model_dump(mode="json")
 	await session.execute(
@@ -254,6 +340,7 @@ async def build_morning_view(
 		todos=len(todos),
 		events=len(events),
 		resurfaced=idea is not None,
+		on_this_day=looked_back is not None,
 	)
 	return view
 
@@ -285,6 +372,7 @@ async def todays_view(
 			idea = None
 	todos, events = await _todays_items(session, user_id, today=today, zone=zone)
 	people = await reach_out(session, user_id, today=today, zone=zone)
+	looked_back = await on_this_day(session, user_id, today=today, zone=zone)
 	return pinned.model_copy(
 		update={
 			"timezone": timezone,
@@ -292,5 +380,6 @@ async def todays_view(
 			"events": events,
 			"resurfaced_idea": idea,
 			"reach_out": people,
+			"on_this_day": looked_back,
 		}
 	)

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Api, Mention, PeopleList, Person } from "../api";
 import { IconCircle } from "../components";
 import { formatAgo } from "../format";
 import { haptic } from "../haptics";
-import { colors, fonts, ui } from "../ui";
+import { fonts, useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
 import { MentionCard } from "./PeopleParts";
 
 type Order = "recent" | "name";
@@ -28,6 +29,9 @@ export function PeopleScreen({
   onOpenCapture: (id: string) => void;
   onChanged: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [list, setList] = useState<PeopleList | null>(null);
   const [waiting, setWaiting] = useState<Mention[]>([]);
@@ -162,6 +166,8 @@ export function PeopleScreen({
 }
 
 function Row({ person, onPress }: { person: Person; onPress: () => void }) {
+  const ui = useUi();
+  const styles = useStyles();
   const last = person.last_contact_on ? `In touch ${formatAgo(person.last_contact_on)}` : "Not in touch yet";
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}>
@@ -177,7 +183,7 @@ function Row({ person, onPress }: { person: Person; onPress: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   topBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 4 },
   title: { fontFamily: fonts.serif, fontSize: 30, color: colors.text, marginLeft: 4 },
   reading: { marginBottom: 12 },
@@ -191,4 +197,4 @@ const styles = StyleSheet.create({
   toggleTextOn: { color: colors.bg },
   row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, gap: 12 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.record },
-});
+}));

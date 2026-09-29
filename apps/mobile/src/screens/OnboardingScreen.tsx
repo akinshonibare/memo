@@ -4,7 +4,6 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
@@ -12,10 +11,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Api, Me } from "../api";
+import Animated from "react-native-reanimated";
 import { Pill } from "../components";
+import { listLayout } from "../motion";
 import { haptic } from "../haptics";
 import { useKeyboardHeight } from "../keyboard";
-import { colors, fonts, ui } from "../ui";
+import { fonts, useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
 
 type Page = { icon: keyof typeof Ionicons.glyphMap; title: string; body: string };
 
@@ -48,6 +50,9 @@ export function OnboardingScreen({
   me: Me | null;
   onDone: (me: Me | null) => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const keyboard = useKeyboardHeight();
@@ -120,7 +125,7 @@ export function OnboardingScreen({
 
       <View style={styles.dots}>
         {[...PAGES, null].map((_, i) => (
-          <View key={i} style={[styles.dot, i === page && styles.dotOn]} />
+          <Animated.View key={i} layout={listLayout} style={[styles.dot, i === page && styles.dotOn]} />
         ))}
       </View>
       <View style={styles.actions}>
@@ -138,7 +143,7 @@ export function OnboardingScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   page: { flex: 1, justifyContent: "center", paddingHorizontal: 32, gap: 14 },
   badge: {
     width: 72,
@@ -156,4 +161,4 @@ const styles = StyleSheet.create({
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.hairline },
   dotOn: { backgroundColor: colors.record, width: 20 },
   actions: { flexDirection: "row", alignItems: "center", paddingHorizontal: 24 },
-});
+}));

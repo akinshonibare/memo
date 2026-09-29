@@ -1,14 +1,27 @@
 import { InstrumentSerif_400Regular, useFonts } from "@expo-google-fonts/instrument-serif";
+import {
+  createNavigationContainerRef,
+  DarkTheme,
+  DefaultTheme,
+  NavigationContainer,
+  StackActions,
+} from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useShareIntent } from "expo-share-intent";
-import { AppState, Linking, StyleSheet, View } from "react-native";
+import { AppState, Linking, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { haptic } from "./src/haptics";
 import { preparePhoto } from "./src/photo";
 import { publishRecord } from "./src/widgets";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Api, type Me } from "./src/api";
 import { type Config, clearSession, loadConfig, loadOnboarded, saveOnboarded } from "./src/config";
+import { LockCover, LockProvider, useLock } from "./src/lock";
+import { FirefliesHost } from "./src/motion";
+import { useReminderTaps } from "./src/reminders";
+import { clearPhone, usePhoneSync } from "./src/sync";
 import { AskSheet } from "./src/screens/AskScreen";
 import { ComposeSheet } from "./src/screens/ComposeSheet";
 import { DetailScreen } from "./src/screens/DetailScreen";
@@ -22,10 +35,9 @@ import { PersonScreen } from "./src/screens/PersonScreen";
 import { RecordSheet } from "./src/screens/RecordSheet";
 import { ProfileSheet } from "./src/screens/ProfileScreen";
 import { ReviewScreen } from "./src/screens/ReviewScreen";
-import { colors } from "./src/ui";
-import { captureOrQueue, flushOutbox, useOutbox } from "./src/outbox";
-
-type Back = "home" | "planner" | "ideas" | "review" | "people";
+import { ThemeProvider, useTheme } from "./src/theme";
+import { captureOrQueue, flushOutbox, onNoteSaved, useOutbox } from "./src/outbox";
+import { birthdayToday, milestoneReached, type Moment } from "./src/delight";
 
 // memo://record, write, ask, planner: what a Shortcut or widget opens (ADR 0027).
 // memo://capture?text=...: a note dictated to Siri (ADR 0028), saved as it is.
@@ -43,14 +55,40 @@ function linkAction(url: string | null): LinkAction | null {
   }
   return text ? `capture:${text}` : null;
 }
-// A note or a person remembers the view it was opened from, so back retraces the path:
+
+// A native stack (ADR 0033): real iOS pushes and the edge swipe back. A note or a
+// person is pushed on top of wherever it was opened from, so back retraces the path:
 // a note -> the person in it -> another of their notes -> back, back.
-type View_ = { name: Back } | { name: "detail"; id: string; back: View_ } | { name: "person"; id: string; back: View_ };
+export type Routes = {
+  Home: undefined;
+  Planner: undefined;
+  Ideas: undefined;
+  Review: undefined;
+  People: undefined;
+  Person: { id: string };
+  Detail: { id: string };
+};
+const Stack = createNativeStackNavigator<Routes>();
+const nav = createNavigationContainerRef<Routes>();
 
 export default function App() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <LockProvider>
+            <Root />
+          </LockProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+function Root() {
+  const { colors, scheme, ready: themeReady } = useTheme();
   const [fontsLoaded] = useFonts({ InstrumentSerif_400Regular });
   const [config, setConfig] = useState<Config | undefined>(undefined);
-  const [view, setView] = useState<View_>({ name: "home" });
   const [ask, setAsk] = useState(false);
   const [settings, setSettings] = useState(false);
   const [record, setRecord] = useState(false);
@@ -59,13 +97,15 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [meReady, setMeReady] = useState(false);
   const [onboarded, setOnboarded] = useState<boolean | undefined>(undefined);
+  const [navReady, setNavReady] = useState(false);
+  const lock = useLock();
 
   useEffect(() => {
     loadOnboarded().then(setOnboarded).catch(() => setOnboarded(true));
   }, []);
 
-  // A link can arrive before sign-in or onboarding finish (a cold start from the Action
-  // Button): it waits as pending and runs once the app is ready for it.
+  // A link can arrive before sign-in, onboarding or unlocking finish (a cold start from
+  // the Action Button): it waits as pending and runs once the app is ready for it.
   const [pending, setPending] = useState<LinkAction | null>(null);
   useEffect(() => {
     const take = (url: string | null) => {
@@ -83,8 +123,11 @@ export default function App() {
 
   const signOut = () => {
     clearSession().catch(() => {});
+    // memo's calendar, Reminders list and notifications belong to the account.
+    void clearPhone();
+    // The navigator unmounts with the session; the next sign-in starts again from Home.
+    setNavReady(false);
     setConfig((c) => (c ? { ...c, token: null } : c));
-    setView({ name: "home" });
     setAsk(false);
     setRecord(false);
     setCompose(false);
@@ -101,10 +144,20 @@ export default function App() {
   }, [config?.baseUrl, config?.token]);
 
   const bump = () => setRefreshKey((k) => k + 1);
-  const openNote = (id: string) => setView((v) => ({ name: "detail", id, back: v }));
-  const openPerson = (id: string) => setView((v) => ({ name: "person", id, back: v }));
+  const openNote = useCallback((id: string) => {
+    if (nav.isReady()) nav.dispatch(StackActions.push("Detail", { id }));
+  }, []);
+  const openPerson = (id: string) => {
+    if (nav.isReady()) nav.dispatch(StackActions.push("Person", { id }));
+  };
+  const goHome = (then?: "Planner") => {
+    if (!nav.isReady()) return;
+    nav.reset({ index: then ? 1 : 0, routes: then ? [{ name: "Home" }, { name: then }] : [{ name: "Home" }] });
+  };
 
-  const ready = !!api && onboarded === true;
+  // Not while covered either: coming back from the background, a link or a notification
+  // tap can arrive before the "active" event that decides whether memo locks.
+  const ready = !!api && onboarded === true && navReady && lock.ready && !lock.locked && !lock.covered;
 
   // Shared into memo from another app (ADR 0027). A photo becomes a photo capture at
   // once; a link or text opens a new note prefilled, so you can say why you kept it.
@@ -116,7 +169,7 @@ export default function App() {
     const text = [shareIntent.meta?.title, shareIntent.text].filter(Boolean).join("\n").trim();
     resetShareIntent();
     const run = setTimeout(() => {
-      setView({ name: "home" });
+      goHome();
       if (image) {
         preparePhoto(image.path, image.width, image.height)
           .then((uri) => captureOrQueue(api, { kind: "image", file: uri }))
@@ -149,6 +202,12 @@ export default function App() {
     };
   }, [api, waiting]);
 
+  // memo on the phone - event notifications (ADR 0036), the calendar and Reminders (ADR
+  // 0034) - follows whatever memo knows; a todo ticked in Reminders comes back as a
+  // change. A tapped notification opens the note the event came from.
+  usePhoneSync(api, refreshKey, bump);
+  useReminderTaps(ready, (captureId) => (captureId ? openNote(captureId) : goHome("Planner")));
+
   // The Record widget needs one snapshot from the app before it can render.
   useEffect(() => {
     publishRecord();
@@ -156,7 +215,7 @@ export default function App() {
   useEffect(() => {
     if (!ready || !pending) return;
     const run = setTimeout(() => {
-      setView({ name: pending === "planner" ? "planner" : "home" });
+      goHome(pending === "planner" ? "Planner" : undefined);
       setSettings(false);
       if (pending.startsWith("capture:")) {
         // Straight to the outbox path: saved now, or kept until there's a network.
@@ -171,6 +230,7 @@ export default function App() {
       setPending(null);
     }, 0);
     return () => clearTimeout(run);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, pending]);
 
   // Who is signed in, for the avatar on Home; refreshed from Profile on every change.
@@ -183,153 +243,239 @@ export default function App() {
       .finally(() => setMeReady(true));
   }, [api]);
 
-  if (!fontsLoaded || config === undefined) return <View style={styles.root} />;
+  // Moments worth marking on Home (ADR 0041): a milestone crossed - checked when memo
+  // opens and after every note saved, since Siri and the share sheet add notes too - and
+  // memo's birthday, once on the day.
+  const [moment, setMoment] = useState<Moment | null>(null);
+  const noteMilestone = useCallback((count: number | undefined) => {
+    if (count === undefined) return; // an older server
+    void milestoneReached(count).then((m) => m && setMoment({ kind: "milestone", count: m }));
+  }, []);
+  const meId = me?.id;
+  const createdAt = me?.created_at;
+  const loadedCount = me?.note_count;
+  useEffect(() => {
+    if (!meId || !createdAt) return;
+    noteMilestone(loadedCount);
+    void birthdayToday(createdAt).then((years) => years && setMoment({ kind: "birthday", years }));
+    // Once per signed-in user: the count after that comes from saved notes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meId]);
+  useEffect(() => {
+    if (!api) return;
+    return onNoteSaved(() => {
+      api
+        .getMe()
+        .then((fresh) => {
+          setMe(fresh);
+          noteMilestone(fresh.note_count);
+        })
+        .catch(() => {});
+    });
+  }, [api, noteMilestone]);
 
+  // Pushes and the swipe back paint in the theme's colours, never the library's.
+  const navTheme = useMemo(() => {
+    const base = scheme === "dark" ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      dark: scheme === "dark",
+      colors: {
+        ...base.colors,
+        primary: colors.record,
+        background: colors.bg,
+        card: colors.bg,
+        text: colors.text,
+        border: colors.hairline,
+        notification: colors.record,
+      },
+    };
+  }, [colors, scheme]);
+
+  if (!fontsLoaded || config === undefined || !themeReady) return <View style={{ flex: 1, backgroundColor: colors.bg }} />;
+
+  const showApp = !!api && onboarded !== false;
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.root} edges={["top"]}>
-        <StatusBar style="light" />
-        {!api && (
-          <LoginScreen
-            config={config}
-            onSignedIn={(token) => setConfig({ ...config, token })}
-            onChangeServer={() => setSettings(true)}
-          />
-        )}
-        {api && meReady && onboarded === false && (
-          <OnboardingScreen
-            api={api}
-            me={me}
-            onDone={(updated) => {
-              if (updated) setMe(updated);
-              setOnboarded(true);
-              saveOnboarded().catch(() => {});
-            }}
-          />
-        )}
-        {api && onboarded !== false && view.name === "home" && (
-          <HomeScreen
-            api={api}
-            refreshKey={refreshKey}
-            onOpen={openNote}
-            onPlanner={() => setView({ name: "planner" })}
-            onReview={() => setView({ name: "review" })}
-            onPeople={() => setView({ name: "people" })}
-            onOpenPerson={openPerson}
-            onChanged={bump}
-            onAsk={() => setAsk(true)}
-            onRecord={() => setRecord(true)}
-            onCompose={() => setCompose(true)}
-            onSettings={() => setSettings(true)}
-            name={me?.name ?? null}
-          />
-        )}
-        {api && view.name === "planner" && (
-          <PlannerScreen
-            api={api}
-            refreshKey={refreshKey}
-            onBack={() => setView({ name: "home" })}
-            onIdeas={() => setView({ name: "ideas" })}
-            onOpenCapture={openNote}
-            onChanged={bump}
-          />
-        )}
-        {api && view.name === "review" && (
-          <ReviewScreen
-            api={api}
-            onBack={() => setView({ name: "home" })}
-            onOpenCapture={openNote}
-            onChanged={bump}
-          />
-        )}
-        {api && view.name === "ideas" && (
-          <IdeasScreen
-            api={api}
-            refreshKey={refreshKey}
-            onBack={() => setView({ name: "planner" })}
-            onOpenCapture={openNote}
-            onChanged={bump}
-          />
-        )}
-        {api && view.name === "people" && (
-          <PeopleScreen
-            api={api}
-            refreshKey={refreshKey}
-            onBack={() => setView({ name: "home" })}
-            onOpenPerson={openPerson}
-            onOpenCapture={openNote}
-            onChanged={bump}
-          />
-        )}
-        {api && view.name === "person" && (
-          <PersonScreen
-            key={view.id}
-            api={api}
-            id={view.id}
-            onBack={() => setView(view.back)}
-            onOpenCapture={openNote}
-            // Only a merge opens another person from here: it replaces this one,
-            // which no longer exists.
-            onOpenPerson={(id) => setView({ name: "person", id, back: view.back })}
-            onChanged={bump}
-          />
-        )}
-        {api && view.name === "detail" && (
-          <DetailScreen
-            key={view.id}
-            api={api}
-            id={view.id}
-            onBack={() => setView(view.back)}
-            onAsk={() => setAsk(true)}
-            onChanged={bump}
-            // A related note replaces this one: back still returns where you came from.
-            onOpen={(id) => setView({ name: "detail", id, back: view.back })}
-            onOpenPerson={openPerson}
-          />
-        )}
-        {api && (
-          <AskSheet
-            api={api}
-            visible={ask}
-            onClose={() => setAsk(false)}
-            onOpenCapture={(id) => {
-              setAsk(false);
-              setView({ name: "detail", id, back: { name: "home" } });
-            }}
-          />
-        )}
-        {api && record && <RecordSheet api={api} onClose={() => setRecord(false)} onSaved={bump} />}
-        {api && compose && (
-          <ComposeSheet
-            api={api}
-            initialText={composeText}
-            onClose={() => {
-              setCompose(false);
-              setComposeText(undefined);
-            }}
-            onSaved={bump}
-          />
-        )}
-        <ProfileSheet
-          visible={settings}
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
+      <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+      {!api && (
+        <LoginScreen
           config={config}
-          onClose={() => setSettings(false)}
-          onBaseUrlChanged={(baseUrl) => {
-            setConfig({ ...config, baseUrl });
-            setSettings(false);
-          }}
-          onSignOut={signOut}
-          onProfileChanged={setMe}
-          onDataDeleted={() => {
-            setView({ name: "home" });
-            bump();
+          onSignedIn={(token) => setConfig({ ...config, token })}
+          onChangeServer={() => setSettings(true)}
+        />
+      )}
+      {api && meReady && onboarded === false && (
+        <OnboardingScreen
+          api={api}
+          me={me}
+          onDone={(updated) => {
+            if (updated) setMe(updated);
+            setOnboarded(true);
+            saveOnboarded().catch(() => {});
           }}
         />
-      </SafeAreaView>
-    </SafeAreaProvider>
+      )}
+      {showApp && (
+        <NavigationContainer
+          ref={nav}
+          theme={navTheme}
+          onReady={() => setNavReady(true)}
+        >
+          <Stack.Navigator
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: colors.bg },
+              gestureEnabled: true,
+              // Edge swipe only: rows swipe sideways for their own actions.
+              fullScreenGestureEnabled: false,
+            }}
+          >
+            <Stack.Screen name="Home">
+              {({ navigation }) => (
+                <HomeScreen
+                  api={api}
+                  refreshKey={refreshKey}
+                  onOpen={openNote}
+                  onPlanner={() => navigation.navigate("Planner")}
+                  onReview={() => navigation.navigate("Review")}
+                  onPeople={() => navigation.navigate("People")}
+                  onOpenPerson={openPerson}
+                  onChanged={bump}
+                  onAsk={() => setAsk(true)}
+                  onRecord={() => setRecord(true)}
+                  onCompose={() => setCompose(true)}
+                  onSettings={() => setSettings(true)}
+                  name={me?.name ?? null}
+                  moment={moment}
+                  onMomentSeen={() => setMoment(null)}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Planner">
+              {({ navigation }) => (
+                <PlannerScreen
+                  api={api}
+                  refreshKey={refreshKey}
+                  onBack={() => navigation.goBack()}
+                  onIdeas={() => navigation.navigate("Ideas")}
+                  onOpenCapture={openNote}
+                  onChanged={bump}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Review">
+              {({ navigation }) => (
+                <ReviewScreen
+                  api={api}
+                  refreshKey={refreshKey}
+                  onBack={() => navigation.goBack()}
+                  onOpenCapture={openNote}
+                  onChanged={bump}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Ideas">
+              {({ navigation }) => (
+                <IdeasScreen
+                  api={api}
+                  refreshKey={refreshKey}
+                  onBack={() => navigation.goBack()}
+                  onOpenCapture={openNote}
+                  onChanged={bump}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="People">
+              {({ navigation }) => (
+                <PeopleScreen
+                  api={api}
+                  refreshKey={refreshKey}
+                  onBack={() => navigation.goBack()}
+                  onOpenPerson={openPerson}
+                  onOpenCapture={openNote}
+                  onChanged={bump}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Person">
+              {({ navigation, route }) => (
+                <PersonScreen
+                  api={api}
+                  id={route.params.id}
+                  refreshKey={refreshKey}
+                  onBack={() => navigation.goBack()}
+                  onOpenCapture={openNote}
+                  // Only a merge opens another person from here: it replaces this one,
+                  // which no longer exists.
+                  onOpenPerson={(id) => navigation.replace("Person", { id })}
+                  onChanged={bump}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Detail">
+              {({ navigation, route }) => (
+                <DetailScreen
+                  api={api}
+                  id={route.params.id}
+                  refreshKey={refreshKey}
+                  onBack={() => navigation.goBack()}
+                  onAsk={() => setAsk(true)}
+                  onChanged={bump}
+                  // A related note replaces this one: back still returns where you came from.
+                  onOpen={(id) => navigation.replace("Detail", { id })}
+                  onOpenPerson={openPerson}
+                />
+              )}
+            </Stack.Screen>
+          </Stack.Navigator>
+        </NavigationContainer>
+      )}
+      {showApp && <FirefliesHost />}
+      {api && (
+        <AskSheet
+          api={api}
+          visible={ask}
+          onClose={() => setAsk(false)}
+          onOpenCapture={(id) => {
+            setAsk(false);
+            openNote(id);
+          }}
+        />
+      )}
+      {api && record && <RecordSheet api={api} onClose={() => setRecord(false)} onSaved={bump} />}
+      {api && compose && (
+        <ComposeSheet
+          api={api}
+          initialText={composeText}
+          onClose={() => {
+            setCompose(false);
+            setComposeText(undefined);
+          }}
+          onSaved={bump}
+        />
+      )}
+      <ProfileSheet
+        visible={settings}
+        config={config}
+        lockEnabled={lock.enabled}
+        onLockChanged={lock.setEnabled}
+        onClose={() => setSettings(false)}
+        onBaseUrlChanged={(baseUrl) => {
+          setConfig({ ...config, baseUrl });
+          setSettings(false);
+        }}
+        onSignOut={signOut}
+        onProfileChanged={setMe}
+        onDataDeleted={() => {
+          goHome();
+          bump();
+        }}
+        onSettingsChanged={bump}
+      />
+    </SafeAreaView>
+    {api && <LockCover />}
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-});

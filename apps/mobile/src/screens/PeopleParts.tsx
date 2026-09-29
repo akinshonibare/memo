@@ -17,7 +17,9 @@ import type { Api, Mention, Person, PersonRef } from "../api";
 import { IconCircle, Pill, SheetHandle } from "../components";
 import { contactWord, formatAgo } from "../format";
 import { haptic } from "../haptics";
-import { colors, ui } from "../ui";
+import { useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
+import { LockCover } from "../lock";
 
 // Pick one person from everyone memo knows: "It's someone else…" on a note, and
 // "Merge into…" on a person's page.
@@ -34,6 +36,9 @@ export function PersonPicker({
   onPick: (person: Person) => void;
   onClose: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [people, setPeople] = useState<Person[] | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +98,7 @@ export function PersonPicker({
             people ? <Text style={[ui.empty, { marginTop: 32 }]}>Nobody by that name.</Text> : null
           }
         />
+        <LockCover />
       </View>
     </Modal>
   );
@@ -125,6 +131,9 @@ export function MentionCard({
   showExcerpt?: boolean;
   onOpenNote?: (captureId: string) => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [busy, setBusy] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -281,7 +290,7 @@ export function MentionCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   sheet: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: 20, paddingBottom: 24 },
   sheetTop: { flexDirection: "row", alignItems: "center", marginTop: 12, marginBottom: 16, gap: 10 },
   pickRow: {
@@ -321,4 +330,4 @@ const styles = StyleSheet.create({
   choiceMeta: { color: colors.forest, fontSize: 13, marginTop: 1 },
   actions: { flexDirection: "row", gap: 10, marginTop: 10 },
   notPerson: { alignSelf: "center", marginTop: 12, paddingVertical: 4 },
-});
+}));

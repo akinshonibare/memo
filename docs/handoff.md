@@ -108,6 +108,45 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   added in Atlas billing (it stays free under the 200M-token allowance); the app fixes
   in #71 need the next EAS build.
 
+- **Look, feel and the phone** (2026-09-29, ADRs 0031-0041; **not built or deployed
+  yet**):
+  - *Themes:* System / Light / Dark, with Forest as the default and a hand-designed light
+    Forest, plus Tide, Clay, Plum, Ink and Custom (two hues, contrast-checked).
+  - *Motion:* the living full stop, the voice orb, ink-in, fireflies, springy lists, the
+    circular theme reveal.
+  - *Navigation:* a native stack, so screens push like iOS and swipe back.
+  - *Swipes:* swipe left to delete a note (the "…" is gone); swipe right to tick in the
+    Planner.
+  - *On the phone:* Settings switches for events into a "memo" calendar, todos into a
+    "memo" Reminders list (ticking syncs both ways), and event notifications. memo never
+    reads your own calendar.
+  - *Privacy and recording:* a Face ID lock. Recording keeps going with the phone locked,
+    with a Lock Screen / Dynamic Island Live Activity.
+  - *Playback:* karaoke follows the transcript as a note plays.
+  - *Server:* word timings (migration 0015) and "On this day" in the morning view.
+  - *Easter eggs (ADR 0041):* tap the dot (five quick taps: a swarm); search "fireflies",
+    "snow", "leaves" or "petals"; seasonal particles; milestone notes (100, 500, 1,000…);
+    memo's birthday; "Still up, Akin?" between 1 and 5am.
+  - *Reviewed before shipping:* an independent review found 13 issues, all fixed. The
+    ones worth knowing: the Face ID lock was a modal and couldn't appear over an open
+    sheet (now a cover inside every sheet); phone sync tags every copy with its memo
+    item (`memo://item/<id>`) so a lost record never duplicates, only touches a calendar
+    or list whose id it recorded (never one merely called "memo"), runs one pass at a
+    time, clears removed notes/due dates/locations, and takes memo's copies off the
+    phone at sign-out; "On this day" now queries UTC ranges an index can serve.
+  - *Updates:* OTA via EAS Update, keyed to a native fingerprint.
+
+  **To ship:**
+  1. Deploy the server first: migration 0015 is additive and nullable, and an old app
+     ignores the new fields.
+  2. Then an EAS build. New native modules: reanimated, worklets, gesture handler,
+     screens, calendar, notifications, local auth, updates, system UI, asset.
+  3. After that, JavaScript changes can go out with `eas update`.
+
+  Local simulator builds need a workaround for Xcode 26.2 (see the release runbook).
+  **Untested by hand:** the five-tap swarm (the simulator tools are too slow for a
+  two-second window); try it on the phone.
+
 ## Filed for later
 
 - [#57](https://github.com/akinshonibare/memo/issues/57): the first PITR restore drill.

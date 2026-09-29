@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "backgroundColor": "#0B1410",
@@ -36,7 +36,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "memo records voice notes so they can be transcribed.",
+          "enableBackgroundRecording": true
+        }
+      ],
       "expo-secure-store",
       "expo-font",
       "expo-apple-authentication",
@@ -101,7 +107,22 @@
           "disableAndroid": true
         }
       ],
-      "./plugins/withAppIntents"
+      "./plugins/withAppIntents",
+      "expo-asset",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "memo keeps its events in a calendar called memo and keeps that calendar up to date. It never reads your own events.",
+          "remindersPermission": "memo keeps its todos in a Reminders list called memo, and ticks off the ones you finish there."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "memo uses Face ID to lock your notes, if you turn that on."
+        }
+      ],
+      "expo-notifications"
     ],
     "backgroundColor": "#0B1410",
     "extra": {
@@ -110,6 +131,12 @@
       }
     },
     "owner": "akiin",
-    "scheme": "memo"
+    "scheme": "memo",
+    "updates": {
+      "url": "https://u.expo.dev/fb5218ca-c4c4-4ee2-b97d-0c38e4a7d58d"
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    }
   }
 }

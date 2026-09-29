@@ -19,6 +19,7 @@ from memo.services.morning import (
 	BUILD_HOUR,
 	build_morning_view,
 	is_build_hour,
+	look_back_days,
 	todays_view,
 )
 
@@ -330,3 +331,172 @@ async def test_endpoint_builds_on_demand_and_is_per_user(
 	as_user(second_user)
 	theirs = (await client.get("/v1/morning")).json()
 	assert theirs["todos"] == [] and theirs["events"] == []
+
+
+# --- on this day (ADR 0040) -----------------------------------------------------------
+
+
+async def _note_on(
+	client: AsyncClient,
+	admin_engine: AsyncEngine,
+	token: str,
+	body: str,
+	written: dt.datetime,
+	*,
+	status: str = "ready",
+) -> str:
+	"""A note as if written at `written` and already processed."""
+	capture_id = await _capture(client, token)
+	async with admin_engine.begin() as conn:
+		await conn.execute(
+			text(
+				"UPDATE captures SET text = :body, status = :status, created_at = :at "
+				"WHERE id = :id"
+			),
+			{"body": body, "status": status, "at": written, "id": capture_id},
+		)
+	return capture_id
+
+
+def test_look_back_days_prefers_years_then_six_months_then_one() -> None:
+	days = look_back_days(dt.date(2026, 9, 29))
+	assert days[0] == dt.date(2016, 9, 29)
+	assert days[9] == dt.date(2025, 9, 29)
+	assert days[10:] == [dt.date(2026, 3, 29), dt.date(2026, 8, 29)]
+
+
+def test_days_that_dont_exist_are_skipped_not_moved() -> None:
+	# 29 February only has a match in leap years; 31 March has no 31 September six
+	# months back and no 31 February one month back, so only the years remain.
+	leap = look_back_days(dt.date(2028, 2, 29))
+	assert leap == [
+		dt.date(2020, 2, 29),
+		dt.date(2024, 2, 29),
+		dt.date(2027, 8, 29),
+		dt.date(2028, 1, 29),
+	]
+	march = look_back_days(dt.date(2026, 3, 31))
+	assert march == [dt.date(y, 3, 31) for y in range(2016, 2026)]
+
+
+async def test_one_note_from_this_day_the_furthest_back_first(
+	client: AsyncClient, admin_engine: AsyncEngine, session: AsyncSession
+) -> None:
+	await _set_timezone(admin_engine, "Europe/London")
+	today = NOW.astimezone(LONDON).date()
+	noon = dt.time(12, tzinfo=LONDON)
+	year_ago = dt.datetime.combine(today.replace(year=today.year - 1), noon)
+	two_years = dt.datetime.combine(today.replace(year=today.year - 2), noon)
+	month_ago = dt.datetime.combine(today.replace(month=today.month - 1), noon)
+	await _note_on(client, admin_engine, "tok-otd-1", "a year ago", year_ago)
+	older = await _note_on(
+		client, admin_engine, "tok-otd-2", "two years ago, and longer", two_years
+	)
+	await _note_on(client, admin_engine, "tok-otd-3", "a month ago", month_ago)
+	await _note_on(
+		client,
+		admin_engine,
+		"tok-otd-4",
+		"the day before, a year ago",
+		year_ago - dt.timedelta(days=1),
+	)
+
+	view = await build_morning_view(session, SEED_USER_ID, now=NOW)
+	await commit_and_rebind(session, SEED_USER_ID)
+
+	assert view.on_this_day is not None
+	assert str(view.on_this_day.capture_id) == older
+	assert view.on_this_day.captured_on == two_years.date()
+	assert view.on_this_day.text == "two years ago, and longer"
+
+
+async def test_on_this_day_reads_the_local_date_not_utc(
+	client: AsyncClient, admin_engine: AsyncEngine, session: AsyncSession
+) -> None:
+	await _set_timezone(admin_engine, "Europe/London")
+	today = NOW.astimezone(LONDON).date()
+	# 00:30 in London, a year ago, is still the previous day in UTC.
+	just_after_midnight = dt.datetime.combine(
+		today.replace(year=today.year - 1), dt.time(0, 30, tzinfo=LONDON)
+	)
+	capture_id = await _note_on(
+		client, admin_engine, "tok-otd-local", "late night note", just_after_midnight
+	)
+	view = await build_morning_view(session, SEED_USER_ID, now=NOW)
+	assert (
+		view.on_this_day is not None and str(view.on_this_day.capture_id) == capture_id
+	)
+
+
+async def test_on_this_day_ends_at_local_midnight(
+	client: AsyncClient, admin_engine: AsyncEngine, session: AsyncSession
+) -> None:
+	await _set_timezone(admin_engine, "Europe/London")
+	today = NOW.astimezone(LONDON).date()
+	year_ago = today.replace(year=today.year - 1)
+	await build_morning_view(session, SEED_USER_ID, now=NOW)
+	await commit_and_rebind(session, SEED_USER_ID)
+	# 00:30 the next local day is the day after, though still that day in UTC.
+	next_day = dt.datetime.combine(
+		year_ago + dt.timedelta(days=1), dt.time(0, 30, tzinfo=LONDON)
+	)
+	await _note_on(client, admin_engine, "tok-otd-after", "the day after", next_day)
+	view = await todays_view(session, SEED_USER_ID, now=NOW)
+	assert view is not None and view.on_this_day is None
+
+	late = dt.datetime.combine(year_ago, dt.time(23, 30, tzinfo=LONDON))
+	capture_id = await _note_on(
+		client, admin_engine, "tok-otd-late", "late that day", late
+	)
+	view = await todays_view(session, SEED_USER_ID, now=NOW)
+	assert view is not None and view.on_this_day is not None
+	assert str(view.on_this_day.capture_id) == capture_id
+	assert view.on_this_day.captured_on == year_ago
+
+
+async def test_unfinished_empty_and_other_peoples_notes_never_look_back(
+	client: AsyncClient,
+	admin_engine: AsyncEngine,
+	session: AsyncSession,
+	as_user: Callable[[uuid.UUID], None],
+	second_user: uuid.UUID,
+) -> None:
+	today = NOW.date()
+	year_ago = dt.datetime.combine(
+		today.replace(year=today.year - 1), dt.time(12, tzinfo=dt.UTC)
+	)
+	await _note_on(
+		client, admin_engine, "tok-otd-f", "failed", year_ago, status="failed"
+	)
+	await _note_on(
+		client, admin_engine, "tok-otd-p", "processing", year_ago, status="extracting"
+	)
+	await _note_on(client, admin_engine, "tok-otd-e", "   ", year_ago)
+	as_user(second_user)
+	await _note_on(client, admin_engine, "tok-otd-theirs", "not yours", year_ago)
+	as_user(SEED_USER_ID)
+
+	view = await build_morning_view(session, SEED_USER_ID, now=NOW)
+	assert view.on_this_day is None
+
+
+async def test_the_live_read_looks_back_too_and_follows_a_delete(
+	client: AsyncClient, admin_engine: AsyncEngine, session: AsyncSession
+) -> None:
+	today = NOW.date()
+	year_ago = dt.datetime.combine(
+		today.replace(year=today.year - 1), dt.time(12, tzinfo=dt.UTC)
+	)
+	await build_morning_view(session, SEED_USER_ID, now=NOW)
+	await commit_and_rebind(session, SEED_USER_ID)
+	capture_id = await _note_on(
+		client, admin_engine, "tok-otd-live", "remember this", year_ago
+	)
+
+	view = await todays_view(session, SEED_USER_ID, now=NOW)
+	assert view is not None and view.on_this_day is not None
+	assert str(view.on_this_day.capture_id) == capture_id
+
+	assert (await client.delete(f"/v1/captures/{capture_id}")).status_code == 204
+	view = await todays_view(session, SEED_USER_ID, now=NOW)
+	assert view is not None and view.on_this_day is None

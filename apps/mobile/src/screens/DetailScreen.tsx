@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActionSheetIOS,
-  ActivityIndicator,
   Alert,
   Image,
   Platform,
@@ -12,11 +11,14 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Api, type Capture, type CaptureDetail, type Derivation } from "../api";
+import { Api, type Capture, type CaptureDetail, type Derivation, type Word } from "../api";
 import { AskBar, IconCircle, Pill, confirmDelete } from "../components";
 import { ACTIVE_STATUSES, formatClock, formatDue, formatStamp, formatWhen, headline, statusLabel } from "../format";
-import { playUrl, stopPlayback, usePlayingId } from "../playback";
-import { colors, ui } from "../ui";
+import { useRefetchOnFocus } from "../focus";
+import { InkText, LiveDot } from "../motion";
+import { playUrl, seekPlayback, stopPlayback, usePlaybackDerived, usePlayingId } from "../playback";
+import { useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
 import { DerivationSheet } from "./DerivationSheet";
 import { MentionCard } from "./PeopleParts";
 import { haptic } from "../haptics";
@@ -49,6 +51,7 @@ const POLL_MS = 3000;
 export function DetailScreen({
   api,
   id,
+  refreshKey,
   onBack,
   onAsk,
   onChanged,
@@ -57,12 +60,15 @@ export function DetailScreen({
 }: {
   api: Api;
   id: string;
+  refreshKey: number;
   onBack: () => void;
   onAsk: () => void;
   onChanged: () => void;
   onOpen: (id: string) => void;
   onOpenPerson: (id: string) => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
 
   // Notes about the same thing (ADR 0028), once this one is indexed. Quiet by design:
@@ -75,9 +81,18 @@ export function DetailScreen({
     { kind: Derivation["kind"]; existing?: Derivation } | null
   >(null);
 
+  // The words ink in (ADR 0032) when they arrive while you're looking: a voice note or
+  // photo opened while it was still being read.
+  const lastText = useRef<string | null>(null);
+  const [inked, setInked] = useState(false);
   const load = useCallback(async () => {
     try {
-      setCapture(await api.getCapture(id));
+      const next = await api.getCapture(id);
+      const had = lastText.current;
+      const has = (next.text ?? "").trim();
+      if (had !== null && !had && has) setInked(true);
+      lastText.current = has;
+      setCapture(next);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -109,7 +124,8 @@ export function DetailScreen({
       clearTimeout(first);
       if (timer) clearInterval(timer);
     };
-  }, [load, active]);
+  }, [load, active, refreshKey]);
+  useRefetchOnFocus(load);
 
   const ready = capture?.status === "ready";
   useEffect(() => {
@@ -198,7 +214,7 @@ export function DetailScreen({
         {capture?.status === "failed" && (
           <Pill label="Retry" tone="light" onPress={retry} busy={busy === "retry"} />
         )}
-        {capture && <IconCircle name="ellipsis-horizontal" onPress={remove} />}
+        {capture && <IconCircle name="trash-outline" onPress={remove} accessibilityLabel="Delete note" />}
       </View>
       <ScrollView
         contentContainerStyle={[ui.pad, { paddingBottom: 140 + insets.bottom }]}
@@ -218,18 +234,36 @@ export function DetailScreen({
               {formatStamp(capture.created_at, true)}
               {capture.duration_ms != null ? ` · ${formatClock(capture.duration_ms)}` : ""}
             </Text>
-            <Text style={[ui.h2, { marginTop: 6 }]}>{headline(capture).title}</Text>
-            {headline(capture).rest && (
-              <Text style={[ui.body, { marginTop: 14 }]}>{headline(capture).rest}</Text>
+            {playingId === capture.id && capture.words && capture.words.length > 0 ? (
+              <Karaoke id={capture.id} words={capture.words} />
+            ) : (
+              <>
+                <InkText
+                  key={inked ? "ink" : "plain"}
+                  text={headline(capture).title}
+                  play={inked}
+                  once={`${capture.id}:title`}
+                  style={[ui.h2, { marginTop: 6 }]}
+                />
+                {headline(capture).rest && (
+                  <InkText
+                    key={inked ? "ink-rest" : "plain-rest"}
+                    text={headline(capture).rest!}
+                    play={inked}
+                    once={`${capture.id}:rest`}
+                    style={[ui.body, { marginTop: 14 }]}
+                  />
+                )}
+              </>
             )}
           </>
         )}
         {error && <Text style={[ui.danger, { marginTop: 16 }]}>{error}</Text>}
 
         {capture && ACTIVE_STATUSES.has(capture.status) && (
-          <View style={styles.processing}>
-            <ActivityIndicator color={colors.muted} />
-            <Text style={[ui.meta, { marginTop: 10 }]}>{statusLabel(capture.status)}</Text>
+          <View style={styles.processing} accessible accessibilityLabel={statusLabel(capture.status) ?? undefined}>
+            <LiveDot live size={14} />
+            <Text style={[ui.meta, { marginTop: 14 }]}>{statusLabel(capture.status)}</Text>
           </View>
         )}
 
@@ -355,6 +389,39 @@ export function DetailScreen({
   );
 }
 
+// The transcript following the recording (ADR 0039): what's been said in full colour,
+// the word being said in amber, what's to come quieter. Tap a word to jump there.
+function Karaoke({ id, words }: { id: string; words: Word[] }) {
+  const ui = useUi();
+  const { colors } = useTheme();
+  const wordAt = useCallback(
+    (ms: number) => {
+      let at = -1;
+      for (let i = 0; i < words.length && words[i][0] <= ms; i++) at = i;
+      return at;
+    },
+    [words],
+  );
+  const current = usePlaybackDerived(id, wordAt);
+  return (
+    <Text style={[ui.body, { marginTop: 10, fontSize: 19, lineHeight: 28 }]} accessibilityLabel={words.map((w) => w[2]).join(" ")}>
+      {words.map(([start, , word], i) => (
+        <Text
+          key={i}
+          onPress={() => seekPlayback(start)}
+          style={{
+            color: i === current ? colors.record : i < current ? colors.text : colors.faint,
+            fontWeight: i === current ? "600" : "400",
+          }}
+        >
+          {word}
+          {i < words.length - 1 ? " " : ""}
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
 function DerivationCard({
   d,
   busy,
@@ -366,6 +433,8 @@ function DerivationCard({
   onReview: (d: Derivation, status: "confirmed" | "rejected") => void;
   onEdit: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
   const p = d.payload;
   const when =
     "due" in p && p.due
@@ -411,7 +480,7 @@ function DerivationCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   topBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 4, marginBottom: 20 },
   processing: { alignItems: "center", paddingVertical: 56 },
   photo: { width: "100%", borderRadius: 16, marginBottom: 16, backgroundColor: colors.surface },
@@ -441,4 +510,4 @@ const styles = StyleSheet.create({
     bottom: 0,
     flexDirection: "row",
   },
-});
+}));

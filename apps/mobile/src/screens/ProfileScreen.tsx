@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Application from "expo-application";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -12,7 +12,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -21,8 +20,13 @@ import {
 import { Api, type Me, type Voice } from "../api";
 import { Avatar, IconCircle, Pill, SheetHandle } from "../components";
 import { type Config, saveBaseUrl } from "../config";
-import { colors, fonts, ui } from "../ui";
+import { fonts, useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
+import { disableLock, enableLock, LockCover } from "../lock";
+import { enableReminders, LEAD_CHOICES, remindersPref } from "../reminders";
+import { setCalendarSync, setRemindersSync, syncPref } from "../sync";
 import { SpeechQueue } from "../voice";
+import { AppearanceGroup, Group, Row, useReveal } from "./SettingsParts";
 
 type Busy =
   | "name"
@@ -34,28 +38,42 @@ type Busy =
   | "signout"
   | "everywhere"
   | "account"
-  | "server";
+  | "server"
+  | "calsync"
+  | "remsync"
+  | "notify"
+  | "lock";
 
-// You first, then how the assistant treats you, then your data, then the account.
+// You first, then how memo looks, then how the assistant treats you, then what memo may
+// do on this phone, then your data, then the account.
 // Plumbing (the API address) is not a setting a person has: it is folded into a
 // developer panel that appears after tapping the version seven times.
 export function ProfileSheet({
   visible,
   config,
+  lockEnabled,
+  onLockChanged,
   onClose,
   onBaseUrlChanged,
   onSignOut,
   onDataDeleted,
   onProfileChanged,
+  onSettingsChanged,
 }: {
   visible: boolean;
   config: Config;
+  lockEnabled: boolean;
+  onLockChanged: (on: boolean) => void;
+  onSettingsChanged: () => void;
   onClose: () => void;
   onBaseUrlChanged: (baseUrl: string) => void;
   onSignOut: () => void;
   onDataDeleted: () => void;
   onProfileChanged: (me: Me) => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const signedIn = !!config.token;
   const device = deviceTimezone();
   const [me, setMe] = useState<Me | null>(null);
@@ -261,6 +279,51 @@ export function ProfileSheet({
       ],
     );
 
+  // What memo may do on this phone (ADR 0034-0036). Each switch asks for its permission
+  // when turned on; a refusal leaves it off and says where to change it.
+  const sync = syncPref.use();
+  const notify = remindersPref.use();
+  // A switch that can't turn on says why in an alert, next to where you were looking,
+  // not in the note at the foot of the sheet.
+  const explain = (message: string | null) => {
+    if (message) Alert.alert("Not turned on", message);
+  };
+  const flip = (what: Busy, fn: () => Promise<string | null>) =>
+    run(what, async () => {
+      explain(await fn());
+      onSettingsChanged();
+    });
+  const pickLead = () => {
+    const labels = LEAD_CHOICES.map((m) => (m === 60 ? "1 hour before" : `${m} minutes before`));
+    const choose = (i: number) => {
+      const minutes = LEAD_CHOICES[i];
+      if (minutes !== undefined) void flip("notify", () => enableReminders(true, minutes));
+    };
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { title: "Notify me", options: [...labels, "Cancel"], cancelButtonIndex: labels.length },
+        choose,
+      );
+      return;
+    }
+    Alert.alert("Notify me", undefined, [
+      ...labels.map((text, i) => ({ text, onPress: () => choose(i) })),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
+  };
+  const toggleLock = (on: boolean) =>
+    run("lock", async () => {
+      if (!on) {
+        if (await disableLock()) onLockChanged(false);
+        return null;
+      }
+      const result = await enableLock();
+      if (result === "on") onLockChanged(true);
+      else explain(result);
+      return null;
+    });
+  const { layer, reveal, hostRef } = useReveal();
+
   const saveServer = () =>
     run("server", async () => {
       const next = baseUrl.trim().replace(/\/+$/, "");
@@ -276,7 +339,7 @@ export function ProfileSheet({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.sheet}>
+      <View style={styles.sheet} ref={hostRef}>
         <SheetHandle />
         <View style={styles.top}>
           <View style={{ flex: 1 }} />
@@ -302,6 +365,8 @@ export function ProfileSheet({
               )}
             </Pressable>
           )}
+
+          <AppearanceGroup reveal={reveal} />
 
           {signedIn && (
             <>
@@ -332,6 +397,49 @@ export function ProfileSheet({
                     onValueChange={(on) => void saveProfile("accept", { auto_accept: on })}
                     trackColor={{ true: colors.forest }}
                   />
+                </Row>
+              </Group>
+
+              <Group
+                title="On this phone"
+                footer="memo keeps its events in a calendar called memo, and its todos in a Reminders list called memo. Tick a todo in either app and it's ticked in both. Turning one off removes memo's calendar or list from the phone. memo never reads your own events."
+              >
+                <Row icon="calendar-outline" label="Put events in Calendar" busy={busy === "calsync"}>
+                  <Switch
+                    value={sync.calendar}
+                    onValueChange={(on) => void flip("calsync", () => setCalendarSync(on))}
+                    trackColor={{ true: colors.forest }}
+                  />
+                </Row>
+                <Row icon="list-outline" label="Put todos in Reminders" busy={busy === "remsync"}>
+                  <Switch
+                    value={sync.reminders}
+                    onValueChange={(on) => void flip("remsync", () => setRemindersSync(on))}
+                    trackColor={{ true: colors.forest }}
+                  />
+                </Row>
+                <Row icon="notifications-outline" label="Remind me before events" busy={busy === "notify"}>
+                  <Switch
+                    value={notify.on}
+                    onValueChange={(on) => void flip("notify", () => enableReminders(on, notify.minutes))}
+                    trackColor={{ true: colors.forest }}
+                  />
+                </Row>
+                {notify.on && (
+                  <Row icon="time-outline" label="Notify me" onPress={pickLead} chevron>
+                    <Text style={styles.value}>
+                      {notify.minutes === 60 ? "1 hour before" : `${notify.minutes} min before`}
+                    </Text>
+                  </Row>
+                )}
+              </Group>
+
+              <Group
+                title="Privacy"
+                footer="Asks for Face ID when memo opens, and after it's been away for a minute. The app switcher shows nothing while it's locked."
+              >
+                <Row icon="lock-closed-outline" label="Lock with Face ID" busy={busy === "lock"}>
+                  <Switch value={lockEnabled} onValueChange={(on) => void toggleLock(on)} trackColor={{ true: colors.forest }} />
                 </Row>
               </Group>
 
@@ -398,53 +506,10 @@ export function ProfileSheet({
             <Text style={ui.meta}>Version {version}</Text>
           </Pressable>
         </ScrollView>
+        {layer}
+        <LockCover />
       </View>
     </Modal>
-  );
-}
-
-function Group({ title, footer, children }: { title: string; footer?: string; children: ReactNode }) {
-  return (
-    <View style={styles.group}>
-      <Text style={ui.label}>{title}</Text>
-      <View style={styles.groupCard}>{children}</View>
-      {footer && <Text style={[ui.meta, styles.groupFooter]}>{footer}</Text>}
-    </View>
-  );
-}
-
-function Row({
-  label,
-  icon,
-  onPress,
-  danger,
-  busy,
-  chevron,
-  children,
-}: {
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  onPress?: () => void;
-  danger?: boolean;
-  busy?: boolean;
-  chevron?: boolean;
-  children?: ReactNode;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={!onPress || busy}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-    >
-      <Ionicons name={icon} size={19} color={danger ? colors.danger : colors.muted} />
-      <Text style={[styles.rowLabel, danger && { color: colors.danger }]} numberOfLines={1}>
-        {label}
-      </Text>
-      <View style={styles.rowRight}>
-        {busy ? <ActivityIndicator color={colors.muted} /> : children}
-        {chevron && !busy && <Ionicons name="chevron-forward" size={16} color={colors.faint} />}
-      </View>
-    </Pressable>
   );
 }
 
@@ -456,7 +521,7 @@ function deviceTimezone(): string {
   }
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   sheet: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: 20 },
   top: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   pressed: { opacity: 0.6 },
@@ -470,20 +535,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   name: { color: colors.text, fontSize: 20, fontWeight: "600", marginBottom: 2 },
-  group: { marginTop: 26 },
-  groupCard: { backgroundColor: colors.surface, borderRadius: 14, overflow: "hidden" },
-  groupFooter: { marginTop: 6, marginHorizontal: 4 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    minHeight: 48,
-    paddingHorizontal: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.hairline,
-  },
-  rowLabel: { fontSize: 16, color: colors.text, flexShrink: 1 },
-  rowRight: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 8 },
   value: { color: colors.muted, fontSize: 15, flexShrink: 1 },
   serverEdit: { padding: 14, gap: 10, alignItems: "flex-end" },
   input: {
@@ -498,4 +549,4 @@ const styles = StyleSheet.create({
   note: { marginTop: 20, textAlign: "center" },
   footer: { alignItems: "center", marginTop: 36, gap: 2 },
   brand: { fontFamily: fonts.serif, fontSize: 22, color: colors.muted },
-});
+}));

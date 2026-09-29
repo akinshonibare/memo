@@ -90,7 +90,11 @@ export type ReachOut = {
   latest_on: string | null;
 };
 
-export type CaptureDetail = Capture & { derivations: Derivation[]; people?: Mention[] };
+// `words`: when each word of a voice note was said, [start_ms, end_ms, word] (ADR 0039),
+// for following the transcript as it plays. Absent from an older server, null for a
+// note transcribed before words were kept.
+export type Word = [number, number, string];
+export type CaptureDetail = Capture & { derivations: Derivation[]; people?: Mention[]; words?: Word[] | null };
 
 export type Citation = {
   chunk_id: string;
@@ -132,6 +136,16 @@ export type MorningView = {
   } | null;
   built_at: string;
   reach_out?: ReachOut[]; // absent from a server older than ADR 0029
+  // A note from this day a month, six months or years ago (ADR 0040). Absent from an
+  // older server; null on a day with nothing to look back on.
+  on_this_day?: OnThisDay | null;
+};
+
+export type OnThisDay = {
+  capture_id: string;
+  kind: Capture["kind"];
+  text: string;
+  captured_on: string;
 };
 
 export type Once = { clientToken: string; capturedAt: string };
@@ -158,6 +172,7 @@ export type Me = {
   voice: string | null; // Aura-2 voice for spoken answers; null = default
   auto_accept?: boolean; // keep what extraction finds without asking (ADR 0030)
   created_at: string;
+  note_count?: number; // for milestones; absent from an older server
 };
 
 export type Voice = { id: string; label: string };
@@ -369,6 +384,12 @@ export class Api {
 
   // Newest first; kept derivations of deleted notes included (capture_id null).
   async listDerivations(max = 400): Promise<Derivation[]> {
+    return (await this.derivationPages(max)).items;
+  }
+
+  // The same, saying whether it stopped at `max` with older items left unread: a sync
+  // must not take "not in this list" to mean "deleted" when the list was cut short.
+  async derivationPages(max: number): Promise<{ items: Derivation[]; truncated: boolean }> {
     const items: Derivation[] = [];
     let cursor: string | null = null;
     do {
@@ -379,7 +400,7 @@ export class Api {
       items.push(...page.items);
       cursor = page.next_cursor;
     } while (cursor && items.length < max);
-    return items;
+    return { items, truncated: cursor !== null };
   }
 
   // Added straight into the Planner, with no note behind it.

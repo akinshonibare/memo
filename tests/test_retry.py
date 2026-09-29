@@ -55,7 +55,29 @@ async def test_deepgram_parses_a_transcript() -> None:
 			json={
 				"metadata": {"duration": 2.5},
 				"results": {
-					"channels": [{"alternatives": [{"transcript": "hello Tunde"}]}]
+					"channels": [
+						{
+							"alternatives": [
+								{
+									"transcript": "Hello, Tunde.",
+									"words": [
+										{
+											"word": "hello",
+											"punctuated_word": "Hello,",
+											"start": 0.08,
+											"end": 0.4,
+										},
+										{
+											"word": "tunde",
+											"punctuated_word": "Tunde.",
+											"start": 0.48,
+											"end": 1.1,
+										},
+									],
+								}
+							]
+						}
+					]
 				},
 			},
 		)
@@ -63,13 +85,62 @@ async def test_deepgram_parses_a_transcript() -> None:
 	transcript = await _transcriber(httpx.MockTransport(handler)).transcribe(
 		b"bytes", "audio/m4a"
 	)
-	assert transcript.text == "hello Tunde"
+	assert transcript.text == "Hello, Tunde."
 	assert transcript.duration_ms == 2500
+	# Per-word times in ms, written as the transcript writes them (ADR 0039).
+	assert transcript.words == [(80, 400, "Hello,"), (480, 1100, "Tunde.")]
 	assert seen == {
 		"auth": "Token test-key",
 		"content_type": "audio/m4a",
 		"model": "nova-3",
 	}
+
+
+async def test_malformed_words_are_skipped_not_fatal() -> None:
+	"""The words are a nicety on top of the text: a bad entry never costs the note."""
+
+	def handler(request: httpx.Request) -> httpx.Response:
+		return httpx.Response(
+			200,
+			json={
+				"results": {
+					"channels": [
+						{
+							"alternatives": [
+								{
+									"transcript": "one two",
+									"words": [
+										{"word": "one", "start": 0.1, "end": 0.3},
+										{"word": "two"},
+										"garbage",
+										{"punctuated_word": 7, "start": 1.0},
+									],
+								}
+							]
+						}
+					]
+				}
+			},
+		)
+
+	transcript = await _transcriber(httpx.MockTransport(handler)).transcribe(
+		b"bytes", "audio/m4a"
+	)
+	assert transcript.text == "one two"
+	assert transcript.words == [(100, 300, "one")]
+
+
+async def test_a_response_without_words_still_transcribes() -> None:
+	def handler(request: httpx.Request) -> httpx.Response:
+		return httpx.Response(
+			200,
+			json={"results": {"channels": [{"alternatives": [{"transcript": "hi"}]}]}},
+		)
+
+	transcript = await _transcriber(httpx.MockTransport(handler)).transcribe(
+		b"bytes", "audio/m4a"
+	)
+	assert transcript.text == "hi" and transcript.words == []
 
 
 async def test_deepgram_429_is_retryable_and_400_is_terminal() -> None:

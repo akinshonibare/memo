@@ -274,6 +274,7 @@ async def get_capture(
 			DerivationOut.model_validate(d) for d in rows if d.kind != MENTION
 		],
 		people=people_out,
+		words=capture.words,
 	)
 
 

@@ -277,7 +277,11 @@ class FakeTranscriber:
 		self.calls += 1
 		if self.fail_with is not None:
 			raise self.fail_with
-		return Transcript(text=self.text, duration_ms=1500, model=self.model)
+		# One word every 400ms, the way Deepgram reports them (ADR 0039).
+		words = [(i * 400, i * 400 + 350, w) for i, w in enumerate(self.text.split())]
+		return Transcript(
+			text=self.text, duration_ms=1500, model=self.model, words=words
+		)
 
 
 @dataclass

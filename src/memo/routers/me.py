@@ -9,7 +9,7 @@ from typing import Annotated, Any, cast
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.engine import CursorResult
 
 from memo.auth import CurrentUser
@@ -46,6 +46,9 @@ class MeOut(BaseModel):
 	# Keep what extraction finds without asking (ADR 0030). Off by default.
 	auto_accept: bool
 	created_at: dt.datetime
+	# How many notes you have now, for the app's milestones ("your 100th note").
+	# Defaulted so the model still validates straight from a User row.
+	note_count: int = 0
 
 
 class MePatch(BaseModel):
@@ -103,13 +106,20 @@ async def _load_user(session: DbSession, user_id: uuid.UUID) -> User:
 	return user
 
 
+async def _me_out(session: DbSession, user: User) -> MeOut:
+	count = await session.scalar(
+		select(func.count()).select_from(Capture).where(Capture.user_id == user.id)
+	)
+	return MeOut.model_validate(user).model_copy(update={"note_count": count or 0})
+
+
 @router.get("", response_model=MeOut)
-async def read_me(session: DbSession, user_id: CurrentUser) -> User:
-	return await _load_user(session, user_id)
+async def read_me(session: DbSession, user_id: CurrentUser) -> MeOut:
+	return await _me_out(session, await _load_user(session, user_id))
 
 
 @router.patch("", response_model=MeOut)
-async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> User:
+async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> MeOut:
 	user = await _load_user(session, user_id)
 	fields = body.model_fields_set
 	if "timezone" in fields and body.timezone is not None:
@@ -128,7 +138,7 @@ async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> 
 		# turning this on is a choice about the future, not a review of the past.
 		user.auto_accept = body.auto_accept
 	await session.flush()
-	return user
+	return await _me_out(session, user)
 
 
 class VoiceOut(BaseModel):

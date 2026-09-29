@@ -72,3 +72,41 @@ Nothing to paste. The API base URL defaults to production in `src/config.ts`
 Ad-hoc profiles expire after a year and cap at 100 devices. Neither matters for one
 phone. TestFlight (`eas build --profile production` then `eas submit`) is the next step
 only when someone who is not you needs the app.
+
+## Over-the-air updates (ADR 0037)
+
+Builds from this change on include `expo-updates`, with a runtime version that is a
+fingerprint of the native project. JavaScript-only changes (screens, colours, motion)
+can then ship without a build:
+
+```bash
+cd apps/mobile
+npx eas-cli@latest update --channel preview --message "what changed"
+```
+
+- The phone downloads it on the next launch and applies it on the launch after that.
+- It only reaches builds whose native fingerprint matches. Adding a native module, a
+  config plugin or an `app.json` change that touches native code needs a new build.
+  `npx expo-fingerprint fingerprint:generate` shows the current fingerprint if in doubt.
+- Build 14 and earlier don't contain `expo-updates` and never get updates.
+- `expo-notifications` adds the push entitlement (`aps-environment`). EAS syncs the
+  capability to the App ID on the next build; answer `Y` at the Apple prompt if it asks.
+
+## Running a development build in the simulator
+
+For checking changes before any EAS build:
+
+```bash
+cd apps/mobile
+npx expo run:ios --device "iPhone 17"
+```
+
+- Sign in with Apple needs an Apple ID the simulator doesn't have. Against a local API,
+  a development build can be handed a session minted there: set `EXPO_PUBLIC_API_URL`
+  and `EXPO_PUBLIC_DEV_SESSION` when starting Metro. Only `__DEV__` builds read the
+  session variable (`src/config.ts`).
+- **Xcode 26.2 can't compile `expo-modules-jsi` 57.1.1** (it builds from source on every
+  machine): a C++ `SWIFT_RETURNS_RETAINED` annotation and Swift 6 "sending … risks
+  causing data races" errors. EAS's Xcode builds it fine; build 14 came from the same
+  version. Locally, either use EAS, or wait for an Expo patch release. The errors are in
+  Expo's code, not memo's.

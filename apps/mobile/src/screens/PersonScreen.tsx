@@ -6,7 +6,10 @@ import { type Api, ApiError, type Mention, type PersonDetail } from "../api";
 import { IconCircle, Pill } from "../components";
 import { contactWord, formatAgo, formatDay, formatDue, formatRhythm, formatWhen } from "../format";
 import { haptic } from "../haptics";
-import { colors, fonts, ui } from "../ui";
+import { fonts, useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
+import { useNavigation } from "@react-navigation/native";
+import { useRefetchOnFocus } from "../focus";
 import { PersonPicker } from "./PeopleParts";
 
 // Rhythms offered for "suggest getting in touch"; 30 days is everyone's default.
@@ -18,6 +21,7 @@ const RHYTHMS: (number | null)[] = [14, 30, 60, 90, 180, null];
 export function PersonScreen({
   api,
   id,
+  refreshKey,
   onBack,
   onOpenCapture,
   onOpenPerson,
@@ -25,11 +29,15 @@ export function PersonScreen({
 }: {
   api: Api;
   id: string;
+  refreshKey: number;
   onBack: () => void;
   onOpenCapture: (id: string) => void;
   onOpenPerson: (id: string) => void;
   onChanged: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [person, setPerson] = useState<PersonDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +51,7 @@ export function PersonScreen({
     back.current = onBack;
   }, [onBack]);
 
+  const navigation = useNavigation();
   const load = useCallback(async () => {
     try {
       setPerson(await api.getPerson(id));
@@ -52,17 +61,23 @@ export function PersonScreen({
       // (the server removes a person nobody's notes name). Back past them, rather
       // than leaving an empty page in the back stack.
       if (e instanceof ApiError && e.status === 404) {
-        back.current();
+        // Only while on top: going back from a screen hidden under a note would pop
+        // the note instead. Hidden, it waits; coming back into view re-reads, and
+        // backs out then.
+        if (navigation.isFocused()) back.current();
         return;
       }
       setError(String(e));
     }
-  }, [api, id]);
+  }, [api, id, navigation]);
 
   useEffect(() => {
     const first = setTimeout(load, 0);
     return () => clearTimeout(first);
-  }, [load]);
+  }, [load, refreshKey]);
+  // Kept mounted under a note opened from here (ADR 0033): coming back re-reads, and a
+  // person who no longer exists is backed out of then, while this screen is on top.
+  useRefetchOnFocus(load);
 
   const run = async (key: string, action: () => Promise<unknown>) => {
     setBusy(key);
@@ -302,6 +317,8 @@ function Timeline({
   onOpenCapture: (id: string) => void;
   onRemove: (m: Mention) => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
   const when = mention.occurred_on ?? mention.written_at ?? mention.created_at;
   const day = new Date(when.length === 10 ? `${when}T00:00:00` : when).toLocaleDateString(undefined, {
     month: "short",
@@ -345,6 +362,9 @@ function Item({
   detail: string | null;
   onPress?: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => [styles.item, pressed && styles.pressed]}>
       <Ionicons name={icon} size={20} color={colors.muted} style={{ marginRight: 12, marginTop: 2 }} />
@@ -356,7 +376,7 @@ function Item({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   topBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 4, marginBottom: 12 },
   pressed: { opacity: 0.6 },
   aliases: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 8 },
@@ -394,4 +414,4 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   entryText: { color: colors.text, fontSize: 16, lineHeight: 22 },
-});
+}));

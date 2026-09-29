@@ -109,7 +109,10 @@ async def _transcribe(ctx: PipelineContext, capture: Capture) -> None:
 	started = time.perf_counter()
 	audio = await ctx.object_store.get(recording.storage_key)
 	transcript = await ctx.transcriber.transcribe(audio, recording.mime)
+	# Written together, so the words always belong to the text shown (a retry that
+	# transcribes again replaces both).
 	capture.text = transcript.text
+	capture.words = [list(w) for w in transcript.words]
 	if recording.duration_ms is None:
 		recording.duration_ms = transcript.duration_ms
 	log.info(

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Api, Derivation } from "../api";
 import { IconCircle } from "../components";
-import { colors, ui } from "../ui";
+import { useUi } from "../ui";
+import { makeStyles } from "../theme";
 import { DerivationSheet } from "./DerivationSheet";
 
 // Ideas have no date, so they don't belong on the Planner's week. Newest first; the
@@ -21,6 +22,8 @@ export function IdeasScreen({
   onOpenCapture: (id: string) => void;
   onChanged: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [ideas, setIdeas] = useState<Derivation[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -97,8 +100,8 @@ export function IdeasScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   topBar: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 4 },
   title: { fontFamily: "InstrumentSerif_400Regular", fontSize: 30, color: colors.text, marginLeft: 4 },
   card: { backgroundColor: colors.surface, borderRadius: 16, padding: 14, marginBottom: 10 },
-});
+}));

@@ -1,10 +1,12 @@
 import * as AppleAuthentication from "expo-apple-authentication";
 import { useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, ApiError } from "../api";
+import { Wordmark } from "../motion";
 import { type Config, saveSession } from "../config";
-import { colors, ui } from "../ui";
+import { useUi } from "../ui";
+import { makeStyles, useTheme } from "../theme";
 
 // One tap. Apple proves who you are; the server hands back a session that lives in the
 // Keychain (ADR 0019). Nothing to copy from anywhere.
@@ -17,6 +19,9 @@ export function LoginScreen({
   onSignedIn: (token: string) => void;
   onChangeServer: () => void;
 }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { scheme } = useTheme();
   const insets = useSafeAreaInsets();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -61,15 +66,18 @@ export function LoginScreen({
   return (
     <View style={[ui.screen, styles.wrap, { paddingBottom: Math.max(insets.bottom, 24) }]}>
       <View style={{ flex: 1 }} />
-      <Text style={styles.wordmark}>
-        memo<Text style={{ color: colors.record }}>.</Text>
-      </Text>
+      <Wordmark live={busy} size={60} style={{ alignSelf: "center" }} />
       <Text style={styles.tagline}>Say it or type it. It remembers.</Text>
       <View style={{ flex: 1 }} />
       {error && <Text style={[ui.danger, styles.error]}>{error}</Text>}
       <AppleAuthentication.AppleAuthenticationButton
         buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-        buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+        // Apple's rule: the white button on dark backgrounds, the black one on light.
+        buttonStyle={
+          scheme === "dark"
+            ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+            : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+        }
         cornerRadius={28}
         style={[styles.apple, busy && { opacity: 0.5 }]}
         onPress={busy ? () => {} : signIn}
@@ -94,18 +102,11 @@ function deviceTimezone(): string {
   }
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((colors) => ({
   wrap: { paddingHorizontal: 24, alignItems: "stretch" },
-  wordmark: {
-    fontFamily: "InstrumentSerif_400Regular",
-    fontSize: 60,
-    lineHeight: 80,
-    color: colors.text,
-    textAlign: "center",
-  },
   tagline: { color: colors.muted, fontSize: 16, textAlign: "center", marginTop: 4 },
   error: { textAlign: "center", marginBottom: 16 },
   apple: { height: 56, width: "100%" },
   server: { alignSelf: "center", marginTop: 20, padding: 8 },
   serverText: { color: colors.faint, fontSize: 13 },
-});
+}));

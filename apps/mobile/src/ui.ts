@@ -1,27 +1,14 @@
 import { StyleSheet } from "react-native";
+import { makeStyles } from "./theme";
 
 // Forest (docs/brand.md): blacks tinted deep green, cream instead of white, one serif
 // for display text and the system sans for everything else, pills not rectangles.
 // Amber is the single warm accent - the dot in the icon - and it marks what is live:
-// the record button, today, a voice session.
-export const colors = {
-  bg: "#0B1410",
-  surface: "#15221C",
-  surfaceAlt: "#1E2F27",
-  hairline: "#26382F",
-  forest: "#1F5A40",
-  text: "#F1ECDF",
-  muted: "#9FAEA4",
-  faint: "#627368",
-  record: "#E2A04A", // amber: the accent
-  green: "#8FBF96", // moss
-  danger: "#E5645A",
-  dangerSurface: "#2B1A16",
-};
-
+// the record button, today, a voice session. The colours themselves come from the
+// theme (src/theme), so every one of these follows light, dark and a custom palette.
 export const fonts = { serif: "InstrumentSerif_400Regular" };
 
-export const ui = StyleSheet.create({
+export const useUi = makeStyles((colors) => ({
   screen: { flex: 1, backgroundColor: colors.bg },
   pad: { paddingHorizontal: 20 },
   h1: {
@@ -61,4 +48,4 @@ export const ui = StyleSheet.create({
   },
   empty: { color: colors.muted, fontSize: 15, textAlign: "center", lineHeight: 22 },
   danger: { color: colors.danger, fontSize: 14, lineHeight: 20 },
-});
+}));

@@ -1,7 +1,7 @@
 """Export round-trips; deletion leaves nothing retrievable (issue #49)."""
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import pytest
 from fastapi import FastAPI
@@ -191,3 +191,22 @@ async def test_unknown_timezone_is_a_422(client: AsyncClient) -> None:
 		await client.patch("/v1/me", json={"timezone": "Mars/Olympus_Mons"})
 	).status_code == 422
 	assert (await client.get("/v1/me")).json()["timezone"] == "UTC"
+
+
+async def test_me_counts_your_notes_and_only_yours(
+	client: AsyncClient,
+	as_user: Callable[[uuid.UUID], None],
+	second_user: uuid.UUID,
+) -> None:
+	"""The count behind the app's milestones: every note you have, nobody else's."""
+	assert (await client.get("/v1/me")).json()["note_count"] == 0
+	for i in range(3):
+		await client.post(
+			"/v1/captures", json={"text": f"note {i}", "client_token": f"tok-count-{i}"}
+		)
+	assert (await client.get("/v1/me")).json()["note_count"] == 3
+	patched = await client.patch("/v1/me", json={"name": "Akin"})
+	assert patched.json()["note_count"] == 3
+
+	as_user(second_user)
+	assert (await client.get("/v1/me")).json()["note_count"] == 0
