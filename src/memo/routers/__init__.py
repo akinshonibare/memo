@@ -9,6 +9,7 @@ from memo.routers import (
 	habits,
 	me,
 	messages,
+	mindmap,
 	morning,
 	people,
 	push,
@@ -41,3 +42,4 @@ v1.include_router(faith.router)
 v1.include_router(habits.router)
 v1.include_router(push.router)
 v1.include_router(updates.router)
+v1.include_router(mindmap.router)

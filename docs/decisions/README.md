@@ -99,6 +99,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0045](0045-ask-reads-dates-and-people-before-it-searches.md) | Ask reads dates and people from the records before it searches; names go to Deepgram as keyterms | active |
 | [0047](0047-a-morning-push-only-when-the-day-has-something.md) | A morning push, only when the day has something in it: once a day, signed-in phones only, measured from the first send (supersedes 0023) | active |
 | [0048](0048-a-later-note-can-answer-a-prayer-or-carry-on-an-idea.md) | A later note can answer a prayer or carry on an idea: candidates cheaply, a model decides, the author says yes | active |
+| [0049](0049-a-map-of-one-thing.md) | A map of one thing (an ego-graph over existing links), not a map of everything | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

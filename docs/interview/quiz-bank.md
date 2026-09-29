@@ -98,6 +98,8 @@ only way to find that out is to ask when Akin isn't braced for it.
 43. A new note says "got the offer!" and an old prayer is about the job. Walk through how
     memo connects them, why similarity alone isn't enough, and why it asks instead of
     marking the prayer answered (ADR 0048).
+44. Why is memo's map an ego-graph and not a graph of everything? What does it give
+    up (ADR 0049)?
 
 ---
 

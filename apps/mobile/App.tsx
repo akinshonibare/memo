@@ -16,7 +16,7 @@ import { haptic } from "./src/haptics";
 import { preparePhoto } from "./src/photo";
 import { publishRecord } from "./src/widgets";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { Api, type Me, type Space } from "./src/api";
+import { Api, type MapKind, type Me, type Space } from "./src/api";
 import { type Config, clearSession, loadConfig, loadOnboarded, saveOnboarded } from "./src/config";
 import { LockCover, LockProvider, useLock } from "./src/lock";
 import { FirefliesHost } from "./src/motion";
@@ -31,6 +31,7 @@ import { HabitScreen } from "./src/screens/HabitScreen";
 import { HabitsScreen } from "./src/screens/HabitsScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { IdeasScreen } from "./src/screens/IdeasScreen";
+import { MapScreen } from "./src/screens/MapScreen";
 import { PlannerScreen } from "./src/screens/PlannerScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
@@ -74,6 +75,7 @@ export type Routes = {
   Faith: undefined;
   Habits: undefined;
   Habit: { id: string };
+  Map: { kind: MapKind; id: string };
 };
 const Stack = createNativeStackNavigator<Routes>();
 const nav = createNavigationContainerRef<Routes>();
@@ -416,6 +418,19 @@ function Root() {
                   onBack={() => navigation.goBack()}
                   onOpenCapture={openNote}
                   onChanged={bump}
+                  onMap={(id) => navigation.push("Map", { kind: "idea", id })}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Map">
+              {({ navigation, route }) => (
+                <MapScreen
+                  api={api}
+                  start={route.params}
+                  translation={me?.bible_translation}
+                  onBack={() => navigation.goBack()}
+                  onOpenNote={openNote}
+                  onOpenPerson={openPerson}
                 />
               )}
             </Stack.Screen>
@@ -443,6 +458,7 @@ function Root() {
                   // which no longer exists.
                   onOpenPerson={(id) => navigation.replace("Person", { id })}
                   onChanged={bump}
+                  onMap={() => navigation.push("Map", { kind: "person", id: route.params.id })}
                   habits={!!me?.habits_enabled}
                 />
               )}
@@ -501,6 +517,7 @@ function Root() {
                   // A related note replaces this one: back still returns where you came from.
                   onOpen={(id) => navigation.replace("Detail", { id })}
                   onOpenPerson={openPerson}
+                  onMap={() => navigation.push("Map", { kind: "note", id: route.params.id })}
                   faith={!!me?.faith_enabled}
                   translation={me?.bible_translation}
                 />
