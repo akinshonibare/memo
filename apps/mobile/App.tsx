@@ -545,7 +545,18 @@ function Root() {
           }}
         />
       )}
-      {api && record && <RecordSheet api={api} space={space} onClose={() => setRecord(false)} onSaved={bump} />}
+      {api && record && (
+        <RecordSheet
+          api={api}
+          space={space}
+          onClose={() => setRecord(false)}
+          onSaved={bump}
+          onType={() => {
+            setRecord(false);
+            setCompose(true);
+          }}
+        />
+      )}
       {api && compose && (
         <ComposeSheet
           api={api}
