@@ -3,10 +3,9 @@ hybrid retrieval as Ask - keyword and vector, fused with RRF - instead of substr
 match on the client. No model call beyond embedding the query."""
 
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from memo.auth import CurrentUser
@@ -20,20 +19,27 @@ from memo.services.retrieval import search as retrieve
 router = APIRouter(prefix="/search", tags=["search"])
 
 
+class SearchIn(BaseModel):
+	# In the body, not the URL: a query is a fragment of someone's notes, and URLs end
+	# up in proxy and access logs.
+	q: str = Field(min_length=2, max_length=300)
+	limit: int = Field(default=15, ge=1, le=30)
+
+
 class SearchHit(BaseModel):
 	snippet: str
 	capture: CaptureOut | None  # the note
 	derivation: DerivationOut | None  # or an item whose note was deleted (ADR 0022)
 
 
-@router.get("", response_model=list[SearchHit], dependencies=[Depends(limit_search)])
+@router.post("", response_model=list[SearchHit], dependencies=[Depends(limit_search)])
 async def search(
+	body: SearchIn,
 	request: Request,
 	session: DbSession,
 	user_id: CurrentUser,
-	q: Annotated[str, Query(min_length=2, max_length=300)],
-	limit: Annotated[int, Query(ge=1, le=30)] = 15,
 ) -> list[SearchHit]:
+	q, limit = body.q, body.limit
 	result = await retrieve(
 		session,
 		user_id=user_id,

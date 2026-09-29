@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Api, type CaptureDetail, type Derivation } from "../api";
+import { Api, type Capture, type CaptureDetail, type Derivation } from "../api";
 import { AskBar, IconCircle, Pill, confirmDelete } from "../components";
 import { ACTIVE_STATUSES, formatClock, formatDue, formatStamp, formatWhen, headline, statusLabel } from "../format";
 import { playUrl, stopPlayback, usePlayingId } from "../playback";
@@ -51,14 +51,20 @@ export function DetailScreen({
   onBack,
   onAsk,
   onChanged,
+  onOpen,
 }: {
   api: Api;
   id: string;
   onBack: () => void;
   onAsk: () => void;
   onChanged: () => void;
+  onOpen: (id: string) => void;
 }) {
   const insets = useSafeAreaInsets();
+
+  // Notes about the same thing (ADR 0028), once this one is indexed. Quiet by design:
+  // the server shows nothing rather than something weakly related.
+  const [related, setRelated] = useState<{ capture: Capture; similarity: number }[]>([]);
   const [capture, setCapture] = useState<CaptureDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -101,6 +107,19 @@ export function DetailScreen({
       if (timer) clearInterval(timer);
     };
   }, [load, active]);
+
+  const ready = capture?.status === "ready";
+  useEffect(() => {
+    if (!ready) return;
+    let live = true;
+    api
+      .related(id)
+      .then((rows) => live && setRelated(rows))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [api, id, ready]);
 
   const review = async (d: Derivation, status: "confirmed" | "rejected") => {
     haptic.pick();
@@ -244,6 +263,23 @@ export function DetailScreen({
         {capture?.status === "ready" && capture.derivations.length === 0 && (
           <Text style={[ui.bodyMuted, { marginTop: 28 }]}>Nothing to extract from this one.</Text>
         )}
+        {related.length > 0 && (
+          <View style={styles.section}>
+            <Text style={ui.label}>Related notes</Text>
+            {related.map(({ capture: other }) => (
+              <Pressable
+                key={other.id}
+                onPress={() => onOpen(other.id)}
+                style={({ pressed }) => [styles.relatedRow, pressed && { opacity: 0.6 }]}
+              >
+                <Text style={ui.meta}>{formatStamp(other.created_at)}</Text>
+                <Text style={styles.relatedTitle} numberOfLines={2}>
+                  {headline(other).title}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
         {capture?.status === "ready" && (
           <View style={styles.add}>
             <Pill
@@ -348,6 +384,8 @@ const styles = StyleSheet.create({
   },
   actions: { flexDirection: "row", gap: 10, marginTop: 14 },
   add: { flexDirection: "row", marginTop: 20 },
+  relatedRow: { paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.hairline },
+  relatedTitle: { color: colors.text, fontSize: 16, marginTop: 2 },
   bottom: {
     position: "absolute",
     left: 20,

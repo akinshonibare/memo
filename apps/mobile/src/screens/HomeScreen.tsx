@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -29,6 +29,7 @@ export function HomeScreen({
   refreshKey,
   onOpen,
   onPlanner,
+  onReview,
   onAsk,
   onRecord,
   onCompose,
@@ -39,6 +40,7 @@ export function HomeScreen({
   refreshKey: number;
   onOpen: (id: string) => void;
   onPlanner: () => void;
+  onReview: () => void;
   onAsk: () => void;
   onRecord: () => void;
   onCompose: () => void;
@@ -72,9 +74,37 @@ export function HomeScreen({
   }, [refresh, anyActive, refreshKey]);
 
   const q = query.trim().toLowerCase();
-  const shown = q
+  const typed = q
     ? captures.filter((c) => (c.text ?? "").toLowerCase().includes(q))
     : captures;
+
+  // Search by meaning (ADR 0028): instant on-device filtering while typing, then the
+  // server's ranked results after a pause. A slower, older response never overwrites
+  // a newer one.
+  const [ranked, setRanked] = useState<Capture[] | null>(null);
+  const latest = useRef("");
+  useEffect(() => {
+    const term = query.trim();
+    latest.current = term;
+    const timer = setTimeout(
+      async () => {
+        if (term.length < 2) {
+          setRanked(null);
+          return;
+        }
+        try {
+          const hits = await api.search(term);
+          if (latest.current !== term) return;
+          setRanked(hits.flatMap((h) => (h.capture ? [h.capture] : [])));
+        } catch {
+          if (latest.current === term) setRanked(null); // keep the typed filter
+        }
+      },
+      term.length < 2 ? 0 : 350,
+    );
+    return () => clearTimeout(timer);
+  }, [query, api]);
+  const shown = q && ranked ? ranked : typed;
 
   const playingId = usePlayingId();
   const togglePlay = async (c: Capture) => {
@@ -140,6 +170,7 @@ export function HomeScreen({
       <View style={[styles.topBar, ui.pad]}>
         <Avatar name={name} size={44} onPress={onSettings} />
         <View style={{ flex: 1 }} />
+        <IconCircle name="reader-outline" onPress={onReview} />
         <IconCircle name="calendar-outline" onPress={onPlanner} />
       </View>
       <Text style={[ui.h1, ui.pad, styles.wordmark]}>

@@ -19,9 +19,10 @@ import { LoginScreen } from "./src/screens/LoginScreen";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
 import { RecordSheet } from "./src/screens/RecordSheet";
 import { ProfileSheet } from "./src/screens/ProfileScreen";
+import { ReviewScreen } from "./src/screens/ReviewScreen";
 import { colors } from "./src/ui";
 
-type Back = "home" | "planner" | "ideas";
+type Back = "home" | "planner" | "ideas" | "review";
 
 // memo://record, memo://write, memo://ask: what an iOS Shortcut opens, so the Action
 // Button or a Siri phrase goes straight to a capture (ADR 0027).
@@ -174,6 +175,7 @@ export default function App() {
             refreshKey={refreshKey}
             onOpen={(id) => setView({ name: "detail", id, back: "home" })}
             onPlanner={() => setView({ name: "planner" })}
+            onReview={() => setView({ name: "review" })}
             onAsk={() => setAsk(true)}
             onRecord={() => setRecord(true)}
             onCompose={() => setCompose(true)}
@@ -191,6 +193,14 @@ export default function App() {
             onChanged={bump}
           />
         )}
+        {api && view.name === "review" && (
+          <ReviewScreen
+            api={api}
+            onBack={() => setView({ name: "home" })}
+            onOpenCapture={(id) => setView({ name: "detail", id, back: "review" })}
+            onChanged={bump}
+          />
+        )}
         {api && view.name === "ideas" && (
           <IdeasScreen
             api={api}
@@ -202,11 +212,13 @@ export default function App() {
         )}
         {api && view.name === "detail" && (
           <DetailScreen
+            key={view.id}
             api={api}
             id={view.id}
             onBack={() => setView({ name: view.back })}
             onAsk={() => setAsk(true)}
             onChanged={bump}
+            onOpen={(id) => setView({ name: "detail", id, back: view.back })}
           />
         )}
         {api && (

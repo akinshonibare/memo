@@ -94,6 +94,19 @@ export type Voice = { id: string; label: string };
 
 export type Usage = { window_days: number; total_cost_usd: string };
 
+export type SearchHit = { snippet: string; capture: Capture | null; derivation: Derivation | null };
+
+export type Week = {
+  start: string;
+  end: string;
+  captured: { notes: number; voice: number; photos: number };
+  done: Derivation[];
+  still_open: Derivation[];
+  still_open_total: number;
+  coming_up: Derivation[];
+  new_ideas: Derivation[];
+};
+
 export class Api {
   // Called once when the server says the session is gone (401): the app signs out.
   onUnauthorized: (() => void) | null = null;
@@ -247,6 +260,23 @@ export class Api {
         client_token: Crypto.randomUUID(),
       }),
     });
+  }
+
+  // Meaning search over everything (ADR 0028), the same retrieval Ask uses.
+  // The query goes in the body: it is a piece of your notes, and URLs get logged.
+  search(q: string) {
+    return this.request<SearchHit[]>("/v1/search", {
+      method: "POST",
+      body: JSON.stringify({ q, limit: 20 }),
+    });
+  }
+
+  related(captureId: string) {
+    return this.request<{ capture: Capture; similarity: number }[]>(`/v1/captures/${captureId}/related`);
+  }
+
+  weekReview(weeksAgo = 0) {
+    return this.request<Week>(`/v1/review/week?weeks_ago=${weeksAgo}`);
   }
 
   listCaptures(limit = 50) {

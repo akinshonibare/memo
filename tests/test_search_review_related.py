@@ -51,10 +51,10 @@ async def test_search_ranks_by_meaning_and_returns_notes(
 	client: AsyncClient, session: AsyncSession
 ) -> None:
 	ids = await _notes(client, session)
-	hits = (await client.get("/v1/search", params={"q": "dentist appointment"})).json()
+	hits = (await client.post("/v1/search", json={"q": "dentist appointment"})).json()
 	assert hits and hits[0]["capture"]["id"] == ids[2]
 	assert "dentist" in hits[0]["snippet"]
-	assert (await client.get("/v1/search", params={"q": "a"})).status_code == 422
+	assert (await client.post("/v1/search", json={"q": "a"})).status_code == 422
 
 
 async def test_related_notes_are_the_nearest_others(
