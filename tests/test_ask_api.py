@@ -211,6 +211,58 @@ async def test_a_rate_limit_is_said_plainly_not_as_the_providers_billing_text(
 	assert "Try again in a minute" in events[-1][1]["message"]
 
 
+def test_both_spellings_of_a_rate_limit_are_said_plainly() -> None:
+	from memo.services.ask import RATE_LIMITED, _for_the_user
+
+	for raw in (
+		'HTTP 429: {"detail":"add a payment method"}',
+		"anthropic 429: Your credit balance is too low",
+	):
+		assert _for_the_user(RetryableError(raw)) == RATE_LIMITED
+	assert _for_the_user(TerminalError("anthropic 400: bad")) == "anthropic 400: bad"
+
+
+async def test_a_logged_contact_is_not_described_as_from_a_deleted_note(
+	client: AsyncClient, session: AsyncSession, app: FastAPI
+) -> None:
+	ctx = PipelineContext(
+		session=session,
+		transcriber=FakeTranscriber(),
+		object_store=FakeObjectStore(),
+		extractor=FakeExtractor(),
+		embedder=FakeEmbedder(),
+		people=FakePeopleReader(PeopleExtraction(people=[MentionPayload(name="Kemi")])),
+	)
+	created = await client.post(
+		"/v1/captures", json={"text": "Kemi", "client_token": "tok-ask-kemi"}
+	)
+	await process_capture(ctx, uuid.UUID(created.json()["id"]), SEED_USER_ID)
+	(kemi,) = (await client.get("/v1/people")).json()["people"]
+	await client.post(f"/v1/people/{kemi['id']}/contact", json={})
+	# The contact's own chunk is embedded by a job; run it here.
+	from memo.services.derivation_index import reembed_derivation
+
+	async with app.state.session_factory() as s:
+		await bind_user(s, SEED_USER_ID)
+		logged = await s.scalar(
+			text(
+				"SELECT id FROM derivations WHERE status = 'user_created' "
+				"AND kind = 'mention'"
+			)
+		)
+		await reembed_derivation(s, app.state.embedder, logged, SEED_USER_ID)
+		await s.commit()
+	answers = FakeAnswerProvider()
+	app.state.answer_provider = answers
+	accepted = await _ask(client, "when was I last in touch with Kemi?")
+	await _events(client, accepted["stream_url"])
+
+	prompt = str(answers.last_messages[-1]["content"])
+	assert "person: Kemi" in prompt
+	assert "added by hand, not from a note" in prompt
+	assert "the note this came from was deleted" not in prompt
+
+
 async def test_a_bug_mid_answer_is_a_failed_row_not_a_cut_stream(
 	client: AsyncClient, corpus: list[uuid.UUID], app: FastAPI
 ) -> None:

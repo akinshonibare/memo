@@ -8,6 +8,7 @@ the system, so the model is never asked to produce one (design doc, Step 3).
 
 import asyncio
 import datetime as dt
+import re
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -312,6 +313,9 @@ async def _notes(
 	}
 	by_capture: dict[uuid.UUID, list[str]] = {}
 	by_id: dict[uuid.UUID, str] = {}
+	# Who wrote an item that has no note: the extractor (so its note was deleted), or
+	# the person, by hand (a Planner item, a "Spoke to them") - never from a note.
+	by_hand: set[uuid.UUID] = set()
 	if capture_ids or orphan_ids:
 		rows = await session.scalars(
 			select(Derivation)
@@ -349,6 +353,8 @@ async def _notes(
 				person=names.get(d.person_id) if d.person_id is not None else None,
 			)
 			by_id[d.id] = line
+			if d.status == "user_created":
+				by_hand.add(d.id)
 			if d.capture_id is not None:
 				by_capture.setdefault(d.capture_id, []).append(line)
 	notes = []
@@ -364,7 +370,9 @@ async def _notes(
 				answer_v2.Note(
 					i,
 					h.created_at,
-					"(the note this came from was deleted)",
+					"(added by hand, not from a note)"
+					if h.derivation_id in by_hand
+					else "(the note this came from was deleted)",
 					[by_id[h.derivation_id]],
 				)
 			)
@@ -380,7 +388,11 @@ RATE_LIMITED = "An AI provider is rate-limiting memo right now. Try again in a m
 def _for_the_user(exc: RetryableError | TerminalError) -> str:
 	"""What the app shows. A provider's own 429 text - quotas, billing pages - is for
 	the logs, not for the person asking; other reasons are kept, they say what to do."""
-	if isinstance(exc, RetryableError) and str(exc).startswith("HTTP 429"):
+	# Two spellings: "HTTP 429" from an HTTP provider (classify_status, e.g. the
+	# embedder), "anthropic 429" from the Claude SDK (_map_error).
+	if isinstance(exc, RetryableError) and re.match(
+		r"(HTTP|anthropic) 429\b", str(exc)
+	):
 		return RATE_LIMITED
 	return str(exc)
 
