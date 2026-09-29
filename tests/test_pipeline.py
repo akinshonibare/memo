@@ -168,7 +168,8 @@ async def test_audio_capture_becomes_text_and_ready(
 		("transcribe", "succeeded", 1),
 		("extract", "succeeded", 1),
 		("people", "succeeded", 1),
-		# Faith (ADR 0042) is off: both stages record a skip, and cost nothing.
+		# Faith (ADR 0042) is off: both stages record a skip, and cost nothing. Habits
+		# (ADR 0043) is off too and leaves no row, so turning it on reads the note then.
 		("faith", "succeeded", 1),
 		("scripture", "succeeded", 1),
 		("embed", "succeeded", 1),

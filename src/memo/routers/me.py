@@ -20,6 +20,7 @@ from memo.models import (
 	Conversation,
 	Derivation,
 	FaithReading,
+	Habit,
 	Message,
 	Person,
 	Recording,
@@ -53,6 +54,7 @@ class MeOut(BaseModel):
 	# Faith (ADR 0042): off by default. The translation Bible links open in.
 	faith_enabled: bool = False
 	bible_translation: str = "NIV"
+	habits_enabled: bool = False  # ADR 0043
 
 
 class MePatch(BaseModel):
@@ -72,6 +74,7 @@ class MePatch(BaseModel):
 	bible_translation: (
 		Literal["NIV", "ESV", "KJV", "NKJV", "NLT", "CSB", "NASB", "MSG"] | None
 	) = None
+	habits_enabled: bool | None = None
 
 	@field_validator("timezone")
 	@classmethod
@@ -104,8 +107,8 @@ class MePatch(BaseModel):
 	def _something(self) -> "MePatch":
 		if not self.model_fields_set:
 			raise ValueError(
-				"provide timezone, name, voice, auto_accept, faith_enabled or "
-				"bible_translation"
+				"provide timezone, name, voice, auto_accept, faith_enabled, "
+				"bible_translation or habits_enabled"
 			)
 		return self
 
@@ -159,6 +162,15 @@ async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> 
 		user.faith_enabled = body.faith_enabled
 	if "bible_translation" in fields and body.bible_translation is not None:
 		user.bible_translation = body.bible_translation
+	if "habits_enabled" in fields:
+		if body.habits_enabled is None:
+			raise HTTPException(
+				status.HTTP_422_UNPROCESSABLE_CONTENT,
+				"habits_enabled must be true or false",
+			)
+		# On: the next note is read for what you did, and a background sweep reads the
+		# last 60 days. Off: nothing is read; what was found and tracked stays.
+		user.habits_enabled = body.habits_enabled
 	await session.flush()
 	return await _me_out(session, user)
 
@@ -215,6 +227,17 @@ class FaithReadingExport(BaseModel):
 	read_at: dt.datetime
 
 
+class HabitExport(BaseModel):
+	model_config = ConfigDict(from_attributes=True)
+
+	key: str
+	name: str
+	source: str
+	status: str
+	target_per_week: int | None
+	created_at: dt.datetime
+
+
 class Export(BaseModel):
 	exported_at: dt.datetime
 	user_id: uuid.UUID
@@ -228,6 +251,8 @@ class Export(BaseModel):
 	people: list[PersonExport] = []
 	# The reading plan's progress (ADR 0042). Prayers are derivations, above.
 	faith_readings: list[FaithReadingExport] = []
+	# Habits tracked or dismissed (ADR 0043); what counted is the activities above.
+	habits: list[HabitExport] = []
 
 
 @router.get("/export", response_model=Export)
@@ -336,6 +361,16 @@ async def export_everything(
 				)
 			).all()
 		],
+		habits=[
+			HabitExport.model_validate(h)
+			for h in (
+				await session.scalars(
+					select(Habit)
+					.where(Habit.user_id == user_id)
+					.order_by(Habit.created_at)
+				)
+			).all()
+		],
 	)
 
 
@@ -412,6 +447,7 @@ async def _purge(
 		"morning_views",
 		"llm_calls",
 		"faith_readings",
+		"habits",
 	):
 		result = cast(
 			CursorResult[Any],

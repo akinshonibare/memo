@@ -25,8 +25,8 @@ from memo.schemas.captures import (
 	CapturePage,
 )
 from memo.schemas.derivations import (
-	FAITH_KINDS,
 	MENTION,
+	NOT_ITEMS,
 	PASSAGE,
 	DerivationCreate,
 	DerivationOut,
@@ -289,9 +289,7 @@ async def get_capture(
 	return CaptureDetail(
 		**item.model_dump(),
 		derivations=[
-			DerivationOut.model_validate(d)
-			for d in rows
-			if d.kind != MENTION and d.kind not in FAITH_KINDS
+			DerivationOut.model_validate(d) for d in rows if d.kind not in NOT_ITEMS
 		],
 		people=people_out,
 		words=capture.words,

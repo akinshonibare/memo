@@ -14,9 +14,9 @@ from memo.pagination import decode_cursor, encode_cursor
 from memo.routers.captures import get_queue
 from memo.schemas.derivations import (
 	DERIVATION_STATUSES,
-	FAITH_KINDS,
 	KINDS,
 	MENTION,
+	NOT_ITEMS,
 	UNREVIEWED,
 	DerivationCreate,
 	DerivationOut,
@@ -130,11 +130,12 @@ async def review_derivation(
 		raise HTTPException(
 			status.HTTP_422_UNPROCESSABLE_CONTENT, "review a mention at /v1/mentions"
 		)
-	if derivation.kind in FAITH_KINDS:
-		# Prayers and passages (ADR 0042) are answered and found, not reviewed.
+	if derivation.kind in NOT_ITEMS:
+		# Prayers and passages (ADR 0042) and activities (ADR 0043) are answered,
+		# found and counted, not reviewed as items.
 		raise HTTPException(
 			status.HTTP_422_UNPROCESSABLE_CONTENT,
-			"change a prayer at /v1/faith/prayers",
+			"change a prayer at /v1/faith, an activity at /v1/habits",
 		)
 	if body.completed is not None:
 		if derivation.kind != "todo":
