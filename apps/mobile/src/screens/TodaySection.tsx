@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import { AppState, type GestureResponderEvent, Pressable, Text, useWindowDimensions, View } from "react-native";
 import Animated from "react-native-reanimated";
-import type { Api, MorningView, OnThisDay, ReachOut } from "../api";
+import type { Api, HabitPrompt, MorningView, OnThisDay, ReachOut } from "../api";
 import { TickCircle } from "../components";
 import { formatAgo, formatDay, formatTime, headline, lookBack } from "../format";
 import { haptic } from "../haptics";
@@ -66,6 +66,10 @@ export function TodaySection({
   onTick,
   onSpoke,
   onNotNow,
+  onTrackHabit,
+  onDismissHabit,
+  onLogHabit,
+  onOpenHabits,
 }: {
   view: MorningView;
   onOpen: (captureId: string) => void;
@@ -73,6 +77,10 @@ export function TodaySection({
   onTick: (todoId: string) => Promise<void>;
   onSpoke: (personId: string) => Promise<void>;
   onNotNow: (personId: string) => Promise<void>;
+  onTrackHabit: (prompt: HabitPrompt) => Promise<void>;
+  onDismissHabit: (key: string) => Promise<void>;
+  onLogHabit: (habitId: string) => Promise<void>;
+  onOpenHabits: () => void;
 }) {
   const ui = useUi();
   const styles = useStyles();
@@ -84,9 +92,12 @@ export function TodaySection({
   // back rather than staying hidden.
   const [done, setDone] = useState<Set<string>>(new Set());
   const [acted, setActed] = useState<Map<string, "ticked" | "gone">>(new Map());
+  // The habit line, gone at once when answered, until a view arrives without it.
+  const [habitDone, setHabitDone] = useState<string | null>(null);
   const [seen, setSeen] = useState(view);
   if (seen !== view) {
     setSeen(view);
+    if (habitDone !== (view.habit?.key ?? null)) setHabitDone(null);
     const todoIds = new Set(view.todos.map((t) => t.id));
     const personIds = new Set((view.reach_out ?? []).map((r) => r.person_id));
     setActed((prev) => new Map([...prev].filter(([id]) => todoIds.has(id))));
@@ -100,7 +111,9 @@ export function TodaySection({
   const idea = view.resurfaced_idea;
   const lookedBack = view.on_this_day ?? null;
   const people = (view.reach_out ?? []).filter((r) => !done.has(r.person_id));
-  const empty = events.length === 0 && todos.length === 0 && !idea && !lookedBack && people.length === 0;
+  const habit = view.habit && view.habit.key !== habitDone ? view.habit : null;
+  const empty =
+    events.length === 0 && todos.length === 0 && !idea && !lookedBack && people.length === 0 && !habit;
   if (empty) return null;
 
   const act = (r: ReachOut, action: (id: string) => Promise<void>) => {
@@ -112,6 +125,11 @@ export function TodaySection({
         return next;
       }),
     );
+  };
+
+  const answerHabit = (key: string, action: () => Promise<void>) => {
+    setHabitDone(key);
+    action().catch(() => setHabitDone(null));
   };
 
   const tick = (id: string, e: GestureResponderEvent) => {
@@ -191,6 +209,47 @@ export function TodaySection({
         </Pressable>
       )}
       {lookedBack && <LookBack note={lookedBack} today={view.local_date} onOpen={onOpen} />}
+      {habit && (
+        <View style={[styles.card, styles.people]}>
+          <Pressable onPress={onOpenHabits} style={({ pressed }) => pressed && styles.pressed}>
+            <Text style={ui.meta}>{habit.kind === "suggest" ? "A habit?" : "Habits"}</Text>
+            <Text style={ui.rowTitle}>{habit.name}</Text>
+            <Text style={ui.bodyMuted}>
+              {habit.kind === "suggest"
+                ? `Noticed on ${habit.days} days in the last three weeks. Keep track of it?`
+                : `Last time ${habit.last_done ? formatAgo(habit.last_done) : "a while ago"}.`}
+            </Text>
+          </Pressable>
+          <View style={styles.personActions}>
+            <Pressable
+              onPress={(e) => {
+                haptic.done();
+                celebrateAt(e);
+                answerHabit(habit.key, () =>
+                  habit.kind === "suggest" || !habit.habit_id ? onTrackHabit(habit) : onLogHabit(habit.habit_id),
+                );
+              }}
+              style={({ pressed }) => [styles.pill, styles.pillLight, pressed && styles.pressed]}
+            >
+              <Ionicons name={habit.kind === "suggest" ? "add" : "checkmark"} size={16} color={colors.bg} />
+              <Text style={[styles.pillText, { color: colors.bg }]}>
+                {habit.kind === "suggest" ? "Track it" : "Did it today"}
+              </Text>
+            </Pressable>
+            {habit.kind === "suggest" && (
+              <Pressable
+                onPress={() => {
+                  haptic.tap();
+                  answerHabit(habit.key, () => onDismissHabit(habit.key));
+                }}
+                style={({ pressed }) => [styles.pill, pressed && styles.pressed]}
+              >
+                <Text style={styles.pillText}>Not now</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      )}
       {people.length > 0 && (
         <View style={[styles.card, styles.people]}>
           <Text style={ui.meta}>Maybe get in touch</Text>

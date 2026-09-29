@@ -147,7 +147,10 @@ at [#6](https://github.com/akinshonibare/memo/issues/6), not [#7](https://github
 ---
 
 ### Q11 — Habit tracking, without a streak
-**Open.** Akin named it as the next feature after Faith ([ADR 0042](decisions/0042-faith-a-space-of-its-own.md)), 2026-09-29.
+**Resolved 2026-09-29 → [ADR 0043](decisions/0043-habits-noticed-not-logged.md)**: habits are
+noticed in notes by a reader with its own eval, suggested once they repeat, counted by
+rhythm (days a week, the last time, eight weeks), with time with family and Bible reading
+computed from People and Faith. No Apple Health. The original framing, kept for the record:
 
 The industry default for habits *is* the streak (Streaks, Duolingo, Habitica): a chain
 that a missed day breaks. memo has refused to keep score twice ([ADR 0029](decisions/0029-people-last-contact-and-reach-out.md):

@@ -124,3 +124,41 @@ def test_harvest_labels_only_finished_reviews() -> None:
 	assert candidate(capture(), "UTC") is None, "nothing reviewed"
 	nothing = candidate(capture(rejected), "UTC")
 	assert nothing is not None and nothing["expected"] == {}
+
+
+def test_habits_scoring_counts_days_and_pairs_each_day_with_its_own() -> None:
+	import datetime as dt
+
+	from evals.habits.run import load_golden as load_habits
+	from evals.habits.scoring import Expected
+	from evals.habits.scoring import score_example as score_habits
+	from memo.schemas.habits import ActivityFound, HabitsExtraction
+
+	def did(*found: tuple[str, str]) -> HabitsExtraction:
+		return HabitsExtraction(
+			activities=[
+				ActivityFound(key=k, label=k, occurred_on=dt.date.fromisoformat(on))
+				for k, on in found
+			]
+		)
+
+	week = [
+		Expected.model_validate({"key": "gym", "on": d})
+		for d in ("2026-09-21", "2026-09-23")
+	]
+	# The same day twice is one day, as the app counts it; order doesn't matter.
+	right = score_habits(
+		week, did(("gym", "2026-09-23"), ("gym", "2026-09-21"), ("gym", "2026-09-21"))
+	)
+	assert (right.tp, right.fp, right.fn, right.dates_right) == (2, 0, 0, 2)
+	off = score_habits(week[:1], did(("gym", "2026-09-22")))
+	assert (off.tp, off.dates_right) == (1, 0), "right activity, wrong day"
+	plan = score_habits([], did(("gym", "2026-09-28")))
+	assert plan.fp == 1
+	either = Expected.model_validate(
+		{"key": "sport", "on": "2026-09-26", "or": ["football"]}
+	)
+	assert score_habits([either], did(("football", "2026-09-26"))).tp == 1
+	golden = load_habits()
+	assert len(golden) >= 30
+	assert sum(1 for e in golden if not e.expected) >= 10, "plenty of traps"

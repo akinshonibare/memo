@@ -30,7 +30,13 @@ PASSAGE = "passage"
 FAITH_KINDS: tuple[str, ...] = (PRAYER, PASSAGE)
 # Kinds that may name a person: who a note is about, and who a prayer is for.
 PERSON_KINDS: tuple[str, ...] = (MENTION, PRAYER)
-ALL_KINDS: tuple[str, ...] = (*KINDS, MENTION, *FAITH_KINDS)
+# Something the author did (ADR 0043): "gym this morning". Counted towards habits, and,
+# like mentions and faith rows, never an item or embedded.
+ACTIVITY = "activity"
+# Rows that are not items: the generic item routes, the Planner and the phone never see
+# them, and they are not embedded for Ask.
+NOT_ITEMS: tuple[str, ...] = (MENTION, *FAITH_KINDS, ACTIVITY)
+ALL_KINDS: tuple[str, ...] = (*KINDS, MENTION, *FAITH_KINDS, ACTIVITY)
 # pending_review: extracted, waiting for a look. confirmed: a person checked it.
 # rejected: a person said no. user_created: a person added it. accepted: kept without
 # a look, because the user turned on auto-accept (ADR 0030) - never a label for evals.

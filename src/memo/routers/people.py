@@ -32,6 +32,7 @@ from memo.schemas.people import (
 )
 from memo.services.derivation_index import enqueue_reembed
 from memo.services.faith import faith_hidden, live_prayers, prayer_out
+from memo.services.habits import is_family
 from memo.services.morning import tz_or_utc
 from memo.services.people import (
 	collapse_duplicates,
@@ -79,6 +80,7 @@ def _person_out(
 		mention_count=counts.get(p.id, 0),
 		due=is_due(p, lasts.get(p.id), today),
 		created_at=p.created_at,
+		family=is_family(p),
 	)
 
 
@@ -258,6 +260,8 @@ async def update_person(
 		person.reach_out_every_days = body.reach_out_every_days
 	if "snoozed_until" in fields:
 		person.snoozed_until = body.snoozed_until
+	if "family" in fields:
+		person.family = body.family
 	await session.flush()
 	today, _ = await _today(session, user_id)
 	return _person_out(

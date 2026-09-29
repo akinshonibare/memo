@@ -23,7 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.ids import uuid7
 from memo.models import Capture, Derivation, MorningView, Resurfacing, User
+from memo.schemas.habits import HabitPrompt
 from memo.schemas.people import ReachOut
+from memo.services.habits import todays_prompt
 from memo.services.people import reach_out
 
 log = structlog.get_logger("memo.morning")
@@ -82,6 +84,9 @@ class MorningViewOut(BaseModel):
 	# A note from this day in another year, or six months or a month ago (ADR 0040).
 	# Read live like the items, and defaulted for views stored before it existed.
 	on_this_day: OnThisDay | None = None
+	# Today's one habit line (ADR 0043): a suggestion, or a nudge. Live, and only while
+	# Habits is on.
+	habit: HabitPrompt | None = None
 
 
 LOOK_BACK_YEARS = 10
@@ -331,6 +336,7 @@ async def build_morning_view(
 		built_at=now,
 		reach_out=people,
 		on_this_day=looked_back,
+		habit=await todays_prompt(session, user, now=now) if user else None,
 	)
 	payload: dict[str, Any] = view.model_dump(mode="json")
 	await session.execute(
@@ -397,5 +403,6 @@ async def todays_view(
 			"resurfaced_idea": idea,
 			"reach_out": people,
 			"on_this_day": looked_back,
+			"habit": await todays_prompt(session, user, now=now) if user else None,
 		}
 	)

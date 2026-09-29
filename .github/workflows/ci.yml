@@ -117,6 +117,10 @@ jobs:
         # Recorded like people (needs ANTHROPIC_API_KEY; Railway's worker has it):
         #   railway run -s worker -- uv run python -m evals.faith.run --record evals/faith/recorded.json
         run: uv run python -m evals.faith.run --replay evals/faith/recorded.json
+      - name: habits reading (recorded outputs)
+        # Recorded like faith (needs ANTHROPIC_API_KEY; Railway's worker has it):
+        #   railway run -s worker -- uv run python -m evals.habits.run --record evals/habits/recorded.json
+        run: uv run python -m evals.habits.run --replay evals/habits/recorded.json
 
   app:
     # The Expo app: a clean `npm ci` (what EAS runs first - a broken peer dependency

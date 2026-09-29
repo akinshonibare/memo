@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.ids import uuid7
 from memo.models import Chunk, Derivation
-from memo.schemas.derivations import FAITH_KINDS
+from memo.schemas.derivations import FAITH_KINDS, NOT_ITEMS
 from memo.services.embeddings import Embedder
 from memo.services.queue import Queue
 
@@ -105,8 +105,9 @@ async def reembed_derivation(
 		return "gone"
 	if derivation.status == "rejected":
 		return "rejected"  # the reject path already superseded its chunk
-	if derivation.kind in FAITH_KINDS:
-		return "faith"  # prayers and passages are never embedded (ADR 0042)
+	if derivation.kind in NOT_ITEMS and derivation.kind not in ("mention",):
+		# Prayers, passages (ADR 0042) and activities (ADR 0043) are never embedded.
+		return "faith" if derivation.kind in FAITH_KINDS else "activity"
 
 	body = derivation_text(derivation)
 	live = (

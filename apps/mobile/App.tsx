@@ -26,6 +26,8 @@ import { AskSheet } from "./src/screens/AskScreen";
 import { ComposeSheet } from "./src/screens/ComposeSheet";
 import { DetailScreen } from "./src/screens/DetailScreen";
 import { FaithScreen } from "./src/screens/FaithScreen";
+import { HabitScreen } from "./src/screens/HabitScreen";
+import { HabitsScreen } from "./src/screens/HabitsScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { IdeasScreen } from "./src/screens/IdeasScreen";
 import { PlannerScreen } from "./src/screens/PlannerScreen";
@@ -69,6 +71,8 @@ export type Routes = {
   Person: { id: string };
   Detail: { id: string };
   Faith: undefined;
+  Habits: undefined;
+  Habit: { id: string };
 };
 const Stack = createNativeStackNavigator<Routes>();
 const nav = createNavigationContainerRef<Routes>();
@@ -364,6 +368,7 @@ function Root() {
                   moment={moment}
                   onMomentSeen={() => setMoment(null)}
                   onFaith={me?.faith_enabled ? () => navigation.navigate("Faith") : undefined}
+                  onHabits={me?.habits_enabled ? () => navigation.navigate("Habits") : undefined}
                 />
               )}
             </Stack.Screen>
@@ -426,6 +431,7 @@ function Root() {
                   // which no longer exists.
                   onOpenPerson={(id) => navigation.replace("Person", { id })}
                   onChanged={bump}
+                  habits={!!me?.habits_enabled}
                 />
               )}
             </Stack.Screen>
@@ -444,6 +450,29 @@ function Root() {
                     setSpace("faith");
                     setRecord(true);
                   }}
+                  onChanged={bump}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Habits">
+              {({ navigation }) => (
+                <HabitsScreen
+                  api={api}
+                  refreshKey={refreshKey}
+                  onBack={() => navigation.goBack()}
+                  onOpenHabit={(id) => navigation.navigate("Habit", { id })}
+                  onChanged={bump}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Habit">
+              {({ navigation, route }) => (
+                <HabitScreen
+                  api={api}
+                  id={route.params.id}
+                  refreshKey={refreshKey}
+                  onBack={() => navigation.goBack()}
+                  onOpenCapture={openNote}
                   onChanged={bump}
                 />
               )}

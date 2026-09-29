@@ -154,6 +154,9 @@ class PersonOut(BaseModel):
 	# Time to reach out: in touch before, not since the rhythm says, not snoozed.
 	due: bool
 	created_at: dt.datetime
+	# Family, for the "time with family" habit (ADR 0043): what you set, or else memo's
+	# guess from a word like "Mum" or "brother" in the name or note.
+	family: bool = False
 
 
 class PeopleList(BaseModel):
@@ -182,6 +185,7 @@ class PersonPatch(BaseModel):
 	note: str | None = Field(default=None, max_length=120)
 	reach_out_every_days: int | None = Field(default=None, ge=1, le=365)
 	snoozed_until: dt.date | None = None
+	family: bool | None = None  # null: back to memo's guess
 
 	@field_validator("name", "note")
 	@classmethod
@@ -204,7 +208,8 @@ class PersonPatch(BaseModel):
 	def _something(self) -> "PersonPatch":
 		if not self.model_fields_set:
 			raise ValueError(
-				"provide name, aliases, note, reach_out_every_days or snoozed_until"
+				"provide name, aliases, note, reach_out_every_days, snoozed_until or "
+				"family"
 			)
 		if "name" in self.model_fields_set and self.name is None:
 			raise ValueError("name must not be blank")

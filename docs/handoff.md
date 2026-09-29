@@ -1,6 +1,6 @@
 # Where memo is, and what comes next
 
-_Last updated 2026-09-28. Rewrite this file whenever the answer to "what's next" changes._
+_Last updated 2026-09-29. Rewrite this file whenever the answer to "what's next" changes._
 
 ## State
 
@@ -153,8 +153,18 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    and opened in YouVersion (NIV by default), a Faith section in the weekly review.
    Prayers said in any note are filed into Faith by the `faith-v1` reader, gated by its
    own eval (`evals/faith`, armed, replayed in CI).
-2. **Habit tracking**: [Q11](open-questions.md), not decided. The question is what a habit
-   looks like without a streak.
+2. **Habits**: built ([ADR 0043](decisions/0043-habits-noticed-not-logged.md), migration 0017).
+   Off until turned on in Settings → Habits. The `habits-v1` reader picks out what each
+   note says you did (gym, running, reading, the Bible, prayer, and so on, or a habit you
+   named); memo suggests a habit at 3 days in 3 weeks, on Today and the Habits screen.
+   Counted by the day: "2 of 3 this week", the last time, eight weeks of bars, and every
+   day with the note behind it. "Log today" and removing a day are one tap each. Time
+   with family comes from People (a Family switch on each person, guessed from "Mum",
+   "brother" and the like); reading the Bible comes from Faith. A gentle nudge on Today
+   when a habit with an aim has gone quiet for twice its usual gap. A Habits section in
+   the weekly review. The last 60 days of notes are read in the background when it's
+   turned on. Gated by its own eval (`evals/habits`, 32 cases, armed at 1.00, replayed
+   in CI).
 3. **Still open from build 17:** a gap Akin sees after deleting a note, not reproduced in
    the simulator. Waiting on his build number and how he deleted.
 

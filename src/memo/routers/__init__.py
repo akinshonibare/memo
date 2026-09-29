@@ -6,6 +6,7 @@ from memo.routers import (
 	conversations,
 	derivations,
 	faith,
+	habits,
 	me,
 	messages,
 	morning,
@@ -35,3 +36,4 @@ v1.include_router(review.router)
 v1.include_router(people.router)
 v1.include_router(people.mentions_router)
 v1.include_router(faith.router)
+v1.include_router(habits.router)

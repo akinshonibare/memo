@@ -4,8 +4,9 @@ Added after 2026-09-29, when Ask crashed on a note with a linked person: each fe
 had its own tests, but no test ever put a person *in front of an older route*. This one
 builds that corpus - linked and unresolved people, auto-accepted items, a note with no
 words, a voice note with word timings, a note from this day last year, a deleted note
-whose items and mention outlive it, a contact with no note, and Faith turned on with a
-faith note, its passages, a prayer for someone who is later merged, and a reading - and
+whose items and mention outlive it, a contact with no note, Faith turned on with a
+faith note, its passages, a prayer for someone who is later merged, and a reading, and
+Habits turned on with activities, a tracked habit, a logged day and a removed one - and
 then calls every GET route in the OpenAPI spec (so a route added later is swept too)
 and the people write routes. Nothing may answer 5xx, and no answer stream may crash.
 """
@@ -32,11 +33,13 @@ from memo.schemas.derivations import (
 	IdeaPayload,
 	TodoPayload,
 )
+from memo.schemas.habits import ActivityFound, HabitsExtraction
 from memo.schemas.people import MentionPayload, PeopleExtraction
 from memo.services.pipeline import PipelineContext, process_capture
 from tests.fakes import (
 	FakeEmbedder,
 	FakeExtractor,
+	FakeHabitsReader,
 	FakeObjectStore,
 	FakePeopleReader,
 	FakeTranscriber,
@@ -68,6 +71,7 @@ class Corpus:
 		spoken: str | None = None,
 		admin: AsyncEngine | None = None,
 		space: str = "main",
+		activities: list[ActivityFound] | None = None,
 	) -> str:
 		if spoken is None:
 			created = await self.client.post(
@@ -105,6 +109,7 @@ class Corpus:
 			extractor=FakeExtractor(extraction or Extraction()),
 			embedder=FakeEmbedder(),
 			people=FakePeopleReader(PeopleExtraction(people=people or [])),
+			habits=FakeHabitsReader(HabitsExtraction(activities=activities or [])),
 		)
 		outcome = await process_capture(ctx, uuid.UUID(capture_id), SEED_USER_ID)
 		assert outcome.status == "ready", outcome
@@ -190,6 +195,37 @@ async def test_every_route_survives_every_kind_of_row(
 		Extraction(ideas=[IdeaPayload(title="Rest", summary="Sabbath.")]),
 		space="faith",
 	)
+	# Habits on (ADR 0043): a habit memo would suggest, one tracked with a logged day,
+	# and the family and Bible habits computed from People and Faith.
+	await client.patch("/v1/me", json={"habits_enabled": True})
+	for back in (1, 2, 4):
+		await corpus.note(
+			f"gym, {back} days ago",
+			activities=[
+				ActivityFound(
+					key="gym", label="gym", occurred_on=TODAY - dt.timedelta(days=back)
+				),
+				ActivityFound(
+					key="reading",
+					label="a chapter",
+					occurred_on=TODAY - dt.timedelta(days=back),
+				),
+			],
+		)
+	gym = await client.post("/v1/habits", json={"name": "Gym", "target_per_week": 3})
+	assert gym.status_code == 201, gym.text
+	habits = [gym.json()["id"]]
+	for name in ("Time with family", "Reading the Bible", "Gardening"):
+		made = await client.post("/v1/habits", json={"name": name})
+		assert made.status_code == 201, made.text
+		habits.append(made.json()["id"])
+	assert (
+		await client.post(f"/v1/habits/{habits[0]}/log", json={})
+	).status_code == 200
+	removed = await client.delete(
+		f"/v1/habits/{habits[0]}/days/{TODAY - dt.timedelta(days=2)}"
+	)
+	assert removed.status_code == 200, removed.text
 	# The first note goes; its items and its mention stay (ADR 0022).
 	assert (await client.delete(f"/v1/captures/{doomed}")).status_code == 204
 
@@ -237,6 +273,7 @@ async def test_every_route_survives_every_kind_of_row(
 		"conversation_id": [conversation],
 		"message_id": [asked["message_id"]],
 		"derivation_id": derivation_ids,
+		"habit_id": habits,
 	}
 	queries: dict[str, list[str]] = {
 		"/v1/derivations": [f"?status={s}" for s in DERIVATION_STATUSES]
@@ -294,10 +331,20 @@ async def test_every_route_survives_every_kind_of_row(
 		f"/v1/derivations/{prayer.json()['id']}", json={"status": "confirmed"}
 	)
 	assert refused.status_code == 422
+	async with admin_engine.connect() as conn:
+		activity_id = await conn.scalar(
+			text("SELECT id FROM derivations WHERE kind = 'activity' LIMIT 1")
+		)
+	refused = await client.patch(
+		f"/v1/derivations/{activity_id}", json={"status": "confirmed"}
+	)
+	assert refused.status_code == 422
 	for patch in (
 		{"name": "Tunde B.", "aliases": ["TB"], "note": "work"},
 		{"reach_out_every_days": None},
 		{"snoozed_until": str(TODAY)},
+		{"family": True},
+		{"family": None},
 	):
 		response = await client.patch(
 			f"/v1/people/{people['Tunde Bakare']}", json=patch

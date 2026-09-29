@@ -30,7 +30,7 @@ from memo.models import (
 	Recording,
 	User,
 )
-from memo.schemas.derivations import FAITH_KINDS, UNREVIEWED
+from memo.schemas.derivations import ACTIVITY, FAITH_KINDS, UNREVIEWED
 from memo.services.chunking import CHUNKER_VERSION, chunk_text
 from memo.services.derivation_index import derivation_text, reembed_derivation
 from memo.services.embeddings import Embedder
@@ -43,6 +43,13 @@ from memo.services.faith import (
 	faith_on,
 	might_pray,
 	replace_passages,
+)
+from memo.services.habits import (
+	HabitsReaderLike,
+	UnconfiguredHabitsReader,
+	apply_activities,
+	habits_on,
+	own_keys,
 )
 from memo.services.llm import LLMCall
 from memo.services.people import PeopleReaderLike, apply_mentions
@@ -83,6 +90,8 @@ class PipelineContext:
 	# Faith (ADR 0042). Defaulted, unlike people: it only ever runs for someone who has
 	# turned Faith on, and an unconfigured reader fails the (optional) stage visibly.
 	faith: FaithReaderLike = field(default_factory=UnconfiguredFaithReader)
+	# Habits (ADR 0043), defaulted like faith: only ever read for someone with it on.
+	habits: HabitsReaderLike = field(default_factory=UnconfiguredHabitsReader)
 
 
 @dataclass(frozen=True)
@@ -94,6 +103,12 @@ class Outcome:
 StageFn = Callable[[PipelineContext, Capture], Awaitable[None]]
 
 
+class StageOff(Exception):
+	"""Raised by a stage its owner hasn't turned on (Habits, ADR 0043). The note is not
+	read, and its ledger row is removed rather than marked succeeded: "succeeded" would
+	mean read, and the backlog that runs once the switch is on would skip the note."""
+
+
 @dataclass(frozen=True)
 class Stage:
 	name: str
@@ -102,8 +117,8 @@ class Stage:
 	run: StageFn
 	applies: Callable[[Capture], bool]
 	# An optional stage's failure never fails the note: it is recorded on the ledger
-	# and the note goes on to `ready`. Only the people stage (ADR 0029) is optional:
-	# who a note is about is secondary to the note being saved and searchable.
+	# and the note goes on to `ready`. People, faith, habits and scripture are optional:
+	# what else a note says is secondary to the note being saved and searchable.
 	optional: bool = False
 
 
@@ -320,6 +335,34 @@ async def _faith(ctx: PipelineContext, capture: Capture) -> None:
 	)
 
 
+async def _habits(ctx: PipelineContext, capture: Capture) -> None:
+	"""What a note says you did (ADR 0043), counted towards habits. Only for someone
+	with Habits on; every note of theirs, since an activity can be anything."""
+	user = await ctx.session.get(User, capture.user_id)
+	if not habits_on(user):
+		raise StageOff("habits")
+	if not (capture.text or "").strip():
+		_skip("habits", capture)
+		return
+	assert user is not None
+	result = await ctx.habits.read(
+		capture.text or "",
+		captured_at=capture.created_at,
+		timezone=user.timezone,
+		extra_keys=await own_keys(ctx.session, user.id),
+	)
+	await _record_calls(ctx, capture, result.calls)
+	made = await apply_activities(
+		ctx.session, capture, result.extraction, version=ctx.habits.version
+	)
+	log.info(
+		"stage.habits",
+		capture_id=str(capture.id),
+		version=ctx.habits.version,
+		activities=[a.payload.get("key") for a in made],
+	)
+
+
 async def _scripture(ctx: PipelineContext, capture: Capture) -> None:
 	"""The Bible passages a note is about (ADR 0042): every faith note, and any note
 	while Faith is on. No model call: references have a regular shape, and
@@ -340,8 +383,9 @@ async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 				Derivation.capture_id == capture.id,
 				Derivation.user_id == capture.user_id,
 				Derivation.status != "rejected",
-				# Prayers and passages answer nothing in Home's Ask (ADR 0042).
-				Derivation.kind.not_in(FAITH_KINDS),
+				# Prayers, passages (ADR 0042) and activities (ADR 0043) answer
+				# nothing in Ask.
+				Derivation.kind.not_in((*FAITH_KINDS, ACTIVITY)),
 			)
 			.order_by(Derivation.created_at, Derivation.id)
 		)
@@ -449,6 +493,14 @@ STAGES: tuple[Stage, ...] = (
 		optional=True,
 	),
 	Stage(
+		name="habits",
+		status=CaptureStatus.EXTRACTING,
+		version=lambda ctx: ctx.habits.version,
+		run=_habits,
+		applies=lambda c: True,
+		optional=True,
+	),
+	Stage(
 		name="scripture",
 		status=CaptureStatus.EXTRACTING,
 		version=lambda ctx: SCRIPTURE_VERSION,
@@ -532,6 +584,10 @@ async def _set_aside(
 		await _finish_run(session, run_id, "failed", repr(exc))
 
 
+async def _forget_run(session: AsyncSession, run_id: uuid.UUID) -> None:
+	await session.execute(text("DELETE FROM job_runs WHERE id = :id"), {"id": run_id})
+
+
 async def process_capture(
 	ctx: PipelineContext, capture_id: uuid.UUID, user_id: uuid.UUID
 ) -> Outcome:
@@ -567,6 +623,10 @@ async def process_capture(
 		try:
 			try:
 				await stage.run(ctx, capture)
+			except StageOff:
+				await _forget_run(session, run_id)
+				await commit_and_rebind(session, user_id)
+				continue
 			except (RetryableError, TerminalError) as exc:
 				if not stage.optional:
 					raise  # to the handlers below: this note fails or retries
@@ -690,4 +750,51 @@ async def read_people_in_old_note(
 				derivation_id=str(mention_id),
 				error=repr(exc),
 			)
+	return "read"
+
+
+async def read_habits_in_old_note(
+	ctx: PipelineContext, capture_id: uuid.UUID, user_id: uuid.UUID
+) -> str:
+	"""Run the habits stage over a note written before Habits was turned on (ADR
+	0043), so a habit accepted today comes with the days memo already knew about. The
+	same ledger row (capture, "habits", version) as the pipeline, so a note is read
+	once however it gets there. Failures are set aside as for people: a transient one
+	returns "retry_later" and stops the sweep.
+
+	Returns: missing | off | done | read | failed | retry_later."""
+	session = ctx.session
+	await bind_user(session, user_id)
+	capture = await session.scalar(
+		select(Capture).where(Capture.id == capture_id, Capture.user_id == user_id)
+	)
+	if capture is None or capture.status != CaptureStatus.READY.value:
+		return "missing"
+	stage = next(s for s in STAGES if s.name == "habits")
+	run_id = await _claim_run(session, capture, stage, stage.version(ctx))
+	await commit_and_rebind(session, user_id)
+	if run_id is None:
+		return "done"
+	try:
+		await _habits(ctx, capture)
+	except StageOff:  # turned off since the sweep picked the note
+		await _forget_run(session, run_id)
+		await commit_and_rebind(session, user_id)
+		return "off"
+	except (RetryableError, TerminalError) as exc:
+		await _set_aside(session, run_id, exc)
+		await commit_and_rebind(session, user_id)
+		log.warning(
+			"habits.backlog_failed", capture_id=str(capture_id), error=repr(exc)
+		)
+		return "retry_later" if isinstance(exc, RetryableError) else "failed"
+	except Exception as exc:
+		log.exception("habits.backlog_crashed", capture_id=str(capture_id))
+		await session.rollback()
+		await bind_user(session, user_id)
+		await _finish_run(session, run_id, "failed", repr(exc))
+		await commit_and_rebind(session, user_id)
+		return "failed"
+	await _finish_run(session, run_id, "succeeded")
+	await commit_and_rebind(session, user_id)
 	return "read"

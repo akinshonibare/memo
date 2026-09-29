@@ -72,6 +72,8 @@ class User(Base):
 	bible_translation: Mapped[str] = mapped_column(
 		String(8), default="NIV", server_default="NIV"
 	)
+	# Habits (ADR 0043): off by default; on, every note is read for what you did.
+	habits_enabled: Mapped[bool] = mapped_column(default=False, server_default=false())
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 	__table_args__ = (
@@ -244,6 +246,9 @@ class Person(Base):
 	# How often to suggest getting in touch. NULL: never. New people get 30.
 	reach_out_every_days: Mapped[int | None]
 	snoozed_until: Mapped[dt.date | None] = mapped_column(Date)
+	# Family, for the "time with family" habit (ADR 0043). NULL: memo guesses from the
+	# name or note; true or false: you said.
+	family: Mapped[bool | None]
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 	updated_at: Mapped[dt.datetime] = mapped_column(
 		server_default=func.now(), onupdate=func.now()
@@ -587,3 +592,44 @@ class FaithReading(Base):
 
 
 Index("ix_faith_readings_user_read", FaithReading.user_id, FaithReading.read_at)
+
+
+HABIT_SOURCES = ("activity", "family", "bible")
+HABIT_STATUSES = ("active", "dismissed")
+
+
+class Habit(Base):
+	"""A habit you track, or a suggestion you dismissed (ADR 0043). What counts is
+	computed from notes and other records, never stored here: a stored count would
+	have to follow every rejection, edit and merge, and would drift."""
+
+	__tablename__ = "habits"
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("users.id", ondelete="CASCADE")
+	)
+	# The activity key it counts ("gym", "reading"), or "family" / "bible".
+	key: Mapped[str] = mapped_column(String(40))
+	name: Mapped[str] = mapped_column(String(80))
+	source: Mapped[str] = mapped_column(String(16))
+	status: Mapped[str] = mapped_column(
+		String(16), default="active", server_default="active"
+	)
+	target_per_week: Mapped[int | None]
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+	__table_args__ = (
+		UniqueConstraint("user_id", "key", name="uq_habits_user_key"),
+		CheckConstraint(
+			f"source IN ({_in_list(HABIT_SOURCES)})", name="ck_habits_source"
+		),
+		CheckConstraint(
+			f"status IN ({_in_list(HABIT_STATUSES)})", name="ck_habits_status"
+		),
+		CheckConstraint(
+			"target_per_week IS NULL OR target_per_week BETWEEN 1 AND 7",
+			name="ck_habits_target",
+		),
+		CheckConstraint("length(btrim(name)) > 0", name="ck_habits_name"),
+	)

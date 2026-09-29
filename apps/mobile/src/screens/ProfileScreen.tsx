@@ -45,7 +45,8 @@ type Busy =
   | "notify"
   | "lock"
   | "faith"
-  | "translation";
+  | "translation"
+  | "habits";
 
 // You first, then how memo looks, then how the assistant treats you, then what memo may
 // do on this phone, then your data, then the account.
@@ -160,6 +161,16 @@ export function ProfileSheet({
   const toggleFaith = (on: boolean) =>
     run("faith", async () => {
       const updated = await api().updateProfile({ faith_enabled: on });
+      setMe(updated);
+      onProfileChanged(updated);
+      onSettingsChanged();
+    });
+
+  // Habits (ADR 0043). On the account: the server reads notes for what you did only
+  // while it's on. Home refreshes because its Habits door appears or goes.
+  const toggleHabits = (on: boolean) =>
+    run("habits", async () => {
+      const updated = await api().updateProfile({ habits_enabled: on });
       setMe(updated);
       onProfileChanged(updated);
       onSettingsChanged();
@@ -461,6 +472,20 @@ export function ProfileSheet({
                     <Text style={styles.value}>{asTranslation(me.bible_translation)}</Text>
                   </Row>
                 )}
+              </Group>
+
+              <Group
+                title="Habits"
+                footer="memo notices what you do from your notes - the gym, reading, time with family, reading the Bible - and suggests a habit once it's happened a few times. It counts days and shows your rhythm, never a streak. Your last 60 days of notes are read when you turn it on."
+              >
+                <Row icon="leaf-outline" label="Habits" busy={busy === "habits"}>
+                  <Switch
+                    value={!!me?.habits_enabled}
+                    disabled={!me}
+                    onValueChange={(on) => void toggleHabits(on)}
+                    trackColor={{ true: colors.forest }}
+                  />
+                </Row>
               </Group>
 
               <Group

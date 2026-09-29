@@ -11,11 +11,13 @@ from sqlalchemy import select, text
 from memo.db import bind_system, bind_user
 from memo.models import Capture, Recording
 from memo.services.derivation_index import reembed_derivation
+from memo.services.habits import unread_for_habits
 from memo.services.morning import build_morning_view, is_build_hour
 from memo.services.people import unread_notes
 from memo.services.pipeline import (
 	PipelineContext,
 	process_capture,
+	read_habits_in_old_note,
 	read_people_in_old_note,
 )
 from memo.services.queue import PROCESS_CAPTURE
@@ -44,6 +46,7 @@ async def process_capture_task(
 			max_attempts=ctx["settings"].max_attempts,
 			describer=ctx["describer"],
 			faith=ctx["faith"],
+			habits=ctx["habits"],
 		)
 		outcome = await process_capture(
 			pipeline, uuid.UUID(capture_id), uuid.UUID(user_id)
@@ -203,4 +206,37 @@ async def read_people_backlog_task(ctx: dict[str, Any]) -> int:
 		if outcome == "retry_later":
 			break  # the provider is struggling: the next sweep, not the next note
 	log.info("sweep.people_backlog", notes=len(backlog), **outcomes)
+	return len(backlog)
+
+
+HABITS_BACKLOG_BATCH = 40
+
+
+async def read_habits_backlog_task(ctx: dict[str, Any]) -> int:
+	"""Read the last 60 days of notes for habits, once Habits is turned on (ADR 0043),
+	so accepting "Gym" shows the gym days memo already knew about. A sweep like the
+	people backlog: the job_runs ledger is the bookmark, and an empty backlog costs one
+	query."""
+	structlog.contextvars.clear_contextvars()
+	structlog.contextvars.bind_contextvars(job_id=ctx.get("job_id"))
+	async with ctx["session_factory"]() as session:
+		await bind_system(session)
+		backlog = await unread_for_habits(session, limit=HABITS_BACKLOG_BATCH)
+	outcomes: dict[str, int] = {}
+	for capture_id, user_id in backlog:
+		async with ctx["session_factory"]() as session:
+			pipeline = PipelineContext(
+				session=session,
+				transcriber=ctx["transcriber"],
+				object_store=ctx["object_store"],
+				extractor=ctx["extractor"],
+				embedder=ctx["embedder"],
+				people=ctx["people"],
+				habits=ctx["habits"],
+			)
+			outcome = await read_habits_in_old_note(pipeline, capture_id, user_id)
+		outcomes[outcome] = outcomes.get(outcome, 0) + 1
+		if outcome == "retry_later":
+			break
+	log.info("sweep.habits_backlog", notes=len(backlog), **outcomes)
 	return len(backlog)
