@@ -70,6 +70,7 @@ export type Person = {
   mention_count: number;
   due: boolean;
   created_at: string;
+  family?: boolean; // for the "time with family" habit (ADR 0043); absent from an older server
 };
 
 export type PersonDetail = Person & {
@@ -160,6 +161,56 @@ export type Faith = {
   answered: Prayer[];
 };
 
+// --- Habits (ADR 0043) --------------------------------------------------------------
+
+export type Habit = {
+  id: string;
+  key: string;
+  name: string;
+  source: "activity" | "family" | "bible";
+  target_per_week: number | null;
+  this_week: number; // days, Monday to Sunday
+  week_days: boolean[]; // this week, Monday first
+  last_done: string | null;
+  total_days: number;
+  since: string | null;
+  weeks: number[]; // the last 8 weeks' days, oldest first
+};
+
+export type HabitSuggestion = {
+  key: string;
+  name: string;
+  source: Habit["source"];
+  days: number; // different days in the last 21
+  total_days: number;
+};
+
+export type Habits = { enabled: boolean; habits: Habit[]; suggestion: HabitSuggestion | null };
+
+export type HabitEvidence = {
+  kind: "note" | "logged" | "contact" | "reading" | "passage";
+  text: string | null;
+  capture_id: string | null;
+  activity_id: string | null;
+};
+
+export type HabitDetail = Habit & {
+  days: { date: string; evidence: HabitEvidence[]; removable: boolean }[];
+};
+
+// Today's one habit line: a suggestion, or a nudge for a habit gone quiet.
+export type HabitPrompt = {
+  kind: "suggest" | "nudge";
+  key: string;
+  name: string;
+  source: Habit["source"];
+  habit_id: string | null;
+  days: number;
+  last_done: string | null;
+};
+
+export type HabitWeek = { habit_id: string; name: string; days: number; target_per_week: number | null };
+
 export type FaithWeek = {
   read: Reading[];
   answered: Prayer[];
@@ -209,6 +260,7 @@ export type MorningView = {
   // A note from this day a month, six months or years ago (ADR 0040). Absent from an
   // older server; null on a day with nothing to look back on.
   on_this_day?: OnThisDay | null;
+  habit?: HabitPrompt | null; // ADR 0043; only while Habits is on
 };
 
 export type OnThisDay = {
@@ -245,6 +297,7 @@ export type Me = {
   note_count?: number; // for milestones; absent from an older server
   faith_enabled?: boolean; // ADR 0042; off by default
   bible_translation?: string; // what Bible links open in; NIV by default
+  habits_enabled?: boolean; // ADR 0043; off by default
 };
 
 export type Voice = { id: string; label: string };
@@ -263,6 +316,7 @@ export type Week = {
   coming_up: Derivation[];
   new_ideas: Derivation[];
   faith?: FaithWeek | null; // only while Faith is on
+  habits?: HabitWeek[] | null; // only while Habits is on
 };
 
 export class Api {
@@ -330,6 +384,7 @@ export class Api {
     auto_accept?: boolean;
     faith_enabled?: boolean;
     bible_translation?: string;
+    habits_enabled?: boolean;
   }) {
     return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });
   }
@@ -490,6 +545,44 @@ export class Api {
     return this.request<Plan>("/v1/faith/readings/last", { method: "DELETE" });
   }
 
+  // --- Habits (ADR 0043) --------------------------------------------------------
+
+  getHabits() {
+    return this.request<Habits>("/v1/habits");
+  }
+
+  // A suggestion accepted (pass its key), or a habit you name.
+  trackHabit(body: { name: string; key?: string; target_per_week?: number | null }) {
+    return this.request<Habit>("/v1/habits", { method: "POST", body: JSON.stringify(body) });
+  }
+
+  dismissHabit(key: string) {
+    return this.request<void>("/v1/habits/dismiss", { method: "POST", body: JSON.stringify({ key }) });
+  }
+
+  getHabit(id: string) {
+    return this.request<HabitDetail>(`/v1/habits/${id}`);
+  }
+
+  updateHabit(id: string, patch: { name?: string; target_per_week?: number | null }) {
+    return this.request<Habit>(`/v1/habits/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  stopHabit(id: string) {
+    return this.request<void>(`/v1/habits/${id}`, { method: "DELETE" });
+  }
+
+  logHabit(id: string, date?: string) {
+    return this.request<Habit>(`/v1/habits/${id}/log`, {
+      method: "POST",
+      body: JSON.stringify(date ? { date } : {}),
+    });
+  }
+
+  removeHabitDay(id: string, date: string) {
+    return this.request<Habit>(`/v1/habits/${id}/days/${date}`, { method: "DELETE" });
+  }
+
   getCapture(id: string) {
     return this.request<CaptureDetail>(`/v1/captures/${id}`);
   }
@@ -584,6 +677,7 @@ export class Api {
       note?: string | null;
       reach_out_every_days?: number | null;
       snoozed_until?: string | null;
+      family?: boolean | null; // null: back to memo's guess
     },
   ) {
     return this.request<Person>(`/v1/people/${id}`, { method: "PATCH", body: JSON.stringify(patch) });

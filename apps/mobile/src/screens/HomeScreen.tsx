@@ -78,12 +78,15 @@ export function HomeScreen({
   moment,
   onMomentSeen,
   onFaith,
+  onHabits,
 }: {
   api: Api;
   refreshKey: number;
   onOpen: (id: string) => void;
   // Faith (ADR 0042): its door on Home, only while it's turned on in Settings.
   onFaith?: () => void;
+  // Habits (ADR 0043): the same, while Habits is on.
+  onHabits?: () => void;
   onPlanner: () => void;
   onReview: () => void;
   onPeople: () => void;
@@ -256,6 +259,7 @@ export function HomeScreen({
       <View style={[styles.topBar, ui.pad]}>
         <Avatar name={name} size={44} onPress={onSettings} />
         <View style={{ flex: 1 }} />
+        {onHabits && <IconCircle name="leaf-outline" onPress={onHabits} accessibilityLabel="Habits" />}
         {onFaith && <IconCircle name="book-outline" onPress={onFaith} accessibilityLabel="Faith" />}
         <IconCircle name="people-outline" onPress={onPeople} />
         <IconCircle name="reader-outline" onPress={onReview} />
@@ -325,6 +329,19 @@ export function HomeScreen({
                     await api.updatePerson(id, { snoozed_until: toIsoDate(inDays(SNOOZE_DAYS)) });
                     onChanged();
                   }}
+                  onTrackHabit={async (p) => {
+                    await api.trackHabit({ name: p.name, key: p.key });
+                    onChanged();
+                  }}
+                  onDismissHabit={async (key) => {
+                    await api.dismissHabit(key);
+                    onChanged();
+                  }}
+                  onLogHabit={async (id) => {
+                    await api.logHabit(id);
+                    onChanged();
+                  }}
+                  onOpenHabits={() => onHabits?.()}
                 />
               )}
               {shown.length > 0 && (

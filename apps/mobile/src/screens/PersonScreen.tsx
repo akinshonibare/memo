@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type Api, ApiError, type Mention, type PersonDetail } from "../api";
 import { IconCircle, Pill } from "../components";
@@ -26,6 +26,7 @@ export function PersonScreen({
   onOpenCapture,
   onOpenPerson,
   onChanged,
+  habits = false,
 }: {
   api: Api;
   id: string;
@@ -34,6 +35,8 @@ export function PersonScreen({
   onOpenCapture: (id: string) => void;
   onOpenPerson: (id: string) => void;
   onChanged: () => void;
+  // Habits on (ADR 0043): the Family switch, for the "time with family" habit.
+  habits?: boolean;
 }) {
   const ui = useUi();
   const styles = useStyles();
@@ -231,6 +234,19 @@ export function PersonScreen({
                 <Ionicons name="chevron-forward" size={16} color={colors.faint} />
               </Pressable>
               {person.due && <Text style={styles.due}>A good time to get in touch.</Text>}
+              {habits && (
+                <View style={styles.rhythm}>
+                  <Ionicons name="home-outline" size={18} color={colors.muted} />
+                  <Text style={styles.rhythmText}>Family</Text>
+                  <Switch
+                    value={!!person.family}
+                    disabled={busy === "family"}
+                    onValueChange={(on) => void run("family", () => api.updatePerson(id, { family: on }))}
+                    trackColor={{ true: colors.forest }}
+                    accessibilityLabel="Family, for time with family"
+                  />
+                </View>
+              )}
             </View>
 
             {person.open_todos.length > 0 && (

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { type GestureResponderEvent, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Api, Derivation, FaithWeek, Week } from "../api";
+import type { Api, Derivation, FaithWeek, HabitWeek, Week } from "../api";
 import { asTranslation, openInBible } from "../bible";
 import { IconCircle, TickCircle } from "../components";
 import { useRefetchOnFocus } from "../focus";
@@ -151,6 +151,8 @@ export function ReviewScreen({
           {(d) => <Line key={d.id} d={d} onPress={() => d.capture_id && onOpenCapture(d.capture_id)} />}
         </Section>
 
+        {week?.habits && week.habits.length > 0 && <HabitsSection habits={week.habits} />}
+
         {week?.faith && (
           <FaithSection faith={week.faith} translation={translation} onOpenCapture={onOpenCapture} />
         )}
@@ -206,6 +208,30 @@ function FaithSection({
             <Text style={ui.meta}>You wrote about it</Text>
           </View>
         </Pressable>
+      ))}
+    </View>
+  );
+}
+
+// Each habit's days that week (ADR 0043): a count against the aim if there is one, and
+// no verdict either way.
+function HabitsSection({ habits }: { habits: HabitWeek[] }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <View style={styles.section}>
+      <Text style={ui.label}>Habits</Text>
+      {habits.map((h) => (
+        <View key={h.habit_id} style={styles.line}>
+          <Ionicons name="leaf-outline" size={18} color={colors.muted} style={{ marginTop: 2 }} />
+          <Text style={[styles.lineTitle, { flex: 1 }]}>{h.name}</Text>
+          <Text style={ui.meta}>
+            {h.target_per_week
+              ? `${h.days} of ${h.target_per_week}`
+              : `${h.days} ${h.days === 1 ? "day" : "days"}`}
+          </Text>
+        </View>
       ))}
     </View>
   );
