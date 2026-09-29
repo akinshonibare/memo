@@ -10,10 +10,11 @@ from sqlalchemy import select
 
 from memo.auth import CurrentUser
 from memo.db import DbSession
-from memo.models import Capture, Derivation
+from memo.models import Capture, Derivation, User
 from memo.routers.limits import limit_search
 from memo.schemas.captures import CaptureOut
 from memo.schemas.derivations import DerivationOut
+from memo.services.faith import faith_hidden
 from memo.services.retrieval import search as retrieve
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -47,6 +48,7 @@ async def search(
 		embedder=request.app.state.embedder,
 		k=limit,
 		candidates=max(40, 3 * limit),
+		include_faith=not faith_hidden(await session.get(User, user_id)),
 	)
 	capture_ids = [h.capture_id for h in result.hits if h.capture_id is not None]
 	orphan_ids = [

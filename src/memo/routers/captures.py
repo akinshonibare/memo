@@ -5,7 +5,7 @@ from typing import Annotated, Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import and_, delete, or_, select, text
+from sqlalchemy import and_, delete, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -13,7 +13,7 @@ from memo.auth import CurrentUser
 from memo.config import Settings, get_settings
 from memo.db import DbSession, commit_and_rebind
 from memo.ids import uuid7
-from memo.models import Capture, Derivation, Recording
+from memo.models import Capture, Chunk, Derivation, Recording, User
 from memo.pagination import decode_cursor, encode_cursor
 from memo.routers.limits import limit_capture
 from memo.routers.recordings import get_object_store
@@ -25,13 +25,17 @@ from memo.schemas.captures import (
 	CapturePage,
 )
 from memo.schemas.derivations import (
+	FAITH_KINDS,
 	MENTION,
+	PASSAGE,
 	DerivationCreate,
 	DerivationOut,
 	validate_payload,
 	validation_detail,
 )
+from memo.schemas.faith import CaptureMove, Space
 from memo.services.derivation_index import enqueue_reembed
+from memo.services.faith import faith_hidden, passage_out, replace_passages
 from memo.services.people import last_contacts, load_people, mention_out
 from memo.services.queue import Queue
 from memo.services.storage import ObjectStore
@@ -106,6 +110,7 @@ async def create_capture(
 		"id": uuid7(),
 		"user_id": user_id,
 		"client_token": body.client_token,
+		"space": body.space,
 	}
 	if body.captured_at is not None:
 		values["created_at"] = body.captured_at
@@ -167,6 +172,7 @@ _RELATED_SQL = text(
 	WHERE this.centroid IS NOT NULL
 		AND k.user_id = :uid AND k.capture_id <> :cid AND k.capture_id IS NOT NULL
 		AND k.derivation_id IS NULL AND k.superseded_at IS NULL
+		AND (CAST(:space AS text) IS NULL OR k.space = :space)
 	GROUP BY k.capture_id
 	ORDER BY distance
 	LIMIT :n
@@ -190,10 +196,15 @@ async def related_captures(
 	"""Notes about the same thing (ADR 0028): the nearest other notes to this one's
 	embedding centroid. No model call; the threshold keeps it quiet rather than always
 	showing *something*, because a wrong "related" is worse than none."""
-	await _owned_capture(session, capture_id, user_id)
+	capture = await _owned_capture(session, capture_id, user_id)
+	# With Faith on, a faith note's neighbours are faith notes and a note's are notes
+	# (ADR 0042); with it off, every note is simply a note.
+	user = await session.get(User, user_id)
+	space = capture.space if faith_hidden(user) else None
 	rows = (
 		await session.execute(
-			_RELATED_SQL, {"cid": capture_id, "uid": user_id, "n": limit}
+			_RELATED_SQL,
+			{"cid": capture_id, "uid": user_id, "n": limit, "space": space},
 		)
 	).all()
 	near = {
@@ -223,13 +234,20 @@ async def list_captures(
 	user_id: CurrentUser,
 	cursor: str | None = None,
 	limit: Annotated[int, Query(ge=1, le=200)] = 50,
+	space: Space | None = None,
 ) -> CapturePage:
+	"""Newest first. `space=faith` lists the Faith screen's notes. With no space, Home's
+	list: every note, except faith notes while Faith is on (ADR 0042)."""
 	stmt = (
 		select(Capture)
 		.where(Capture.user_id == user_id)
 		.order_by(Capture.created_at.desc(), Capture.id.desc())
 		.limit(limit + 1)
 	)
+	if space is not None:
+		stmt = stmt.where(Capture.space == space)
+	elif faith_hidden(await session.get(User, user_id)):
+		stmt = stmt.where(Capture.space == "main")
 	if cursor is not None:
 		after_created, after_id = decode_cursor(cursor)
 		stmt = stmt.where(
@@ -271,10 +289,15 @@ async def get_capture(
 	return CaptureDetail(
 		**item.model_dump(),
 		derivations=[
-			DerivationOut.model_validate(d) for d in rows if d.kind != MENTION
+			DerivationOut.model_validate(d)
+			for d in rows
+			if d.kind != MENTION and d.kind not in FAITH_KINDS
 		],
 		people=people_out,
 		words=capture.words,
+		passages=[
+			passage_out(d) for d in rows if d.kind == PASSAGE and d.status != "rejected"
+		],
 	)
 
 
@@ -407,3 +430,27 @@ async def add_derivation(
 	await commit_and_rebind(session, user_id)
 	await enqueue_reembed(queue, derivation)
 	return derivation
+
+
+@router.post("/{capture_id}/move", response_model=CaptureOut)
+async def move_capture(
+	capture_id: uuid.UUID, body: CaptureMove, session: DbSession, user_id: CurrentUser
+) -> CaptureOut:
+	"""Move a note into Faith or out of it (ADR 0042): the note, its text chunks (so
+	search and Ask follow), and its passages, found again for its new place."""
+	capture = await _owned_capture(session, capture_id, user_id)
+	if capture.space != body.space:
+		capture.space = body.space
+		await session.execute(
+			update(Chunk)
+			.where(
+				Chunk.capture_id == capture.id,
+				Chunk.user_id == user_id,
+				Chunk.derivation_id.is_(None),
+			)
+			.values(space=body.space)
+		)
+		await replace_passages(session, capture)
+		await commit_and_rebind(session, user_id)
+	(item,) = await _with_durations(session, [capture], user_id)
+	return item

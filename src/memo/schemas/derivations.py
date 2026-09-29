@@ -22,7 +22,15 @@ KINDS: tuple[str, ...] = ("todo", "event", "idea")
 # the people stage and linked to a `people` row, so it is not an item: the generic
 # derivation routes leave it out, and it is resolved through /v1/mentions.
 MENTION = "mention"
-ALL_KINDS: tuple[str, ...] = (*KINDS, MENTION)
+# Faith (ADR 0042): a prayer, and a Bible passage a note is about. Like mentions, not
+# items: they live under /v1/faith, and the generic derivation routes leave them out,
+# so the Planner, the phone sync and an app built before Faith never meet one.
+PRAYER = "prayer"
+PASSAGE = "passage"
+FAITH_KINDS: tuple[str, ...] = (PRAYER, PASSAGE)
+# Kinds that may name a person: who a note is about, and who a prayer is for.
+PERSON_KINDS: tuple[str, ...] = (MENTION, PRAYER)
+ALL_KINDS: tuple[str, ...] = (*KINDS, MENTION, *FAITH_KINDS)
 # pending_review: extracted, waiting for a look. confirmed: a person checked it.
 # rejected: a person said no. user_created: a person added it. accepted: kept without
 # a look, because the user turned on auto-accept (ADR 0030) - never a label for evals.
@@ -105,6 +113,45 @@ class IdeaPayload(_Item):
 	"""A thought worth coming back to."""
 
 	summary: str = Field(min_length=1, max_length=1000)
+
+
+class PrayerPayload(BaseModel):
+	"""A prayer (ADR 0042). Answered, not done: `completed_at` on the row is when it
+	was answered, and `answer` says how, in the user's words."""
+
+	model_config = ConfigDict(extra="forbid")
+
+	title: str = Field(min_length=1, max_length=200)
+	notes: str | None = Field(default=None, max_length=2000)
+	answer: str | None = Field(default=None, max_length=2000)
+
+	@field_validator("title")
+	@classmethod
+	def _title_has_content(cls, value: str) -> str:
+		stripped = value.strip()
+		if not stripped:
+			raise ValueError("title must not be blank")
+		return stripped
+
+	@field_validator("notes", "answer")
+	@classmethod
+	def _blank_is_none(cls, value: str | None) -> str | None:
+		return value.strip() or None if value is not None else None
+
+
+class PassagePayload(BaseModel):
+	"""A passage a note is about, as found by services/scripture: canonical, checked
+	against real chapter and verse counts. `book` is the USFM code (ROM, 1CO) that
+	Bible apps and links use; `ref` is how it reads ("Romans 8:28–30")."""
+
+	model_config = ConfigDict(extra="forbid")
+
+	ref: str
+	book: str = Field(min_length=3, max_length=3)
+	chapter: int = Field(ge=1)
+	verse: int | None = Field(default=None, ge=1)
+	end_chapter: int = Field(ge=1)
+	end_verse: int | None = Field(default=None, ge=1)
 
 
 PAYLOAD_MODELS: dict[str, type[_Item]] = {

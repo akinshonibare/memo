@@ -18,6 +18,7 @@ dependencies = [
     "pgvector>=0.5.0",
     "pydantic-settings>=2.15.0",
     "pyjwt[crypto]>=2.10",
+    "pythonbible>=0.15.5",
     "sqlalchemy[asyncio]>=2.1.1",
     "structlog>=26.1.0",
     "uuid6>=2025.0.1",
@@ -40,7 +41,7 @@ plugins = ["pydantic.mypy"]
 files = ["src", "tests", "alembic", "evals"]
 
 [[tool.mypy.overrides]]
-module = ["asgi_lifespan.*", "uuid6.*", "aioboto3.*", "botocore.*"]
+module = ["asgi_lifespan.*", "uuid6.*", "aioboto3.*", "botocore.*", "pythonbible.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -4,6 +4,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from memo.schemas.derivations import DerivationOut
+from memo.schemas.faith import PassageOut, Space
 from memo.schemas.people import MentionOut
 
 
@@ -21,6 +22,9 @@ class CaptureCreate(BaseModel):
 	# (ADR 0028). Its date is what "tomorrow" in the note resolves against, so the
 	# sync time would be wrong. Bounded: not in the future, not older than 90 days.
 	captured_at: dt.datetime | None = None
+
+	# Where the note lives (ADR 0042). A note written from the Faith screen is 'faith'.
+	space: Space = "main"
 
 	@field_validator("captured_at")
 	@classmethod
@@ -56,6 +60,7 @@ class CaptureOut(BaseModel):
 	created_at: dt.datetime
 	# From the attached recording; filled in by the list and detail routes.
 	duration_ms: int | None = None
+	space: str = "main"  # ADR 0042
 
 
 class AudioOut(BaseModel):
@@ -73,6 +78,9 @@ class CaptureDetail(CaptureOut):
 	# A voice note's words with their times (ADR 0039): detail only, since the list
 	# never plays anything. None when there are none to give.
 	words: list[tuple[int, int, str]] | None = None
+	# The Bible passages a faith note is about (ADR 0042), its own field for the same
+	# reason as `people`: an app built before Faith never renders one as an item.
+	passages: list[PassageOut] = []
 
 
 class CapturePage(BaseModel):

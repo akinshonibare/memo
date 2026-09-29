@@ -30,11 +30,12 @@ from memo.models import (
 	Recording,
 	User,
 )
-from memo.schemas.derivations import UNREVIEWED
+from memo.schemas.derivations import FAITH_KINDS, UNREVIEWED
 from memo.services.chunking import CHUNKER_VERSION, chunk_text
 from memo.services.derivation_index import derivation_text, reembed_derivation
 from memo.services.embeddings import Embedder
 from memo.services.extraction import ExtractionFailed, ExtractorLike
+from memo.services.faith import SCRIPTURE_VERSION, replace_passages
 from memo.services.llm import LLMCall
 from memo.services.people import PeopleReaderLike, apply_mentions
 from memo.services.retry import RetryableError, TerminalError, backoff_delay
@@ -213,6 +214,10 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 		)
 	)
 	for kind, item in result.extraction.items():
+		if kind == "idea" and capture.space == "faith":
+			# A reflection is full of thoughts, and Home's Ideas shouldn't fill with
+			# them (ADR 0042). Its todos and events still count: they're commitments.
+			continue
 		ctx.session.add(
 			Derivation(
 				id=uuid7(),
@@ -276,6 +281,13 @@ async def _people(ctx: PipelineContext, capture: Capture) -> None:
 	)
 
 
+async def _scripture(ctx: PipelineContext, capture: Capture) -> None:
+	"""The Bible passages a faith note is about (ADR 0042). No model call: references
+	have a regular shape, and services/scripture parses and checks them."""
+	found = await replace_passages(ctx.session, capture)
+	log.info("stage.scripture", capture_id=str(capture.id), passages=found)
+
+
 async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 	"""Dual granularity: capture chunks for recall, derivation rows for precision."""
 	source = capture.text or ""
@@ -287,6 +299,8 @@ async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 				Derivation.capture_id == capture.id,
 				Derivation.user_id == capture.user_id,
 				Derivation.status != "rejected",
+				# Prayers and passages answer nothing in Home's Ask (ADR 0042).
+				Derivation.kind.not_in(FAITH_KINDS),
 			)
 			.order_by(Derivation.created_at, Derivation.id)
 		)
@@ -324,6 +338,7 @@ async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 				embedding=next(vectors),
 				embedding_model=ctx.embedder.model,
 				embedding_dim=ctx.embedder.dim,
+				space=capture.space,
 			)
 		)
 	for offset, derivation in enumerate(derivations, start=len(pieces)):
@@ -382,6 +397,14 @@ STAGES: tuple[Stage, ...] = (
 		version=lambda ctx: ctx.people.version,
 		run=_people,
 		applies=lambda c: True,
+		optional=True,
+	),
+	Stage(
+		name="scripture",
+		status=CaptureStatus.EXTRACTING,
+		version=lambda ctx: SCRIPTURE_VERSION,
+		run=_scripture,
+		applies=lambda c: c.space == "faith",
 		optional=True,
 	),
 	Stage(

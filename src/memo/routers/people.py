@@ -18,6 +18,7 @@ from memo.ids import uuid7
 from memo.models import Capture, Chunk, Derivation, Person, User
 from memo.routers.captures import get_queue
 from memo.schemas.derivations import MENTION, UNREVIEWED, DerivationOut
+from memo.schemas.faith import PrayerOut
 from memo.schemas.people import (
 	ContactBody,
 	MentionOut,
@@ -30,6 +31,7 @@ from memo.schemas.people import (
 	PersonPatch,
 )
 from memo.services.derivation_index import enqueue_reembed
+from memo.services.faith import faith_hidden, live_prayers, prayer_out
 from memo.services.morning import tz_or_utc
 from memo.services.people import (
 	collapse_duplicates,
@@ -203,7 +205,24 @@ async def _detail(
 		],
 		open_todos=[DerivationOut.model_validate(d) for d in open_todos],
 		upcoming_events=[DerivationOut.model_validate(d) for d in upcoming],
+		prayers=await _prayers_for(session, user_id, person),
 	)
+
+
+async def _prayers_for(
+	session: DbSession, user_id: uuid.UUID, person: Person
+) -> list[PrayerOut]:
+	"""Prayers for this person (ADR 0042), only while Faith is on."""
+	if not faith_hidden(await session.get(User, user_id)):
+		return []
+	rows = (
+		await session.scalars(
+			live_prayers(user_id)
+			.where(Derivation.person_id == person.id)
+			.order_by(Derivation.created_at.desc(), Derivation.id.desc())
+		)
+	).all()
+	return [prayer_out(d, {person.id: person.name}) for d in rows]
 
 
 @router.get("/{person_id}", response_model=PersonDetail)

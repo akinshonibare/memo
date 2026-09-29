@@ -20,6 +20,7 @@ from pydantic import (
 )
 
 from memo.schemas.derivations import DerivationOut, no_leaked_field
+from memo.schemas.faith import PrayerOut
 
 Contact = Literal["in_person", "call", "message", "unspecified", "none"]
 CONTACTS: tuple[str, ...] = ("in_person", "call", "message", "unspecified", "none")
@@ -166,6 +167,8 @@ class PersonDetail(PersonOut):
 	mentions: list[MentionOut]
 	open_todos: list[DerivationOut]
 	upcoming_events: list[DerivationOut]
+	# Prayers for them (ADR 0042), only while Faith is on; newest first.
+	prayers: list[PrayerOut] = []
 
 
 class PersonPatch(BaseModel):

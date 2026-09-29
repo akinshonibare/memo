@@ -109,7 +109,7 @@ def look_back_days(today: dt.date) -> list[dt.date]:
 	return [d for d in [*years, *recent] if d is not None]
 
 
-def _local_day_range(day: dt.date, zone: ZoneInfo) -> tuple[dt.datetime, dt.datetime]:
+def local_day_range(day: dt.date, zone: ZoneInfo) -> tuple[dt.datetime, dt.datetime]:
 	"""The instants a local day spans, as [start, end). Local midnight to local
 	midnight, so a day that gains or loses a DST hour is 25 or 23 hours long."""
 	start = dt.datetime.combine(day, dt.time(), tzinfo=zone)
@@ -118,7 +118,12 @@ def _local_day_range(day: dt.date, zone: ZoneInfo) -> tuple[dt.datetime, dt.date
 
 
 async def on_this_day(
-	session: AsyncSession, user_id: uuid.UUID, *, today: dt.date, zone: ZoneInfo
+	session: AsyncSession,
+	user_id: uuid.UUID,
+	*,
+	today: dt.date,
+	zone: ZoneInfo,
+	include_faith: bool = True,
 ) -> OnThisDay | None:
 	"""One note from a day worth looking back on - never a feed. Rationed like the
 	resurfaced idea, and for the same reason: one is a memory, five are a chore. Only
@@ -126,24 +131,23 @@ async def on_this_day(
 	A pure read, so it's the same all day without being pinned.
 
 	Each local day is turned into a UTC range here, not by converting every row's
-	timestamp in SQL: plain ranges on `created_at` can use ix_captures_user_created."""
+	timestamp in SQL: plain ranges on `created_at` can use ix_captures_user_created.
+
+	`include_faith=False` leaves faith notes out; they have their own place (ADR
+	0042)."""
 	days = look_back_days(today)
-	ranges = [_local_day_range(d, zone) for d in days]
-	rows = (
-		await session.execute(
-			select(Capture.id, Capture.kind, Capture.text, Capture.created_at).where(
-				Capture.user_id == user_id,
-				Capture.status == "ready",
-				func.length(func.trim(Capture.text)) > 0,
-				or_(
-					*(
-						and_(Capture.created_at >= s, Capture.created_at < e)
-						for s, e in ranges
-					)
-				),
-			)
-		)
-	).all()
+	ranges = [local_day_range(d, zone) for d in days]
+	stmt = select(Capture.id, Capture.kind, Capture.text, Capture.created_at).where(
+		Capture.user_id == user_id,
+		Capture.status == "ready",
+		func.length(func.trim(Capture.text)) > 0,
+		or_(
+			*(and_(Capture.created_at >= s, Capture.created_at < e) for s, e in ranges)
+		),
+	)
+	if not include_faith:
+		stmt = stmt.where(Capture.space == "main")
+	rows = (await session.execute(stmt)).all()
 	if not rows:
 		return None
 	rank = {d: i for i, d in enumerate(days)}
@@ -286,7 +290,13 @@ async def build_morning_view(
 
 	todos, events = await _todays_items(session, user_id, today=today, zone=zone)
 	people = await reach_out(session, user_id, today=today, zone=zone)
-	looked_back = await on_this_day(session, user_id, today=today, zone=zone)
+	looked_back = await on_this_day(
+		session,
+		user_id,
+		today=today,
+		zone=zone,
+		include_faith=not (user is not None and user.faith_enabled),
+	)
 
 	existing = await session.scalar(
 		select(MorningView).where(
@@ -372,7 +382,13 @@ async def todays_view(
 			idea = None
 	todos, events = await _todays_items(session, user_id, today=today, zone=zone)
 	people = await reach_out(session, user_id, today=today, zone=zone)
-	looked_back = await on_this_day(session, user_id, today=today, zone=zone)
+	looked_back = await on_this_day(
+		session,
+		user_id,
+		today=today,
+		zone=zone,
+		include_faith=not (user is not None and user.faith_enabled),
+	)
 	return pinned.model_copy(
 		update={
 			"timezone": timezone,

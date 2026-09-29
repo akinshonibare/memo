@@ -4,7 +4,7 @@ removal; the schema was built multi-tenant, so both are one user's rows."""
 import datetime as dt
 import uuid
 import zoneinfo
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -19,6 +19,7 @@ from memo.models import (
 	Capture,
 	Conversation,
 	Derivation,
+	FaithReading,
 	Message,
 	Person,
 	Recording,
@@ -49,6 +50,9 @@ class MeOut(BaseModel):
 	# How many notes you have now, for the app's milestones ("your 100th note").
 	# Defaulted so the model still validates straight from a User row.
 	note_count: int = 0
+	# Faith (ADR 0042): off by default. The translation Bible links open in.
+	faith_enabled: bool = False
+	bible_translation: str = "NIV"
 
 
 class MePatch(BaseModel):
@@ -64,6 +68,10 @@ class MePatch(BaseModel):
 	name: str | None = Field(default=None, max_length=60)
 	voice: str | None = None
 	auto_accept: bool | None = None
+	faith_enabled: bool | None = None
+	bible_translation: (
+		Literal["NIV", "ESV", "KJV", "NKJV", "NLT", "CSB", "NASB", "MSG"] | None
+	) = None
 
 	@field_validator("timezone")
 	@classmethod
@@ -95,7 +103,10 @@ class MePatch(BaseModel):
 	@model_validator(mode="after")
 	def _something(self) -> "MePatch":
 		if not self.model_fields_set:
-			raise ValueError("provide timezone, name, voice or auto_accept")
+			raise ValueError(
+				"provide timezone, name, voice, auto_accept, faith_enabled or "
+				"bible_translation"
+			)
 		return self
 
 
@@ -137,6 +148,17 @@ async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> 
 		# From the next note on. What already waits for review keeps waiting:
 		# turning this on is a choice about the future, not a review of the past.
 		user.auto_accept = body.auto_accept
+	if "faith_enabled" in fields:
+		if body.faith_enabled is None:
+			raise HTTPException(
+				status.HTTP_422_UNPROCESSABLE_CONTENT,
+				"faith_enabled must be true or false",
+			)
+		# Turned off, nothing is deleted: faith notes are simply notes again, and
+		# prayers and the plan wait for it to come back on (ADR 0042).
+		user.faith_enabled = body.faith_enabled
+	if "bible_translation" in fields and body.bible_translation is not None:
+		user.bible_translation = body.bible_translation
 	await session.flush()
 	return await _me_out(session, user)
 
@@ -184,6 +206,15 @@ class PersonExport(BaseModel):
 	created_at: dt.datetime
 
 
+class FaithReadingExport(BaseModel):
+	model_config = ConfigDict(from_attributes=True)
+
+	plan: str
+	cycle: int
+	position: int
+	read_at: dt.datetime
+
+
 class Export(BaseModel):
 	exported_at: dt.datetime
 	user_id: uuid.UUID
@@ -195,6 +226,8 @@ class Export(BaseModel):
 	conversations: list[ConversationExport]
 	# Who your notes are about; each mention (a derivation) carries its person_id.
 	people: list[PersonExport] = []
+	# The reading plan's progress (ADR 0042). Prayers are derivations, above.
+	faith_readings: list[FaithReadingExport] = []
 
 
 @router.get("/export", response_model=Export)
@@ -293,6 +326,16 @@ async def export_everything(
 		recordings=recordings,
 		conversations=conversations,
 		people=[PersonExport.model_validate(p) for p in people],
+		faith_readings=[
+			FaithReadingExport.model_validate(r)
+			for r in (
+				await session.scalars(
+					select(FaithReading)
+					.where(FaithReading.user_id == user_id)
+					.order_by(FaithReading.read_at)
+				)
+			).all()
+		],
 	)
 
 
@@ -368,6 +411,7 @@ async def _purge(
 		"recordings",
 		"morning_views",
 		"llm_calls",
+		"faith_readings",
 	):
 		result = cast(
 			CursorResult[Any],
