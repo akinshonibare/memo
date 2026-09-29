@@ -36,7 +36,7 @@ from memo.prompts.people_v1 import (
 	repair_message,
 	user_message,
 )
-from memo.schemas.derivations import MENTION
+from memo.schemas.derivations import MENTION, UNREVIEWED
 from memo.schemas.people import (
 	IN_TOUCH,
 	MentionOut,
@@ -381,10 +381,14 @@ async def apply_mentions(
 	*,
 	version: str,
 	timezone: str,
+	auto_accept: bool = False,
 ) -> list[Derivation]:
 	"""Write one `mention` per person the note names, each linked, new, or waiting
 	for the user. Idempotent by replacement, like extraction: a re-run of this version
-	replaces only what nobody has reviewed. Returns the mentions written."""
+	replaces only what nobody has reviewed. Returns the mentions written.
+
+	With auto-accept (ADR 0030) a linked mention is kept as 'accepted'. One that could
+	be two people still waits: the setting says "trust the reading", not "guess who"."""
 	user_id = capture.user_id
 	await lock_people(session, user_id)
 	stale = (
@@ -395,7 +399,7 @@ async def apply_mentions(
 				Derivation.user_id == user_id,
 				Derivation.kind == MENTION,
 				Derivation.extractor_version == version,
-				Derivation.status == "pending_review",
+				Derivation.status.in_(UNREVIEWED),
 			)
 			.returning(Derivation.person_id)
 		)
@@ -432,7 +436,9 @@ async def apply_mentions(
 			capture_id=capture.id,
 			kind=MENTION,
 			payload=payload,
-			status="pending_review",
+			status="accepted"
+			if auto_accept and person_id is not None
+			else "pending_review",
 			extractor_version=version,
 			confidence=item.confidence,
 			person_id=person_id,

@@ -88,6 +88,10 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   **Open:** Deepgram keyterms from people's names; Ask answering "when did I last see X"
   from the person rather than retrieval.
 
+- **Keep without asking** ([ADR 0030](decisions/0030-auto-accept-is-not-confirmation.md)):
+  Settings → Review, off by default. When on, new items are kept as `accepted` (not
+  `confirmed`): Ask trusts them, the eval harvester never labels them. Migration 0013.
+
 ## Filed for later
 
 - [#57](https://github.com/akinshonibare/memo/issues/57): the first PITR restore drill.

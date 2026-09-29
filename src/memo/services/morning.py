@@ -105,7 +105,7 @@ _RESURFACE_SQL = text(
 	CROSS JOIN recent r
 	WHERE d.user_id = :user_id
 		AND d.kind = 'idea'
-		AND d.status IN ('confirmed', 'pending_review', 'user_created')
+		AND d.status IN ('confirmed', 'pending_review', 'user_created', 'accepted')
 		AND d.created_at < CAST(:min_age_before AS timestamptz)
 		AND NOT EXISTS (
 			SELECT 1 FROM resurfacings s

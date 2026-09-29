@@ -374,10 +374,12 @@ function DerivationCard({
         : null
       : d.status === "user_created"
         ? "added by you"
-        : d.status;
+        : d.status === "accepted"
+          ? "kept automatically"
+          : d.status;
   // A settled card is tapped to edit it; a rejected one is left alone. A card awaiting
   // review gets Edit alongside Confirm and Reject (saving an edit also confirms it).
-  const editable = d.status === "confirmed" || d.status === "user_created";
+  const editable = d.status === "confirmed" || d.status === "user_created" || d.status === "accepted";
   return (
     <Pressable
       onPress={editable ? onEdit : undefined}

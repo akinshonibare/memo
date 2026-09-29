@@ -17,7 +17,7 @@ from memo.db import DbSession, commit_and_rebind
 from memo.ids import uuid7
 from memo.models import Capture, Chunk, Derivation, Person, User
 from memo.routers.captures import get_queue
-from memo.schemas.derivations import MENTION, DerivationOut
+from memo.schemas.derivations import MENTION, UNREVIEWED, DerivationOut
 from memo.schemas.people import (
 	ContactBody,
 	MentionOut,
@@ -362,7 +362,7 @@ async def resolve_mention(
 				status.HTTP_422_UNPROCESSABLE_CONTENT,
 				"say who this is first (person_id or new_person)",
 			)
-		if mention.status == "pending_review":
+		if mention.status in UNREVIEWED:
 			mention.status = "confirmed"
 	else:
 		mention.status = "rejected"

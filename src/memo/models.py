@@ -18,6 +18,7 @@ from sqlalchemy import (
 	String,
 	Text,
 	UniqueConstraint,
+	false,
 	func,
 	text,
 )
@@ -55,6 +56,8 @@ class User(Base):
 	display_name: Mapped[str | None] = mapped_column(String(60))
 	# An Aura-2 model for spoken answers; None means the server default.
 	voice: Mapped[str | None] = mapped_column(String(64))
+	# Keep what extraction finds without asking (ADR 0030); stored as 'accepted'.
+	auto_accept: Mapped[bool] = mapped_column(default=False, server_default=false())
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 

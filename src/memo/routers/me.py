@@ -43,6 +43,8 @@ class MeOut(BaseModel):
 	name: str | None = Field(validation_alias="display_name")
 	email: str | None  # from Apple; may be a private relay address
 	voice: str | None
+	# Keep what extraction finds without asking (ADR 0030). Off by default.
+	auto_accept: bool
 	created_at: dt.datetime
 
 
@@ -58,6 +60,7 @@ class MePatch(BaseModel):
 	timezone: str | None = Field(default=None, min_length=1, max_length=64)
 	name: str | None = Field(default=None, max_length=60)
 	voice: str | None = None
+	auto_accept: bool | None = None
 
 	@field_validator("timezone")
 	@classmethod
@@ -89,7 +92,7 @@ class MePatch(BaseModel):
 	@model_validator(mode="after")
 	def _something(self) -> "MePatch":
 		if not self.model_fields_set:
-			raise ValueError("provide timezone, name or voice")
+			raise ValueError("provide timezone, name, voice or auto_accept")
 		return self
 
 
@@ -115,6 +118,15 @@ async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> 
 		user.display_name = body.name or None
 	if "voice" in fields:
 		user.voice = body.voice
+	if "auto_accept" in fields:
+		if body.auto_accept is None:
+			raise HTTPException(
+				status.HTTP_422_UNPROCESSABLE_CONTENT,
+				"auto_accept must be true or false",
+			)
+		# From the next note on. What already waits for review keeps waiting:
+		# turning this on is a choice about the future, not a review of the past.
+		user.auto_accept = body.auto_accept
 	await session.flush()
 	return user
 

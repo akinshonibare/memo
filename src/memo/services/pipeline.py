@@ -30,6 +30,7 @@ from memo.models import (
 	Recording,
 	User,
 )
+from memo.schemas.derivations import UNREVIEWED
 from memo.services.chunking import CHUNKER_VERSION, chunk_text
 from memo.services.derivation_index import derivation_text, reembed_derivation
 from memo.services.embeddings import Embedder
@@ -172,6 +173,8 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 		raise TerminalError("nothing to extract: the capture has no text")
 	user = await ctx.session.get(User, capture.user_id)
 	timezone = user.timezone if user is not None else "UTC"
+	# Auto-accept (ADR 0030): kept at once, but as 'accepted', never 'confirmed'.
+	status = "accepted" if user is not None and user.auto_accept else "pending_review"
 	version = ctx.extractor.version
 	try:
 		result = await ctx.extractor.extract(
@@ -191,7 +194,7 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 			Derivation.capture_id == capture.id,
 			Derivation.user_id == capture.user_id,
 			Derivation.extractor_version == version,
-			Derivation.status == "pending_review",
+			Derivation.status.in_(UNREVIEWED),
 		)
 	)
 	for kind, item in result.extraction.items():
@@ -202,7 +205,7 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 				capture_id=capture.id,
 				kind=kind,
 				payload=item.model_dump(mode="json", exclude={"confidence"}),
-				status="pending_review",
+				status=status,
 				extractor_version=version,
 				confidence=item.confidence,
 			)
@@ -240,7 +243,12 @@ async def _people(ctx: PipelineContext, capture: Capture) -> None:
 		raise TerminalError(str(exc)) from exc
 	await _record_calls(ctx, capture, result.calls)
 	mentions = await apply_mentions(
-		ctx.session, capture, result.extraction, version=version, timezone=timezone
+		ctx.session,
+		capture,
+		result.extraction,
+		version=version,
+		timezone=timezone,
+		auto_accept=user.auto_accept if user is not None else False,
 	)
 	log.info(
 		"stage.people",

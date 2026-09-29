@@ -5,10 +5,11 @@
 
 `export.json` is Settings → Export in the app (GET /v1/me/export). A capture becomes a
 candidate only when the user has finished with it: it has derivations, and none is
-still pending_review. Its expected extraction is exactly what the user kept -
-confirmed items as they now read, plus `user_created` ones - so a rejection is a
-labelled false positive and an addition a labelled false negative, without anyone
-writing a label by hand.
+still pending_review or auto-accepted (ADR 0030: kept without a look, so not a label).
+Mentions (ADR 0029) are not extraction items and are ignored here. Its expected
+extraction is exactly what the user kept - confirmed items as they now read, plus
+`user_created` ones - so a rejection is a labelled false positive and an addition a
+labelled false negative, without anyone writing a label by hand.
 
 Prints candidates; never edits golden.jsonl. Read each one before moving it across:
 this is your private text, and a label is only as good as the review behind it.
@@ -23,18 +24,21 @@ from typing import Any
 from memo.schemas.derivations import PAYLOAD_MODELS, Extraction
 
 KEPT = {"confirmed", "user_created"}
+UNREVIEWED = {"pending_review", "accepted"}
 _LISTS = {"todo": "todos", "event": "events", "idea": "ideas"}
 
 
 def candidate(capture: dict[str, Any], timezone: str) -> dict[str, Any] | None:
-	derivations = capture.get("derivations", [])
+	derivations = [d for d in capture.get("derivations", []) if d["kind"] in _LISTS]
 	text = (capture.get("text") or "").strip()
 	if not text or capture.get("status") != "ready":
 		return None
 	if not derivations:
 		return None  # nothing was extracted or added: no review, so no label
-	if any(d["status"] == "pending_review" for d in derivations):
-		return None  # not finished reviewing: the labels would be half-made
+	if any(d["status"] in UNREVIEWED for d in derivations):
+		# Not finished reviewing, or kept without a look: the model's own guesses
+		# would become the answers it is graded against.
+		return None
 	# Everything rejected is a real label too: "there was nothing to extract".
 	kept = [d for d in derivations if d["status"] in KEPT]
 	expected: dict[str, list[dict[str, Any]]] = {}

@@ -21,7 +21,8 @@ export type Derivation = {
   capture_id: string | null;
   kind: "todo" | "event" | "idea";
   payload: Record<string, unknown> & { title?: string };
-  status: "pending_review" | "confirmed" | "rejected" | "user_created";
+  // accepted: kept without a look because auto-accept is on (ADR 0030).
+  status: "pending_review" | "confirmed" | "rejected" | "user_created" | "accepted";
   extractor_version: string;
   confidence: number | null;
   completed_at: string | null; // todos only: when it was ticked off
@@ -150,6 +151,7 @@ export type Me = {
   name: string | null; // what the assistant calls you; null means "you"
   email: string | null; // from Apple, possibly a private relay address
   voice: string | null; // Aura-2 voice for spoken answers; null = default
+  auto_accept?: boolean; // keep what extraction finds without asking (ADR 0030)
   created_at: string;
 };
 
@@ -228,7 +230,7 @@ export class Api {
     return this.updateProfile({ timezone });
   }
 
-  updateProfile(patch: { name?: string; voice?: string | null; timezone?: string }) {
+  updateProfile(patch: { name?: string; voice?: string | null; timezone?: string; auto_accept?: boolean }) {
     return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });
   }
 

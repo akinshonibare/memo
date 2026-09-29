@@ -23,13 +23,21 @@ KINDS: tuple[str, ...] = ("todo", "event", "idea")
 # derivation routes leave it out, and it is resolved through /v1/mentions.
 MENTION = "mention"
 ALL_KINDS: tuple[str, ...] = (*KINDS, MENTION)
-DerivationStatus = Literal["pending_review", "confirmed", "rejected", "user_created"]
+# pending_review: extracted, waiting for a look. confirmed: a person checked it.
+# rejected: a person said no. user_created: a person added it. accepted: kept without
+# a look, because the user turned on auto-accept (ADR 0030) - never a label for evals.
+DerivationStatus = Literal[
+	"pending_review", "confirmed", "rejected", "user_created", "accepted"
+]
 DERIVATION_STATUSES: tuple[str, ...] = (
 	"pending_review",
 	"confirmed",
 	"rejected",
 	"user_created",
+	"accepted",
 )
+# Extracted and not yet looked at by a person, whether or not it was kept.
+UNREVIEWED: tuple[str, ...] = ("pending_review", "accepted")
 
 
 # A string value that ends in something like `','confidence':1.0` is the model

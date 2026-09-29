@@ -16,6 +16,7 @@ from memo.schemas.derivations import (
 	DERIVATION_STATUSES,
 	KINDS,
 	MENTION,
+	UNREVIEWED,
 	DerivationCreate,
 	DerivationOut,
 	DerivationPage,
@@ -142,11 +143,12 @@ async def review_derivation(
 			raise HTTPException(
 				status.HTTP_422_UNPROCESSABLE_CONTENT, validation_detail(exc)
 			) from exc
-	# An edit is a confirmation only of something awaiting review. One the user added
-	# stays `user_created` (the recall signal), one already confirmed stays confirmed.
+	# An edit is a confirmation only of something nobody had looked at (awaiting
+	# review, or auto-accepted: ADR 0030). One the user added stays `user_created`
+	# (the recall signal), one already confirmed stays confirmed.
 	if body.status is not None:
 		derivation.status = body.status
-	elif derivation.status == "pending_review":
+	elif derivation.status in UNREVIEWED:
 		derivation.status = "confirmed"
 	derivation.reviewed_at = dt.datetime.now(dt.UTC)
 	if derivation.status == "rejected":

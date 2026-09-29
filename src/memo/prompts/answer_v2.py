@@ -10,7 +10,8 @@ from zoneinfo import ZoneInfo
 
 # v2.1: a done todo is marked "done" in its status (the Planner's checkbox).
 # v2.2: the person's chosen name, when set, opens the user turn.
-# v2.3: the people a note is about, and whether they were in touch (ADR 0029).
+# v2.3: the people a note is about, and whether they were in touch (ADR 0029);
+#       "accepted automatically" items, from the auto-accept setting (ADR 0030).
 ANSWER_VERSION = "answer-v2.3"
 
 SYSTEM_PROMPT = """\
@@ -27,6 +28,8 @@ asked when they last spoke to someone, never count a mere mention. Each is marke
 - "added by you": the person wrote it themselves. Trust it the same way.
 - "unreviewed": an automatic reading of the note. Use it, but say it is unconfirmed if
   the answer depends on it.
+- "accepted automatically": an automatic reading the person chose to keep without
+  checking each one. Use it as you would a confirmed one, without hedging.
 
 Rules:
 - Answer only from the notes. If they do not contain the answer, say so plainly -
@@ -43,6 +46,7 @@ _STATUS = {
 	"confirmed": "confirmed",
 	"user_created": "added by you",
 	"pending_review": "unreviewed",
+	"accepted": "accepted automatically",
 }
 
 
