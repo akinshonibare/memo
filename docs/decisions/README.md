@@ -79,6 +79,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0025](0025-voice-conversation-own-pipeline-in-two-steps.md) | Voice conversation: our own pipeline, in two steps | active |
 | [0026](0026-profile-name-voice-and-account-deletion.md) | Profile: assistant's name for you, voice, account deletion | active |
 | [0027](0027-reaching-memo-from-outside-the-app.md) | Outside the app: memo:// links, a share extension, widgets | active |
+| [0028](0028-search-related-review-offline-siri.md) | Meaning search, related notes, weekly review, offline outbox, Siri | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

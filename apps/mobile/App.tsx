@@ -25,12 +25,21 @@ import { captureOrQueue, flushOutbox, useOutbox } from "./src/outbox";
 
 type Back = "home" | "planner" | "ideas" | "review";
 
-// memo://record, memo://write, memo://ask: what an iOS Shortcut opens, so the Action
-// Button or a Siri phrase goes straight to a capture (ADR 0027).
-type LinkAction = "record" | "write" | "ask" | "planner";
+// memo://record, write, ask, planner: what a Shortcut or widget opens (ADR 0027).
+// memo://capture?text=...: a note dictated to Siri (ADR 0028), saved as it is.
+type LinkAction = "record" | "write" | "ask" | "planner" | `capture:${string}`;
 function linkAction(url: string | null): LinkAction | null {
-  const match = url?.match(/^memo:\/\/(record|write|ask|planner)\b/);
-  return match ? (match[1] as LinkAction) : null;
+  const match = url?.match(/^memo:\/\/(record|write|ask|planner|capture)\b(?:\?(.*))?/);
+  if (!match) return null;
+  if (match[1] !== "capture") return match[1] as LinkAction;
+  const param = /(?:^|&)text=([^&]*)/.exec(match[2] ?? "");
+  let text = "";
+  try {
+    text = param ? decodeURIComponent(param[1].replace(/\+/g, " ")).trim() : "";
+  } catch {
+    return null; // malformed escape: ignore rather than save garbage
+  }
+  return text ? `capture:${text}` : null;
 }
 type View_ = { name: Back } | { name: "detail"; id: string; back: Back };
 
@@ -143,6 +152,13 @@ export default function App() {
     const run = setTimeout(() => {
       setView({ name: pending === "planner" ? "planner" : "home" });
       setSettings(false);
+      if (pending.startsWith("capture:")) {
+        // Straight to the outbox path: saved now, or kept until there's a network.
+        void captureOrQueue(api!, { kind: "text", text: pending.slice("capture:".length) }).then(() => {
+          haptic.done();
+          bump();
+        });
+      }
       if (pending === "record") setRecord(true);
       if (pending === "write") setCompose(true);
       if (pending === "ask") setAsk(true);
