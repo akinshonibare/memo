@@ -29,6 +29,17 @@ export async function saveSession(token: string): Promise<void> {
   await SecureStore.setItemAsync(KEY_TOKEN, token);
 }
 
+// First-run onboarding is a per-device convenience, not account state.
+const KEY_ONBOARDED = "memo.onboarded";
+
+export async function loadOnboarded(): Promise<boolean> {
+  return (await SecureStore.getItemAsync(KEY_ONBOARDED)) === "1";
+}
+
+export async function saveOnboarded(): Promise<void> {
+  await SecureStore.setItemAsync(KEY_ONBOARDED, "1");
+}
+
 export async function clearSession(): Promise<void> {
   await SecureStore.deleteItemAsync(KEY_TOKEN);
 }

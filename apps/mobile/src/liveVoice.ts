@@ -1,5 +1,6 @@
 import { AudioModule, setAudioModeAsync, useAudioStream } from "expo-audio";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { haptic } from "./haptics";
 
 // Ask's voice mode, step 2 (ADR 0025): hands-free. The mic streams 16-bit PCM over a
 // WebSocket; the server relays it to Deepgram, whose endpointing decides when a turn
@@ -110,6 +111,7 @@ export function useLiveVoice({
       } else if (message.type === "partial" && !muted.current) {
         setPartial(message.text ?? "");
       } else if (message.type === "final" && !muted.current && message.text) {
+        haptic.tap(); // you were heard
         muted.current = true; // half-duplex: stop listening while the answer plays
         setPartial("");
         setState("answering");

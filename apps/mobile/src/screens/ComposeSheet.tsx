@@ -4,17 +4,21 @@ import { Api, ApiError, type Capture } from "../api";
 import { IconCircle, Pill, SheetHandle } from "../components";
 import { useKeyboardHeight } from "../keyboard";
 import { colors, ui } from "../ui";
+import { haptic } from "../haptics";
 
 export function ComposeSheet({
   api,
+  initialText,
   onClose,
   onSaved,
 }: {
   api: Api;
+  initialText?: string; // from the share sheet: a link or text to annotate
+
   onClose: () => void;
   onSaved: (capture: Capture) => void;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const keyboard = useKeyboardHeight();
@@ -25,6 +29,7 @@ export function ComposeSheet({
     setBusy(true);
     try {
       const saved = await api.createTextCapture(body);
+      haptic.done();
       onSaved(saved);
       onClose();
     } catch (e) {

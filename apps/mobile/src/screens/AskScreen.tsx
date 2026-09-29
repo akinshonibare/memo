@@ -19,6 +19,7 @@ import { useKeyboardHeight } from "../keyboard";
 import { colors, ui } from "../ui";
 import { useLiveVoice } from "../liveVoice";
 import { SentenceSplitter, SpeechQueue } from "../voice";
+import { haptic } from "../haptics";
 
 type Turn = Message & { streaming?: boolean };
 type StreamEvent = "retrieval" | "token" | "done" | "error";
@@ -99,6 +100,7 @@ export function AskSheet({
   const ask = useCallback(async (spoken?: string) => {
     const question = (spoken ?? text).trim();
     if (!question || busy) return;
+    haptic.tap();
     if (spoken === undefined) setText("");
     speech.stop();
     const splitter = spoken !== undefined ? new SentenceSplitter() : null;
@@ -202,6 +204,7 @@ export function AskSheet({
   };
 
   const startListening = async () => {
+    haptic.press();
     pressedAt.current = Date.now();
     released.current = false;
     setHint(null);

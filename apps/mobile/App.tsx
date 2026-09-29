@@ -1,10 +1,14 @@
 import { InstrumentSerif_400Regular, useFonts } from "@expo-google-fonts/instrument-serif";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useShareIntent } from "expo-share-intent";
+import { Linking, StyleSheet, View } from "react-native";
+import { haptic } from "./src/haptics";
+import { preparePhoto } from "./src/photo";
+import { publishRecord } from "./src/widgets";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Api, type Me } from "./src/api";
-import { type Config, clearSession, loadConfig } from "./src/config";
+import { type Config, clearSession, loadConfig, loadOnboarded, saveOnboarded } from "./src/config";
 import { AskSheet } from "./src/screens/AskScreen";
 import { ComposeSheet } from "./src/screens/ComposeSheet";
 import { DetailScreen } from "./src/screens/DetailScreen";
@@ -12,11 +16,20 @@ import { HomeScreen } from "./src/screens/HomeScreen";
 import { IdeasScreen } from "./src/screens/IdeasScreen";
 import { PlannerScreen } from "./src/screens/PlannerScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
+import { OnboardingScreen } from "./src/screens/OnboardingScreen";
 import { RecordSheet } from "./src/screens/RecordSheet";
 import { ProfileSheet } from "./src/screens/ProfileScreen";
 import { colors } from "./src/ui";
 
 type Back = "home" | "planner" | "ideas";
+
+// memo://record, memo://write, memo://ask: what an iOS Shortcut opens, so the Action
+// Button or a Siri phrase goes straight to a capture (ADR 0027).
+type LinkAction = "record" | "write" | "ask" | "planner";
+function linkAction(url: string | null): LinkAction | null {
+  const match = url?.match(/^memo:\/\/(record|write|ask|planner)\b/);
+  return match ? (match[1] as LinkAction) : null;
+}
 type View_ = { name: Back } | { name: "detail"; id: string; back: Back };
 
 export default function App() {
@@ -29,6 +42,25 @@ export default function App() {
   const [compose, setCompose] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [me, setMe] = useState<Me | null>(null);
+  const [meReady, setMeReady] = useState(false);
+  const [onboarded, setOnboarded] = useState<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    loadOnboarded().then(setOnboarded).catch(() => setOnboarded(true));
+  }, []);
+
+  // A link can arrive before sign-in or onboarding finish (a cold start from the Action
+  // Button): it waits as pending and runs once the app is ready for it.
+  const [pending, setPending] = useState<LinkAction | null>(null);
+  useEffect(() => {
+    const take = (url: string | null) => {
+      const action = linkAction(url);
+      if (action) setPending(action);
+    };
+    Linking.getInitialURL().then(take).catch(() => {});
+    const sub = Linking.addEventListener("url", (event) => take(event.url));
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     loadConfig().then(setConfig);
@@ -55,10 +87,61 @@ export default function App() {
 
   const bump = () => setRefreshKey((k) => k + 1);
 
+  const ready = !!api && onboarded === true;
+
+  // Shared into memo from another app (ADR 0027). A photo becomes a photo capture at
+  // once; a link or text opens a new note prefilled, so you can say why you kept it.
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent();
+  const [composeText, setComposeText] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!ready || !api || !hasShareIntent) return;
+    const image = shareIntent.files?.find((f) => f.mimeType.startsWith("image/"));
+    const text = [shareIntent.meta?.title, shareIntent.text].filter(Boolean).join("\n").trim();
+    resetShareIntent();
+    const run = setTimeout(() => {
+      setView({ name: "home" });
+      if (image) {
+        preparePhoto(image.path, image.width, image.height)
+          .then((uri) => api.createImageCapture(uri))
+          .then(() => {
+            haptic.done();
+            bump();
+          })
+          .catch(() => {});
+      } else if (text) {
+        setComposeText(text);
+        setCompose(true);
+      }
+    }, 0);
+    return () => clearTimeout(run);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, api, hasShareIntent]);
+
+  // The Record widget needs one snapshot from the app before it can render.
+  useEffect(() => {
+    publishRecord();
+  }, []);
+  useEffect(() => {
+    if (!ready || !pending) return;
+    const run = setTimeout(() => {
+      setView({ name: pending === "planner" ? "planner" : "home" });
+      setSettings(false);
+      if (pending === "record") setRecord(true);
+      if (pending === "write") setCompose(true);
+      if (pending === "ask") setAsk(true);
+      setPending(null);
+    }, 0);
+    return () => clearTimeout(run);
+  }, [ready, pending]);
+
   // Who is signed in, for the avatar on Home; refreshed from Profile on every change.
   useEffect(() => {
     if (!api) return;
-    api.getMe().then(setMe).catch(() => setMe(null));
+    api
+      .getMe()
+      .then(setMe)
+      .catch(() => setMe(null))
+      .finally(() => setMeReady(true));
   }, [api]);
 
   if (!fontsLoaded || config === undefined) return <View style={styles.root} />;
@@ -74,7 +157,18 @@ export default function App() {
             onChangeServer={() => setSettings(true)}
           />
         )}
-        {api && view.name === "home" && (
+        {api && meReady && onboarded === false && (
+          <OnboardingScreen
+            api={api}
+            me={me}
+            onDone={(updated) => {
+              if (updated) setMe(updated);
+              setOnboarded(true);
+              saveOnboarded().catch(() => {});
+            }}
+          />
+        )}
+        {api && onboarded !== false && view.name === "home" && (
           <HomeScreen
             api={api}
             refreshKey={refreshKey}
@@ -127,7 +221,17 @@ export default function App() {
           />
         )}
         {api && record && <RecordSheet api={api} onClose={() => setRecord(false)} onSaved={bump} />}
-        {api && compose && <ComposeSheet api={api} onClose={() => setCompose(false)} onSaved={bump} />}
+        {api && compose && (
+          <ComposeSheet
+            api={api}
+            initialText={composeText}
+            onClose={() => {
+              setCompose(false);
+              setComposeText(undefined);
+            }}
+            onSaved={bump}
+          />
+        )}
         <ProfileSheet
           visible={settings}
           config={config}

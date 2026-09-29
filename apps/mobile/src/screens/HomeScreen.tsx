@@ -20,6 +20,7 @@ import { pickPhoto } from "../photo";
 import { playUrl, stopPlayback, usePlayingId } from "../playback";
 import { colors, ui } from "../ui";
 import { TodaySection, useMorning } from "./TodaySection";
+import { haptic } from "../haptics";
 
 const POLL_MS = 3000;
 
@@ -97,6 +98,7 @@ export function HomeScreen({
       if (!uri) return;
       setUploading(true);
       await api.createImageCapture(uri);
+      haptic.done();
       await refresh();
     } catch (e) {
       setError(`Couldn't add the photo: ${String(e)}`);
@@ -140,7 +142,10 @@ export function HomeScreen({
         <View style={{ flex: 1 }} />
         <IconCircle name="calendar-outline" onPress={onPlanner} />
       </View>
-      <Text style={[ui.h1, ui.pad]}>memo</Text>
+      <Text style={[ui.h1, ui.pad, styles.wordmark]}>
+        memo<Text style={{ color: colors.record }}>.</Text>
+      </Text>
+      <Text style={[ui.meta, ui.pad, styles.greeting]}>{greeting(name)}</Text>
       <View style={[styles.search, { marginHorizontal: 20 }]}>
         <Ionicons name="search" size={20} color={colors.muted} />
         <TextInput
@@ -197,7 +202,10 @@ export function HomeScreen({
           <IconCircle name="add" size={56} onPress={add} />
         )}
         <Pressable
-          onPress={onRecord}
+          onPress={() => {
+            haptic.press();
+            onRecord();
+          }}
           style={({ pressed }) => [
             styles.record,
             pressed && styles.recordPressed,
@@ -273,7 +281,20 @@ function Row({
   );
 }
 
+// "Good evening, Akin · Monday 28 September": the first name only, and nothing at all
+// in its place when no name is set.
+function greeting(name: string | null): string {
+  const now = new Date();
+  const hour = now.getHours();
+  const part = hour < 5 ? "evening" : hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+  const first = name?.trim().split(/\s+/)[0];
+  const day = now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+  return `Good ${part}${first ? `, ${first}` : ""} · ${day}`;
+}
+
 const styles = StyleSheet.create({
+  wordmark: { marginBottom: 2 },
+  greeting: { marginBottom: 14 },
   topBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -307,7 +328,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 34,
   },
-  chipDanger: { backgroundColor: "#2a1214" },
+  chipDanger: { backgroundColor: colors.dangerSurface },
   chipText: { color: colors.text, fontSize: 14, fontWeight: "600" },
   bottom: {
     position: "absolute",
@@ -324,7 +345,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     backgroundColor: colors.record,
     borderWidth: 6,
-    borderColor: "#3a1a19",
+    borderColor: "#4A3317",
   },
   recordPressed: { transform: [{ scale: 0.94 }] },
   uploading: {

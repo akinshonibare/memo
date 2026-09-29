@@ -18,6 +18,7 @@ import { ACTIVE_STATUSES, formatClock, formatDue, formatStamp, formatWhen, headl
 import { playUrl, stopPlayback, usePlayingId } from "../playback";
 import { colors, ui } from "../ui";
 import { DerivationSheet } from "./DerivationSheet";
+import { haptic } from "../haptics";
 
 const KINDS: Derivation["kind"][] = ["todo", "event", "idea"];
 
@@ -102,6 +103,7 @@ export function DetailScreen({
   }, [load, active]);
 
   const review = async (d: Derivation, status: "confirmed" | "rejected") => {
+    haptic.pick();
     setBusy(d.id);
     try {
       await api.reviewDerivation(d.id, { status });
@@ -334,7 +336,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     padding: 16,
     borderRadius: 18,
-    backgroundColor: "#1f1214",
+    backgroundColor: colors.dangerSurface,
   },
   section: { marginTop: 32 },
   card: {
