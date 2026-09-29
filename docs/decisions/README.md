@@ -96,6 +96,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0042](0042-faith-a-space-of-its-own.md) | Faith: a space of its own, off until turned on; prayers answered, not done; a plan by position (plan superseded by 0044) | active |
 | [0043](0043-habits-noticed-not-logged.md) | Habits: noticed in your notes, suggested when they repeat, counted by rhythm, never a streak | active |
 | [0044](0044-readings-you-choose.md) | Readings you choose: set what you're reading, log what you read, no fixed plan (supersedes 0042's plan) | active |
+| [0045](0045-ask-reads-dates-and-people-before-it-searches.md) | Ask reads dates and people from the records before it searches; names go to Deepgram as keyterms | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

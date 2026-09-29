@@ -261,6 +261,41 @@ def resolve(payload: MentionPayload, people: Sequence[Person]) -> Resolution:
 	return Resolution("new")
 
 
+def _words(text: str) -> list[str]:
+	# "Tunde's" is Tunde.
+	return [w.removesuffix("'s") for w in normalize(text).split()]
+
+
+def _contains(haystack: list[str], needle: list[str]) -> bool:
+	n = len(needle)
+	return n > 0 and any(
+		haystack[i : i + n] == needle for i in range(len(haystack) - n + 1)
+	)
+
+
+def named_in(question: str, people: Sequence[Person], limit: int = 3) -> list[Person]:
+	"""The people a question names (ADR 0045), for Ask to read their last contact
+	from the record instead of hoping retrieval finds the right note.
+
+	A full name or alias anywhere in the question is a match; so is a given name
+	alone ("when did I last see Tunde?"). A full match outranks a given-name one with
+	the same given name, so "Tunde Ade" doesn't also bring Tunde Bakare, while "Mum and
+	Tunde" still finds both. A wrong match costs one ignored line in the prompt; a
+	missed one costs the answer, so this errs towards matching."""
+	words = _words(question)
+	full = [p for p in people if any(_contains(words, _words(n)) for n in names_of(p))]
+	claimed = {_words(p.name)[0] for p in full if _words(p.name)}
+	given = [
+		p
+		for p in people
+		if p not in full
+		and _words(p.name)
+		and _words(p.name)[0] in words
+		and _words(p.name)[0] not in claimed
+	]
+	return [*full, *given][:limit]
+
+
 def with_alias(person: Person, name: str) -> list[str]:
 	"""The person's aliases plus `name`, unless memo would already match it. Linking
 	"Mum" to Folake teaches memo that "Mum" is Folake; linking "Tunde" to "Tunde
@@ -577,6 +612,56 @@ async def last_contacts(
 		.group_by(Derivation.person_id)
 	)
 	return {pid: day for pid, day in rows.all() if pid is not None and day}
+
+
+# Kinship words make poor keyterms: Deepgram already hears them, and boosting a common
+# word risks hearing it where it wasn't said. Keyterms are for the names it can't know.
+_KIN = frozenset(
+	"mum mom mother mummy dad father daddy brother sister bro sis grandma grandad "
+	"grandpa granny nan nana aunt auntie aunty uncle cousin wife husband son daughter "
+	"boss partner babe".split()
+)
+# Deepgram allows 500 tokens of keyterms and recommends 20-50 terms.
+KEYTERM_LIMIT = 50
+
+
+async def keyterms(
+	session: AsyncSession, user_id: uuid.UUID, limit: int = KEYTERM_LIMIT
+) -> list[str]:
+	"""The names transcription should listen for, the reason memo chose Deepgram
+	(ADR 0013): each person's name and proper-noun aliases, the most recently
+	mentioned first, so the cap drops the people least likely to come up."""
+	latest = (
+		select(Derivation.person_id, func.max(Derivation.created_at).label("at"))
+		.where(
+			Derivation.user_id == user_id,
+			Derivation.kind == MENTION,
+			Derivation.status != "rejected",
+			Derivation.person_id.is_not(None),
+		)
+		.group_by(Derivation.person_id)
+		.subquery()
+	)
+	people = (
+		await session.scalars(
+			select(Person)
+			.outerjoin(latest, latest.c.person_id == Person.id)
+			.where(Person.user_id == user_id)
+			.order_by(latest.c.at.desc().nulls_last(), Person.name, Person.id)
+		)
+	).all()
+	terms: list[str] = []
+	seen: set[str] = set()
+	for person in people:
+		for name in names_of(person):
+			key = normalize(name)
+			if not key or key in seen or key in _KIN or not name.strip()[:1].isupper():
+				continue
+			seen.add(key)
+			terms.append(name.strip())
+			if len(terms) >= limit:
+				return terms
+	return terms
 
 
 async def mention_counts(

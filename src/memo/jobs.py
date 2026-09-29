@@ -10,7 +10,7 @@ from sqlalchemy import select, text
 
 from memo.db import bind_system, bind_user
 from memo.models import Capture, Recording
-from memo.services.derivation_index import reembed_derivation
+from memo.services.derivation_index import reembed_derivation, refresh_stale_chunks
 from memo.services.habits import unread_for_habits
 from memo.services.morning import build_morning_view, is_build_hour
 from memo.services.people import unread_notes
@@ -207,6 +207,25 @@ async def read_people_backlog_task(ctx: dict[str, Any]) -> int:
 			break  # the provider is struggling: the next sweep, not the next note
 	log.info("sweep.people_backlog", notes=len(backlog), **outcomes)
 	return len(backlog)
+
+
+async def refresh_derivation_chunks_task(ctx: dict[str, Any]) -> int:
+	"""Bring stale item chunks up to date, a batch per hour (ADR 0045): the items
+	embedded before their dates were part of their text, and any future change to
+	that text. A sweep, like the people backlog; a provider hiccup waits for the next
+	hour rather than retrying, since nothing the user sees depends on it."""
+	structlog.contextvars.clear_contextvars()
+	structlog.contextvars.bind_contextvars(job_id=ctx.get("job_id"))
+	try:
+		async with ctx["session_factory"]() as session:
+			await bind_system(session)
+			refreshed = await refresh_stale_chunks(session, ctx["embedder"])
+			await session.commit()
+	except (RetryableError, TerminalError) as exc:
+		log.warning("sweep.derivation_chunks_failed", error=str(exc))
+		return 0
+	log.info("sweep.derivation_chunks", refreshed=refreshed)
+	return refreshed
 
 
 HABITS_BACKLOG_BATCH = 40

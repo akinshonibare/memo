@@ -1,0 +1,45 @@
+{"id": "t01", "question": "what's on today", "expected": ["2026-09-30", "2026-09-30"]}
+{"id": "t02", "question": "what do I have on tomorrow morning", "expected": ["2026-10-01", "2026-10-01"]}
+{"id": "t03", "question": "what did I do yesterday", "expected": ["2026-09-29", "2026-09-29"]}
+{"id": "t04", "question": "what's happening this week", "expected": ["2026-09-28", "2026-10-04"]}
+{"id": "t05", "question": "anything next week I should prep for", "expected": ["2026-10-05", "2026-10-11"]}
+{"id": "t06", "question": "what did I get done last week", "expected": ["2026-09-21", "2026-09-27"]}
+{"id": "t07", "question": "what are my plans this weekend", "expected": ["2026-10-03", "2026-10-04"]}
+{"id": "t08", "question": "how was last weekend", "expected": ["2026-09-26", "2026-09-27"]}
+{"id": "t09", "question": "who did I see this past weekend", "expected": ["2026-09-26", "2026-09-27"]}
+{"id": "t10", "question": "what's on Friday", "expected": ["2026-10-02", "2026-10-02"]}
+{"id": "t11", "question": "what did I do on Saturday", "expected": ["2026-09-26", "2026-09-26"]}
+{"id": "t12", "question": "anything on next Tuesday", "expected": ["2026-10-06", "2026-10-06"], "note": "read as the next Tuesday after today; some mean the Tuesday of next week (the same day here)"}
+{"id": "t13", "question": "what happened last Thursday", "expected": ["2026-09-24", "2026-09-24"]}
+{"id": "t14", "question": "anything on this Sunday", "expected": ["2026-10-04", "2026-10-04"]}
+{"id": "t15", "question": "who's coming round on sunday", "expected": ["2026-10-04", "2026-10-04"]}
+{"id": "t16", "question": "what's on wed", "expected": ["2026-09-30", "2026-09-30"]}
+{"id": "t17", "question": "what's on the 14th of October", "expected": ["2026-10-14", "2026-10-14"]}
+{"id": "t18", "question": "what did I write on 3 September", "expected": ["2026-09-03", "2026-09-03"]}
+{"id": "t19", "question": "what's on October 20", "expected": ["2026-10-20", "2026-10-20"]}
+{"id": "t20", "question": "what happened on the 26th of September", "expected": ["2026-09-26", "2026-09-26"]}
+{"id": "t21", "question": "what was I thinking about in August", "expected": ["2026-08-01", "2026-08-31"]}
+{"id": "t22", "question": "what have I got on in November", "expected": ["2026-11-01", "2026-11-30"]}
+{"id": "t23", "question": "what did I write last month", "expected": ["2026-08-01", "2026-08-31"]}
+{"id": "t24", "question": "anything due this month", "expected": ["2026-09-01", "2026-09-30"]}
+{"id": "t25", "question": "what's coming up next month", "expected": ["2026-10-01", "2026-10-31"]}
+{"id": "t26", "question": "what was I worried about 2 weeks ago", "expected": ["2026-09-14", "2026-09-20"]}
+{"id": "t27", "question": "what have I been doing the past 7 days", "expected": ["2026-09-24", "2026-09-30"]}
+{"id": "t28", "question": "what did I get up to in the past week", "expected": ["2026-09-24", "2026-09-30"]}
+{"id": "t29", "question": "what did I do 3 days ago", "expected": ["2026-09-27", "2026-09-27"]}
+{"id": "t30", "question": "what's on the day after tomorrow", "expected": ["2026-10-02", "2026-10-02"]}
+{"id": "t31", "question": "what's on tonight", "expected": ["2026-09-30", "2026-09-30"]}
+{"id": "t32", "question": "remind me what I said this morning", "expected": ["2026-09-30", "2026-09-30"]}
+{"id": "t33", "question": "what am I doing next weekend", "expected": ["2026-10-10", "2026-10-11"]}
+{"id": "t34", "question": "what's on the week after next", "expected": ["2026-10-12", "2026-10-18"], "note": "known miss"}
+{"id": "t35", "question": "what's on the 2nd", "expected": ["2026-10-02", "2026-10-02"], "note": "known miss: a day with no month"}
+{"id": "t36", "question": "what did I do over Christmas", "expected": ["2025-12-24", "2025-12-26"], "note": "known miss: holidays"}
+{"id": "t37", "question": "what did I get up to in the last few days", "expected": ["2026-09-27", "2026-09-30"], "note": "known miss: 'few'"}
+{"id": "t38", "question": "what did I do since I got back from Lagos", "expected": null, "note": "a time, but one only the notes can resolve: no window is right"}
+{"id": "t39", "question": "what did I do on my birthday", "expected": null, "note": "same: the date is in the notes, not the question"}
+{"id": "t40", "question": "when did I last see Tunde", "expected": null}
+{"id": "t41", "question": "what did I need to talk to Tunde about", "expected": null}
+{"id": "t42", "question": "what was my idea about pricing", "expected": null}
+{"id": "t43", "question": "may I see my ideas about the app", "expected": null}
+{"id": "t44", "question": "what should I do about the march deadline", "expected": null, "note": "'march' alone is not a month without 'in'"}
+{"id": "t45", "question": "what did we'd planned for the flat", "expected": null, "note": "we'd is not wed"}

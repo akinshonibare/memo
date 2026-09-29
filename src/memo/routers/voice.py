@@ -23,10 +23,11 @@ from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketDisconnect
 
 from memo.auth import CurrentUser, websocket_user
-from memo.db import DbSession
+from memo.db import DbSession, bind_user
 from memo.models import User
 from memo.routers.limits import limit_voice
 from memo.services.live_stt import LiveTranscriber, minute_cost, relay
+from memo.services.people import keyterms
 from memo.services.ratelimit import check
 from memo.services.retry import RetryableError, TerminalError
 from memo.services.speech import MAX_CHARS, VOICES, Speaker
@@ -80,6 +81,7 @@ def _upstream(exc: RetryableError | TerminalError) -> HTTPException:
 async def transcribe_question(
 	request: Request,
 	user_id: CurrentUser,
+	session: DbSession,
 	transcriber: Annotated[Transcriber, Depends(get_transcriber)],
 ) -> TranscriptOut:
 	mime = request.headers.get("content-type", "")
@@ -93,7 +95,9 @@ async def transcribe_question(
 	if len(audio) > MAX_QUESTION_BYTES:
 		raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "question too long")
 	try:
-		transcript = await transcriber.transcribe(audio, mime)
+		transcript = await transcriber.transcribe(
+			audio, mime, keyterms=await keyterms(session, user_id)
+		)
 	except (RetryableError, TerminalError) as exc:
 		raise _upstream(exc) from exc
 	return TranscriptOut(text=transcript.text.strip())
@@ -157,9 +161,15 @@ async def live(websocket: WebSocket) -> None:
 		return
 
 	transcriber: LiveTranscriber = websocket.app.state.live_transcriber
+	# Names from the notes, so Ask hears "Tunde" when it's spoken (ADR 0013).
+	async with websocket.app.state.session_factory() as session:
+		await bind_user(session, user_id)
+		terms = await keyterms(session, user_id)
 	seconds = 0.0
 	try:
-		async with transcriber.open(sample_rate=sample_rate) as upstream:
+		async with transcriber.open(
+			sample_rate=sample_rate, keyterms=terms
+		) as upstream:
 			await websocket.send_json({"type": "ready"})
 			seconds = await relay(websocket, upstream, sample_rate=sample_rate)
 	except (

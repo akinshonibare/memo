@@ -52,7 +52,7 @@ from memo.services.habits import (
 	own_keys,
 )
 from memo.services.llm import LLMCall
-from memo.services.people import PeopleReaderLike, apply_mentions
+from memo.services.people import PeopleReaderLike, apply_mentions, keyterms
 from memo.services.retry import RetryableError, TerminalError, backoff_delay
 from memo.services.storage import ObjectStore
 from memo.services.transcription import Transcriber
@@ -135,7 +135,9 @@ async def _transcribe(ctx: PipelineContext, capture: Capture) -> None:
 
 	started = time.perf_counter()
 	audio = await ctx.object_store.get(recording.storage_key)
-	transcript = await ctx.transcriber.transcribe(audio, recording.mime)
+	# The names of people in earlier notes, so "Tunde" isn't heard as "Tuesday".
+	terms = await keyterms(ctx.session, capture.user_id)
+	transcript = await ctx.transcriber.transcribe(audio, recording.mime, keyterms=terms)
 	# Written together, so the words always belong to the text shown (a retry that
 	# transcribes again replaces both).
 	capture.text = transcript.text

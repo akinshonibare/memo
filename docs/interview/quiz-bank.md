@@ -63,6 +63,14 @@ only way to find that out is to ask when Akin isn't braced for it.
     that buy you?
 27. Your ANN query has `WHERE user_id = ?`. Why is that the hard case for HNSW?
 28. Do you need a vector database? Give the real reason, not the performance one.
+40. "What's on this week?" returns nothing useful from your RAG system. Why can't
+    similarity search answer it, what's the textbook fix, and why did memo not use it
+    (ADR 0045)?
+41. You filter a vector search to one weekend's notes and get two results back when
+    there are twenty. What happened, and what do you do instead of widening
+    `ef_search`?
+42. "When did I last see Tunde?" keeps citing an older note. What kind of question is
+    "last", and where should the answer come from?
 
 ## LLM engineering
 

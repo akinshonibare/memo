@@ -28,6 +28,7 @@ from memo.config import Settings
 from memo.db import bind_user, commit_and_rebind
 from memo.ids import uuid7
 from memo.models import (
+	Chunk,
 	Derivation,
 	LLMCallRow,
 	Message,
@@ -36,11 +37,15 @@ from memo.models import (
 	User,
 )
 from memo.prompts import answer_v2, rewrite_v1
+from memo.schemas.derivations import MENTION
+from memo.schemas.people import IN_TOUCH
+from memo.services import timewindow
 from memo.services.embeddings import Embedder
 from memo.services.extraction import RawCompletion
 from memo.services.faith import faith_hidden
 from memo.services.llm import LLMCall
 from memo.services.morning import tz_or_utc
+from memo.services.people import load_people, named_in
 from memo.services.retrieval import Hit, search
 from memo.services.retry import RetryableError, TerminalError
 
@@ -294,6 +299,233 @@ async def rewrite_query(
 	return rewritten
 
 
+# --- what Ask can know exactly (ADR 0045) --------------------------------------------
+
+# Items dated in the question's window, listed ahead of what retrieval finds. A cap,
+# because "this month" can hold more than an answer should read out.
+DATED_LIMIT = 15
+
+
+@dataclass(frozen=True)
+class Named:
+	"""A person the question names, with their last recorded contact."""
+
+	person: Person
+	last: Derivation | None
+	mentions: int
+
+
+def _item_days(d: Derivation, zone: ZoneInfo) -> list[dt.date]:
+	"""The days an item belongs to: an event's day, a todo's due date, and the day a
+	todo was ticked off ("what did I get done last week?"). A payload that doesn't
+	parse is skipped, not fatal: this is a listing, not validation."""
+	days: list[dt.date] = []
+	p = d.payload
+	try:
+		if d.kind == "event" and p.get("starts_at"):
+			days.append(
+				dt.datetime.fromisoformat(p["starts_at"]).astimezone(zone).date()
+			)
+		if d.kind == "todo" and p.get("due"):
+			days.append(dt.date.fromisoformat(p["due"]))
+	except (TypeError, ValueError):
+		pass
+	if d.kind == "todo" and d.completed_at is not None:
+		days.append(d.completed_at.astimezone(zone).date())
+	return days
+
+
+async def dated_items(
+	session: AsyncSession,
+	user_id: uuid.UUID,
+	window: timewindow.Window,
+	zone: ZoneInfo,
+) -> list[Derivation]:
+	"""Todos and events that fall in `window`, earliest first. Read from the table the
+	Planner reads, not searched: "what's on this week" has no words to match."""
+	rows = await session.scalars(
+		select(Derivation).where(
+			Derivation.user_id == user_id,
+			Derivation.kind.in_(("todo", "event")),
+			Derivation.status != "rejected",
+		)
+	)
+	found: list[tuple[dt.date, str, Derivation]] = []
+	for d in rows.all():
+		days = [day for day in _item_days(d, zone) if window.contains(day)]
+		if days:
+			found.append((min(days), str(d.payload.get("starts_at") or ""), d))
+	found.sort(key=lambda t: (t[0], t[1], str(t[2].id)))
+	return [d for _, _, d in found[:DATED_LIMIT]]
+
+
+async def named_people(
+	session: AsyncSession, user_id: uuid.UUID, question: str
+) -> list[Named]:
+	named = named_in(question, await load_people(session, user_id))
+	if not named:
+		return []
+	mentions = (
+		await session.scalars(
+			select(Derivation).where(
+				Derivation.user_id == user_id,
+				Derivation.kind == MENTION,
+				Derivation.status != "rejected",
+				Derivation.person_id.in_([p.id for p in named]),
+			)
+		)
+	).all()
+	out = []
+	for person in named:
+		theirs = [m for m in mentions if m.person_id == person.id]
+		in_touch = [
+			m
+			for m in theirs
+			if m.payload.get("contact") in IN_TOUCH and m.payload.get("occurred_on")
+		]
+		last = max(
+			in_touch,
+			key=lambda m: (str(m.payload["occurred_on"]), m.created_at),
+			default=None,
+		)
+		out.append(Named(person, last, len(theirs)))
+	return out
+
+
+async def pinned_hits(
+	session: AsyncSession,
+	user_id: uuid.UUID,
+	derivations: list[Derivation],
+	*,
+	include_faith: bool,
+) -> dict[uuid.UUID, Hit]:
+	"""The chunk that stands for each derivation in the notes list, by derivation id:
+	its note's opening chunk, so the model reads the note and everything taken from
+	it; or its own chunk when it has no note (deleted, or added by hand). A faith note
+	stays out of Home's Ask (ADR 0042): its item is shown by its own chunk instead."""
+	capture_ids = {d.capture_id for d in derivations if d.capture_id is not None}
+	openings: dict[uuid.UUID, Chunk] = {}
+	if capture_ids:
+		rows = await session.scalars(
+			select(Chunk)
+			.where(
+				Chunk.user_id == user_id,
+				Chunk.capture_id.in_(capture_ids),
+				Chunk.derivation_id.is_(None),
+				Chunk.superseded_at.is_(None),
+				*(() if include_faith else (Chunk.space == "main",)),
+			)
+			.order_by(Chunk.ordinal.desc())
+		)
+		# Later ordinals first, so the opening chunk is the one each note keeps.
+		openings = {c.capture_id: c for c in rows.all() if c.capture_id is not None}
+	own_ids = [d.id for d in derivations if d.capture_id not in openings]
+	own: dict[uuid.UUID, Chunk] = {}
+	if own_ids:
+		rows = await session.scalars(
+			select(Chunk).where(
+				Chunk.user_id == user_id,
+				Chunk.derivation_id.in_(own_ids),
+				Chunk.superseded_at.is_(None),
+			)
+		)
+		own = {c.derivation_id: c for c in rows.all() if c.derivation_id is not None}
+	out: dict[uuid.UUID, Hit] = {}
+	for d in derivations:
+		chunk = (
+			openings.get(d.capture_id) if d.capture_id is not None else None
+		) or own.get(d.id)
+		if chunk is None:
+			continue  # not embedded yet; retrieval may still find its note
+		out[d.id] = Hit(
+			chunk_id=chunk.id,
+			capture_id=chunk.capture_id,
+			derivation_id=chunk.derivation_id,
+			text=chunk.text,
+			created_at=chunk.created_at,
+			vector_rank=None,
+			keyword_rank=None,
+			score=0.0,
+		)
+	return out
+
+
+def _source(hit: Hit) -> uuid.UUID:
+	source = hit.capture_id or hit.derivation_id
+	assert source is not None, "ck_chunks_has_owner"
+	return source
+
+
+async def gather_hits(
+	ctx: AskContext,
+	user_id: uuid.UUID,
+	question: str,
+	query: str,
+	*,
+	zone: ZoneInfo,
+	today: dt.date,
+	include_faith: bool,
+) -> tuple[list[Hit], timewindow.Window | None, list[Named], dict[uuid.UUID, Hit]]:
+	"""Pinned first - the last contact with anyone named, then items dated in the
+	question's days - then retrieval inside those days, then ordinary retrieval to
+	fill up to top_k. One source appears once."""
+	session = ctx.session
+	window = timewindow.parse(query, today)
+	if window is None and query != question:
+		window = timewindow.parse(question, today)
+	if window is None and (word := timewindow.temporal_word(question)):
+		log.info("ask.time_unparsed", word=word)
+	# The rewrite resolves "her" to a name on a follow-up; the question has the rest.
+	named = await named_people(
+		session, user_id, question if query == question else f"{question} {query}"
+	)
+	dated = await dated_items(session, user_id, window, zone) if window else []
+	pins = await pinned_hits(
+		session,
+		user_id,
+		[n.last for n in named if n.last is not None] + dated,
+		include_faith=include_faith,
+	)
+
+	hits: list[Hit] = []
+	seen: set[uuid.UUID] = set()
+
+	def add(hit: Hit) -> None:
+		if _source(hit) not in seen:
+			seen.add(_source(hit))
+			hits.append(hit)
+
+	for hit in pins.values():
+		add(hit)
+	pinned = len(hits)
+	query_vector = await ctx.embedder.embed_query(query)
+	passes = [window.bounds(zone), None] if window else [None]
+	for bounds in passes:
+		result = await search(
+			session,
+			user_id=user_id,
+			query=query,
+			embedder=ctx.embedder,
+			k=ctx.top_k,
+			ef_search=ctx.ef_search,
+			include_faith=include_faith,
+			window=bounds,
+			query_vector=query_vector,
+		)
+		for hit in result.hits:
+			if len(hits) - pinned >= ctx.top_k:
+				break
+			add(hit)
+	if window:
+		log.info(
+			"ask.window",
+			days=(window.end - window.start).days + 1,
+			dated=len(dated),
+			pinned=pinned,
+		)
+	return hits, window, named, pins
+
+
 async def _notes(
 	session: AsyncSession, user_id: uuid.UUID, hits: list[Hit]
 ) -> tuple[list[answer_v2.Note], dt.date, ZoneInfo]:
@@ -422,17 +654,19 @@ async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event,
 		history = await _history(session, assistant, ctx.history_turns)
 		query = await rewrite_query(ctx, assistant, question, history)
 
-		result = await search(
-			session,
-			user_id=user_id,
-			query=query,
-			embedder=ctx.embedder,
-			k=ctx.top_k,
-			ef_search=ctx.ef_search,
+		user = await session.get(User, user_id)
+		zone = tz_or_utc(user.timezone if user is not None else "UTC")
+		hits, window, named, pins = await gather_hits(
+			ctx,
+			user_id,
+			question,
+			query,
+			zone=zone,
+			today=dt.datetime.now(zone).date(),
 			# Home's Ask leaves faith notes out while Faith is on (ADR 0042).
-			include_faith=not faith_hidden(await session.get(User, user_id)),
+			include_faith=not faith_hidden(user),
 		)
-		for rank, hit in enumerate(result.hits, start=1):
+		for rank, hit in enumerate(hits, start=1):
 			session.add(
 				MessageCitation(
 					message_id=assistant.id,
@@ -446,14 +680,29 @@ async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event,
 			"retrieval",
 			{
 				"citations": [
-					citation_payload(h, i) for i, h in enumerate(result.hits, start=1)
+					citation_payload(h, i) for i, h in enumerate(hits, start=1)
 				]
 			},
 		)
 
-		notes, today, zone = await _notes(session, user_id, result.hits)
-		person = await session.get(User, user_id)
-		name = person.display_name if person is not None else None
+		notes, today, zone = await _notes(session, user_id, hits)
+		name = user.display_name if user is not None else None
+		number = {_source(h): i for i, h in enumerate(hits, start=1)}
+		people = [
+			answer_v2.person_fact(
+				n.person.name,
+				list(n.person.aliases or []),
+				dt.date.fromisoformat(n.last.payload["occurred_on"])
+				if n.last is not None
+				else None,
+				n.last.payload.get("contact") if n.last is not None else None,
+				number.get(_source(pins[n.last.id]))
+				if n.last is not None and n.last.id in pins
+				else None,
+				n.mentions,
+			)
+			for n in named
+		]
 		messages: list[MessageParam] = [
 			{"role": role, "content": txt}  # type: ignore[typeddict-item]
 			for role, txt in history
@@ -462,7 +711,13 @@ async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event,
 			{
 				"role": "user",
 				"content": answer_v2.user_turn(
-					question, notes, today=today, zone=zone, name=name
+					question,
+					notes,
+					today=today,
+					zone=zone,
+					name=name,
+					about=window.describe() if window else None,
+					people=people,
 				),
 			}
 		)
@@ -490,7 +745,7 @@ async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event,
 			message_id=str(assistant.id),
 			ttft_ms=assistant.ttft_ms,
 			total_ms=round((time.perf_counter() - started) * 1000),
-			citations=len(result.hits),
+			citations=len(hits),
 			cost_usd=str(call.cost_usd),
 		)
 		yield Event(
