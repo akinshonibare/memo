@@ -173,6 +173,8 @@ async def test_audio_capture_becomes_text_and_ready(
 		("faith", "succeeded", 1),
 		("scripture", "succeeded", 1),
 		("embed", "succeeded", 1),
+		# Nothing earlier to compare with (ADR 0048): recorded, and no model call.
+		("reconcile", "succeeded", 1),
 	]
 
 
@@ -216,8 +218,8 @@ async def test_running_twice_transcribes_and_extracts_once(
 
 	assert transcriber.calls == 1
 	assert extractor.calls == 1
-	# transcribe, extract, people, faith, scripture, embed: once each.
-	assert len(await _runs(admin_engine, capture_id)) == 6
+	# transcribe, extract, people, faith, scripture, embed, reconcile: once each.
+	assert len(await _runs(admin_engine, capture_id)) == 7
 
 
 async def test_retryable_failure_schedules_a_retry_and_keeps_the_stage(
@@ -331,6 +333,7 @@ async def test_text_capture_never_calls_the_transcriber(
 		"faith",
 		"scripture",
 		"embed",
+		"reconcile",
 	]
 
 

@@ -9,10 +9,12 @@ from typing import Any
 
 from anthropic.types import MessageParam
 
+from memo.prompts.reconcile_v1 import Listed
 from memo.schemas.derivations import Extraction
 from memo.schemas.faith import FaithExtraction
 from memo.schemas.habits import HabitsExtraction
 from memo.schemas.people import PeopleExtraction
+from memo.schemas.reconcile import Change, Reconciliation
 from memo.services.apple import AppleIdentity, InvalidIdentityToken
 from memo.services.embeddings import EmbedResult
 from memo.services.extraction import ExtractResult, RawCompletion
@@ -21,6 +23,7 @@ from memo.services.habits import HabitsResult
 from memo.services.llm import LLMCall
 from memo.services.people import PeopleResult
 from memo.services.push import Message, Outgoing, Ticket
+from memo.services.reconcile import ReconcileResult
 from memo.services.transcription import Transcript
 from memo.services.vision import DescribeResult
 
@@ -433,3 +436,42 @@ class FakePushSender:
 		return {
 			t: self.receipt_answers[t] for t in ticket_ids if t in self.receipt_answers
 		}
+
+
+class FakeReconciler:
+	"""The reconcile reader, scripted (ADR 0048): the changes to report, by the words a
+	note contains, as (label, relation, quote). Records what it was shown."""
+
+	model = "fake"
+	version = "reconcile-v1/fake"
+
+	def __init__(
+		self,
+		by_word: dict[str, list[tuple[str, str, str]]] | None = None,
+		*,
+		fail_with: Exception | None = None,
+	) -> None:
+		self.by_word = by_word or {}
+		self.fail_with = fail_with
+		self.seen: list[tuple[str, list[Listed]]] = []
+
+	async def read(
+		self,
+		text: str,
+		listed: list[Listed],
+		*,
+		captured_at: dt.datetime,
+		timezone: str,
+	) -> ReconcileResult:
+		self.seen.append((text, listed))
+		if self.fail_with is not None:
+			raise self.fail_with
+		changes = [
+			Change(candidate=label, relation=relation, quote=quote)
+			for word, found in self.by_word.items()
+			if word in text
+			for label, relation, quote in found
+		]
+		return ReconcileResult(
+			result=Reconciliation(changes=changes), raw="{}", calls=[]
+		)

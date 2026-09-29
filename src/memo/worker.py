@@ -31,6 +31,7 @@ from memo.services.faith import make_faith_reader
 from memo.services.habits import make_habits_reader
 from memo.services.people import make_people_reader
 from memo.services.push import make_push_sender
+from memo.services.reconcile import make_reconciler
 from memo.services.storage import S3ObjectStore
 from memo.services.transcription import make_transcriber
 from memo.services.vision import make_describer
@@ -57,6 +58,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 		describer=make_describer(settings),
 		embedder=make_embedder(settings, http),
 		push_sender=make_push_sender(settings, http),
+		reconciler=make_reconciler(settings),
 	)
 
 

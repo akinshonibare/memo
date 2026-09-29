@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Api, Derivation } from "../api";
+import type { Api, Derivation, Update } from "../api";
 import { IconCircle } from "../components";
 import { useUi } from "../ui";
 import { makeStyles } from "../theme";
 import { usePullToRefresh } from "../refresh";
 import { DerivationSheet } from "./DerivationSheet";
+import { IdeaThread, UpdateCard } from "./UpdateCard";
 
 // Ideas have no date, so they don't belong on the Planner's week. Newest first; the
-// morning view resurfaces old ones one at a time.
+// morning view resurfaces old ones one at a time. A later note that seems to carry an
+// idea on is asked about at the top (ADR 0048); the ones you said yes to sit under
+// the idea, as its thread.
 export function IdeasScreen({
   api,
   refreshKey,
@@ -29,11 +32,20 @@ export function IdeasScreen({
   const [ideas, setIdeas] = useState<Derivation[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<{ existing?: Derivation } | null>(null);
+  const [asking, setAsking] = useState<Update[]>([]);
+  const [threads, setThreads] = useState<Update[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const all = await api.listDerivations();
+      const [all, waiting, said] = await Promise.all([
+        api.listDerivations(),
+        // An older server has no /v1/updates: the screen still works without them.
+        api.listUpdates({ status: "pending", kind: "idea" }).catch(() => []),
+        api.listUpdates({ status: "confirmed", kind: "idea" }).catch(() => []),
+      ]);
       setIdeas(all.filter((d) => d.kind === "idea" && d.status !== "rejected"));
+      setAsking(waiting);
+      setThreads(said);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -60,6 +72,23 @@ export function IdeasScreen({
         keyExtractor={(d) => d.id}
         refreshControl={pull}
         contentContainerStyle={{ padding: 20, paddingBottom: 40 + insets.bottom }}
+        ListHeaderComponent={
+          asking.length > 0 ? (
+            <View style={{ marginBottom: 6 }}>
+              {asking.map((u) => (
+                <UpdateCard
+                  key={u.id}
+                  update={u}
+                  onOpenNote={onOpenCapture}
+                  onDecide={async (yes) => {
+                    await api.answerUpdate(u.id, yes ? "yes" : "no");
+                    await load();
+                  }}
+                />
+              ))}
+            </View>
+          ) : null
+        }
         renderItem={({ item }) => (
           <Pressable
             onPress={() => setSheet({ existing: item })}
@@ -79,6 +108,7 @@ export function IdeasScreen({
               })}
               {item.status === "pending_review" ? " · to review" : ""}
             </Text>
+            <IdeaThread updates={threads.filter((u) => u.target.id === item.id)} onOpenNote={onOpenCapture} />
           </Pressable>
         )}
         ListEmptyComponent={

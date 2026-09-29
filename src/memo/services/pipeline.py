@@ -53,6 +53,12 @@ from memo.services.habits import (
 )
 from memo.services.llm import LLMCall
 from memo.services.people import PeopleReaderLike, apply_mentions, keyterms
+from memo.services.reconcile import (
+	ReconcilerLike,
+	UnconfiguredReconciler,
+	apply_changes,
+)
+from memo.services.reconcile import candidates as reconcile_candidates
 from memo.services.retry import RetryableError, TerminalError, backoff_delay
 from memo.services.storage import ObjectStore
 from memo.services.transcription import Transcriber
@@ -92,6 +98,9 @@ class PipelineContext:
 	faith: FaithReaderLike = field(default_factory=UnconfiguredFaithReader)
 	# Habits (ADR 0043), defaulted like faith: only ever read for someone with it on.
 	habits: HabitsReaderLike = field(default_factory=UnconfiguredHabitsReader)
+	# Reconcile (ADR 0048), defaulted: it runs only when a note has something to be
+	# compared with, and an unconfigured reader fails the (optional) stage visibly.
+	reconciler: ReconcilerLike = field(default_factory=UnconfiguredReconciler)
 
 
 @dataclass(frozen=True)
@@ -454,6 +463,37 @@ async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 	)
 
 
+async def _reconcile(ctx: PipelineContext, capture: Capture) -> None:
+	"""Whether this note answers an open prayer or carries on an idea (ADR 0048). After
+	embed, so the note's own embeddings find the ideas near it; only a note with
+	something to compare with costs a model call."""
+	if not (capture.text or "").strip():
+		_skip("reconcile", capture)
+		return
+	user = await ctx.session.get(User, capture.user_id)
+	listed = await reconcile_candidates(ctx.session, capture, user)
+	if not listed:
+		log.info("stage.reconcile", capture_id=str(capture.id), candidates=0)
+		return
+	result = await ctx.reconciler.read(
+		capture.text or "",
+		[c.listed for c in listed],
+		captured_at=capture.created_at,
+		timezone=user.timezone if user is not None else "UTC",
+	)
+	await _record_calls(ctx, capture, result.calls)
+	made = await apply_changes(
+		ctx.session, capture, result.result, listed, version=ctx.reconciler.version
+	)
+	log.info(
+		"stage.reconcile",
+		capture_id=str(capture.id),
+		version=ctx.reconciler.version,
+		candidates=len(listed),
+		suggested=[u.payload.get("relation") for u in made],
+	)
+
+
 STAGES: tuple[Stage, ...] = (
 	Stage(
 		name="transcribe",
@@ -516,6 +556,15 @@ STAGES: tuple[Stage, ...] = (
 		version=lambda ctx: f"{CHUNKER_VERSION}/{ctx.embedder.model}",
 		run=_embed,
 		applies=lambda c: True,
+	),
+	Stage(
+		name="reconcile",
+		# Still "embedding" to anyone watching; the note is already searchable.
+		status=CaptureStatus.EMBEDDING,
+		version=lambda ctx: ctx.reconciler.version,
+		run=_reconcile,
+		applies=lambda c: True,
+		optional=True,
 	),
 )
 

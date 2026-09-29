@@ -114,6 +114,7 @@ async def test_a_photo_is_described_then_extracted_like_any_note(
 		"extract",
 		"faith",
 		"people",
+		"reconcile",
 		"scripture",
 	]
 	assert costed == 1, "the vision call is priced and logged like every other"
