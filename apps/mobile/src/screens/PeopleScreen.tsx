@@ -76,6 +76,14 @@ export function PeopleScreen({
           Reading your older notes for people · {list.unread_notes} to go
         </Text>
       )}
+      {list && (list.unreadable_notes ?? 0) > 0 && (
+        <Text style={[ui.meta, styles.reading]}>
+          {list.unreadable_notes === 1
+            ? "One older note couldn't be read for people."
+            : `${list.unreadable_notes} older notes couldn't be read for people.`}{" "}
+          Their notes are fine; only who they mention is missing.
+        </Text>
+      )}
       {waiting.length > 0 && !q && (
         <View style={styles.section}>
           <Text style={ui.label}>{"Who's who"}</Text>

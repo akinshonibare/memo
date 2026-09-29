@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Api, Mention, PersonDetail } from "../api";
+import { type Api, ApiError, type Mention, type PersonDetail } from "../api";
 import { IconCircle, Pill } from "../components";
 import { contactWord, formatAgo, formatDay, formatDue, formatRhythm, formatWhen } from "../format";
 import { haptic } from "../haptics";
@@ -36,11 +36,25 @@ export function PersonScreen({
   const [busy, setBusy] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
 
+  // onBack is a new function on every App render; a ref keeps `load` (and so the
+  // fetch) tied to the person, not to App re-rendering.
+  const back = useRef(onBack);
+  useEffect(() => {
+    back.current = onBack;
+  }, [onBack]);
+
   const load = useCallback(async () => {
     try {
       setPerson(await api.getPerson(id));
       setError(null);
     } catch (e) {
+      // Gone: merged into someone else, or their last mention was just rejected
+      // (the server removes a person nobody's notes name). Back past them, rather
+      // than leaving an empty page in the back stack.
+      if (e instanceof ApiError && e.status === 404) {
+        back.current();
+        return;
+      }
       setError(String(e));
     }
   }, [api, id]);
@@ -124,6 +138,25 @@ export function PersonScreen({
       ...labels.map((text, i) => ({ text, onPress: () => choose(i) })),
       { text: "Cancel", style: "cancel" as const },
     ]);
+  };
+
+  // A mis-tapped "Spoke to them" (here or on Today) is undone by rejecting the
+  // contact it logged: last contact falls back to the one before.
+  const removeContact = (m: Mention) => {
+    if (!person) return;
+    haptic.warn();
+    Alert.alert(
+      "Remove this contact?",
+      `It will no longer count as being in touch with ${person.name}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => void run("undo", () => api.resolveMention(m.id, { status: "rejected" })),
+        },
+      ],
+    );
   };
 
   const removeAlias = (alias: string) => {
@@ -219,7 +252,7 @@ export function PersonScreen({
                 {person.mentions.length === 1 ? "1 note" : `${person.mentions.length} notes`}
               </Text>
               {person.mentions.map((m) => (
-                <Timeline key={m.id} mention={m} onOpenCapture={onOpenCapture} />
+                <Timeline key={m.id} mention={m} onOpenCapture={onOpenCapture} onRemove={removeContact} />
               ))}
             </View>
           </>
@@ -260,7 +293,15 @@ export function PersonScreen({
   );
 }
 
-function Timeline({ mention, onOpenCapture }: { mention: Mention; onOpenCapture: (id: string) => void }) {
+function Timeline({
+  mention,
+  onOpenCapture,
+  onRemove,
+}: {
+  mention: Mention;
+  onOpenCapture: (id: string) => void;
+  onRemove: (m: Mention) => void;
+}) {
   const when = mention.occurred_on ?? mention.written_at ?? mention.created_at;
   const day = new Date(when.length === 10 ? `${when}T00:00:00` : when).toLocaleDateString(undefined, {
     month: "short",
@@ -268,11 +309,19 @@ function Timeline({ mention, onOpenCapture }: { mention: Mention; onOpenCapture:
     year: "numeric",
   });
   const open = mention.capture_id ? () => onOpenCapture(mention.capture_id!) : undefined;
+  // A contact you logged has no note to open; tapping it offers to remove it.
+  const logged = mention.status === "user_created" && !mention.capture_id;
+  const press = open ?? (logged ? () => onRemove(mention) : undefined);
   return (
-    <Pressable onPress={open} disabled={!open} style={({ pressed }) => [styles.entry, pressed && styles.pressed]}>
+    <Pressable
+      onPress={press}
+      disabled={!press}
+      accessibilityHint={logged ? "Remove this contact" : undefined}
+      style={({ pressed }) => [styles.entry, pressed && styles.pressed]}
+    >
       <Text style={ui.meta}>
         {day} · {contactWord(mention.contact)}
-        {mention.status === "user_created" ? " · logged by you" : ""}
+        {logged ? " · logged by you · tap to remove" : mention.status === "user_created" ? " · logged by you" : ""}
         {mention.status === "pending_review" ? " · unconfirmed" : ""}
       </Text>
       {mention.context ? <Text style={styles.entryText}>{mention.context}</Text> : null}

@@ -569,6 +569,38 @@ async def test_reach_out_today(client: AsyncClient, session: AsyncSession) -> No
 	assert off.json()["due"] is False and off.json()["reach_out_every_days"] is None
 
 
+async def test_undoing_a_mistaken_spoke_to_them(
+	client: AsyncClient, session: AsyncSession
+) -> None:
+	"""The app's undo: reject the contact that "Spoke to them" logged, and last
+	contact goes back to what the notes say."""
+	before = TODAY - dt.timedelta(days=40)
+	await _note(
+		client,
+		session,
+		"called Tunde",
+		FakePeopleReader(
+			_read(_mention("Tunde", contact="call", occurred_on=before.isoformat()))
+		),
+	)
+	(tunde,) = (await client.get("/v1/people")).json()["people"]
+	await client.post(f"/v1/people/{tunde['id']}/contact", json={})
+	page = (await client.get(f"/v1/people/{tunde['id']}")).json()
+	assert page["last_contact_on"] == TODAY.isoformat()
+	logged = next(m for m in page["mentions"] if m["status"] == "user_created")
+	assert logged["capture_id"] is None
+
+	undone = await client.patch(
+		f"/v1/mentions/{logged['id']}", json={"status": "rejected"}
+	)
+
+	assert undone.status_code == 200, undone.text
+	page = (await client.get(f"/v1/people/{tunde['id']}")).json()
+	assert page["last_contact_on"] == before.isoformat()
+	assert page["due"] is True
+	assert [m["status"] for m in page["mentions"]] == ["pending_review"]
+
+
 async def test_today_shows_at_most_three(
 	client: AsyncClient, session: AsyncSession
 ) -> None:

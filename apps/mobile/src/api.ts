@@ -74,7 +74,12 @@ export type PersonDetail = Person & {
   upcoming_events: Derivation[];
 };
 
-export type PeopleList = { people: Person[]; unresolved: number; unread_notes: number };
+export type PeopleList = {
+  people: Person[];
+  unresolved: number;
+  unread_notes: number; // older notes not read for people yet
+  unreadable_notes?: number; // ones the server gave up on after repeated failures
+};
 
 export type ReachOut = {
   person_id: string;
