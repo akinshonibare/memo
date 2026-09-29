@@ -16,9 +16,10 @@ from memo.config import SEED_USER_ID
 from memo.db import bind_user
 from memo.models import Message
 from memo.schemas.derivations import Extraction, TodoPayload
+from memo.schemas.people import MentionPayload, PeopleExtraction
 from memo.services.ask import AskContext, run_turn
 from memo.services.pipeline import PipelineContext, process_capture
-from memo.services.retry import TerminalError
+from memo.services.retry import RetryableError, TerminalError
 from tests.fakes import (
 	FakeAnswerProvider,
 	FakeEmbedder,
@@ -194,6 +195,78 @@ async def test_provider_failure_is_an_error_event_and_a_failed_row(
 		await client.get(f"/v1/conversations/{accepted['conversation_id']}/messages")
 	).json()
 	assert history[-1]["status"] == "failed" and "boom" in history[-1]["error"]
+
+
+async def test_a_rate_limit_is_said_plainly_not_as_the_providers_billing_text(
+	client: AsyncClient, corpus: list[uuid.UUID], app: FastAPI
+) -> None:
+	billing = 'HTTP 429: {"detail":"You have not yet added your payment method"}'
+	app.state.answer_provider = FakeAnswerProvider(fail_with=RetryableError(billing))
+	accepted = await _ask(client, "anything")
+
+	events = await _events(client, accepted["stream_url"])
+
+	assert events[-1][0] == "error" and events[-1][1]["retryable"] is True
+	assert "payment" not in events[-1][1]["message"]
+	assert "Try again in a minute" in events[-1][1]["message"]
+
+
+async def test_a_bug_mid_answer_is_a_failed_row_not_a_cut_stream(
+	client: AsyncClient, corpus: list[uuid.UUID], app: FastAPI
+) -> None:
+	"""An unexpected exception used to end the stream with no event: the app showed
+	"connection lost" and the message stayed `streaming`."""
+	app.state.answer_provider = FakeAnswerProvider(fail_with=RuntimeError("a bug"))
+	accepted = await _ask(client, "anything")
+
+	events = await _events(client, accepted["stream_url"])
+
+	assert events[-1][0] == "error"
+	assert events[-1][1]["code"] == "internal_error"
+	history = (
+		await client.get(f"/v1/conversations/{accepted['conversation_id']}/messages")
+	).json()
+	assert history[-1]["status"] == "failed"
+	assert "a bug" not in history[-1]["error"]
+
+
+async def test_the_answer_sees_the_people_in_a_note(
+	client: AsyncClient, session: AsyncSession, app: FastAPI
+) -> None:
+	"""The crash of 2026-09-29: a retrieved note with a linked person broke Ask."""
+	ctx = PipelineContext(
+		session=session,
+		transcriber=FakeTranscriber(),
+		object_store=FakeObjectStore(),
+		extractor=FakeExtractor(),
+		embedder=FakeEmbedder(),
+		people=FakePeopleReader(
+			PeopleExtraction(
+				people=[
+					MentionPayload(
+						name="Mum",
+						full_name="Folake Shonibare",
+						contact="call",
+						occurred_on=dt.date(2026, 9, 20),
+					)
+				]
+			)
+		),
+	)
+	created = await client.post(
+		"/v1/captures", json={"text": "called mum", "client_token": "tok-ask-mum"}
+	)
+	capture_id = uuid.UUID(created.json()["id"])
+	assert (await process_capture(ctx, capture_id, SEED_USER_ID)).status == "ready"
+	answers = FakeAnswerProvider()
+	app.state.answer_provider = answers
+	accepted = await _ask(client, "when did I last call mum?")
+
+	events = await _events(client, accepted["stream_url"])
+
+	assert events[-1][0] == "done"
+	prompt = str(answers.last_messages[-1]["content"])
+	assert "person: Folake Shonibare · spoke on the phone on Sun 20 Sep 2026" in prompt
 
 
 async def test_client_disconnect_closes_the_upstream_stream_and_keeps_the_partial(
