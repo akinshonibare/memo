@@ -469,7 +469,7 @@ async def test_reading_the_bible_counts_faith_readings_and_notes(
 	client: AsyncClient, session: AsyncSession
 ) -> None:
 	await _habits(client, True)
-	await client.post("/v1/faith/readings")
+	await client.post("/v1/faith/readings", json={"ref": "John 3"})
 	await _note(client, session, "read my Bible", _did(("bible", 2)))
 	habit = await _track(client, "Bible reading")
 	assert habit["key"] == "bible" and habit["source"] == "bible"

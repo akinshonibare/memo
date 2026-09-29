@@ -17,7 +17,7 @@ const SOURCE: Record<HabitDetail["source"], string> = {
   activity: "Counted from your notes, and the days you log. Remove a day that shouldn't count.",
   family:
     "Counted from People: the days you saw, called or texted someone who's family. Mark who's family on their page.",
-  bible: "Counted from Faith: readings you mark, notes that name a passage, and notes that say you read your Bible.",
+  bible: "Counted from Faith: what you mark as read, notes that name a passage, and notes that say you read your Bible.",
 };
 
 // One habit (ADR 0043): this week, eight weeks at a glance, and every day that counted
@@ -242,7 +242,7 @@ function Evidence({ evidence, onOpenCapture }: { evidence: HabitEvidence; onOpen
     evidence.kind === "logged"
       ? "Logged"
       : evidence.kind === "reading"
-        ? `Read ${evidence.text ?? "from the plan"}`
+        ? `Read ${evidence.text ?? "the Bible"}`
         : (evidence.text ?? "");
   const capture = evidence.capture_id;
   return (

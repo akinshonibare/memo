@@ -4,6 +4,7 @@ the one thing a day, and the weekly section."""
 import datetime as dt
 import uuid
 from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -20,7 +21,6 @@ from memo.schemas.people import MentionPayload, PeopleExtraction
 from memo.services.faith import apply_prayers
 from memo.services.pipeline import PipelineContext, process_capture
 from memo.services.retry import TerminalError
-from memo.services.scripture import plan
 from tests.fakes import (
 	FakeEmbedder,
 	FakeExtractor,
@@ -340,50 +340,87 @@ async def test_the_generic_item_routes_never_touch_faith_rows(
 	assert refused.status_code == 422
 
 
-# --- the reading plan -----------------------------------------------------------------
+# --- what you're reading -------------------------------------------------------------
 
 
-async def test_the_plan_moves_by_position_and_undo_takes_one_back(
+async def _reading(client: AsyncClient) -> dict[str, Any]:
+	return dict((await client.get("/v1/faith")).json()["reading"])
+
+
+async def test_nothing_is_set_until_you_choose_what_you_are_reading(
 	client: AsyncClient,
 ) -> None:
-	state = (await client.get("/v1/faith")).json()["plan"]
-	assert state["position"] == 0 and state["cycle"] == 1
-	assert state["next"]["label"] == "Genesis 1–4"
-	assert state["next"]["book"] == "GEN" and state["next"]["chapter"] == 1
-	assert state["last"] is None and state["total"] == len(plan())
-
-	first = (await client.post("/v1/faith/readings")).json()
-	assert first["position"] == 1 and first["last"]["label"] == "Genesis 1–4"
-	second = (await client.post("/v1/faith/readings")).json()
-	assert second["position"] == 2
-	undone = (await client.delete("/v1/faith/readings/last")).json()
-	assert (
-		undone["position"] == 1 and undone["next"]["label"] == second["last"]["label"]
-	)
-	(await client.delete("/v1/faith/readings/last"))
-	empty = (await client.delete("/v1/faith/readings/last")).json()
-	assert empty["position"] == 0, "nothing marked: nothing to undo"
+	state = await _reading(client)
+	assert state == {"current": None, "next": None, "last": None, "recent": []}
+	nothing = await client.post("/v1/faith/readings", json={})
+	assert nothing.status_code == 422, "nothing set: nothing to read next"
+	bad = await client.put("/v1/faith/reading", json={"ref": "the one with the ark"})
+	assert bad.status_code == 422
 
 
-async def test_finishing_the_plan_starts_again_at_genesis(
-	client: AsyncClient, admin_engine: AsyncEngine
+async def test_you_set_a_book_and_read_it_a_chapter_at_a_time(
+	client: AsyncClient,
 ) -> None:
-	total = len(plan())
-	async with admin_engine.begin() as conn:
-		await conn.execute(
-			text(
-				"INSERT INTO faith_readings (id, user_id, plan, cycle, position) "
-				"SELECT gen_random_uuid(), :u, 'canonical', 1, g "
-				"FROM generate_series(0, :last) g"
-			),
-			{"u": SEED_USER_ID, "last": total - 1},
+	chosen = (await client.put("/v1/faith/reading", json={"ref": "John"})).json()
+	assert chosen["current"]["ref"] == "John" and chosen["next"]["ref"] == "John 1"
+	assert chosen["next"]["book"] == "JHN" and chosen["next"]["chapter"] == 1
+
+	first = await client.post("/v1/faith/readings", json={})
+	assert first.status_code == 201
+	state = first.json()
+	assert state["last"]["passage"]["ref"] == "John 1"
+	assert state["next"]["ref"] == "John 2"
+	again = (await client.post("/v1/faith/readings", json={})).json()
+	assert again["next"]["ref"] == "John 3"
+	twice = (await client.post("/v1/faith/readings", json={"ref": "John 2"})).json()
+	assert len(twice["recent"]) == 2, "the same passage on the same day is one reading"
+
+	# Something else read today doesn't move John on; three chapters at once do.
+	other = (await client.post("/v1/faith/readings", json={"ref": "Psalm 23"})).json()
+	assert other["last"]["passage"]["ref"] == "Psalm 23"
+	assert other["next"]["ref"] == "John 3"
+	more = (await client.post("/v1/faith/readings", json={"ref": "John 3-5"})).json()
+	assert more["next"]["ref"] == "John 6"
+
+	# Undo takes the latest back; John goes back to where it was.
+	undone = (await client.delete(f"/v1/faith/readings/{more['last']['id']}")).json()
+	assert undone["next"]["ref"] == "John 3"
+	assert [r["passage"]["ref"] for r in undone["recent"]] == [
+		"Psalm 23",
+		"John 2",
+		"John 1",
+	]
+
+
+async def test_changing_what_you_read_keeps_what_you_read_before(
+	client: AsyncClient,
+) -> None:
+	await client.put("/v1/faith/reading", json={"ref": "Romans 8"})
+	await client.post("/v1/faith/readings", json={})
+	finished = await _reading(client)
+	assert finished["next"] is None, "a chapter set is read once"
+	changed = (await client.put("/v1/faith/reading", json={"ref": "James"})).json()
+	assert changed["current"]["ref"] == "James" and changed["next"]["ref"] == "James 1"
+	assert [r["passage"]["ref"] for r in changed["recent"]] == ["Romans 8"]
+	cleared = (await client.put("/v1/faith/reading", json={"ref": None})).json()
+	assert cleared["current"] is None and len(cleared["recent"]) == 1
+
+
+async def test_a_reading_on_an_earlier_day_and_never_a_future_one(
+	client: AsyncClient,
+) -> None:
+	today = dt.datetime.now(dt.UTC).date()  # the seed user is on UTC
+	yesterday = (today - dt.timedelta(days=1)).isoformat()
+	state = (
+		await client.post(
+			"/v1/faith/readings", json={"ref": "Genesis 1", "on": yesterday}
 		)
-	state = (await client.get("/v1/faith")).json()["plan"]
-	assert state["cycle"] == 2 and state["position"] == 0
-	assert state["next"]["label"] == "Genesis 1–4"
-	assert state["last"]["label"].startswith("Revelation")
-	again = (await client.post("/v1/faith/readings")).json()
-	assert again["cycle"] == 2 and again["position"] == 1
+	).json()
+	assert state["last"]["on"] == yesterday
+	future = (today + dt.timedelta(days=1)).isoformat()
+	assert (
+		await client.post("/v1/faith/readings", json={"ref": "Genesis 2", "on": future})
+	).status_code == 422
 
 
 async def test_readings_are_the_users_own(
@@ -391,9 +428,46 @@ async def test_readings_are_the_users_own(
 	as_user: Callable[[uuid.UUID], None],
 	second_user: uuid.UUID,
 ) -> None:
-	await client.post("/v1/faith/readings")
+	await client.put("/v1/faith/reading", json={"ref": "John"})
+	mine = (await client.post("/v1/faith/readings", json={})).json()["last"]["id"]
 	as_user(second_user)
-	assert (await client.get("/v1/faith")).json()["plan"]["position"] == 0
+	state = await _reading(client)
+	assert state["current"] is None and state["recent"] == []
+	assert (await client.delete(f"/v1/faith/readings/{mine}")).status_code == 404
+
+
+async def test_the_generic_item_routes_never_touch_a_reading(
+	client: AsyncClient,
+) -> None:
+	mine = (await client.post("/v1/faith/readings", json={"ref": "Mark 1"})).json()[
+		"last"
+	]["id"]
+	refused = await client.patch(
+		f"/v1/derivations/{mine}", json={"status": "confirmed"}
+	)
+	assert refused.status_code == 422
+	listed = (await client.get("/v1/derivations")).json()
+	assert all(d["id"] != mine for d in listed["items"])
+
+
+# --- the passages your notes talk about -----------------------------------------------
+
+
+async def test_passages_are_a_reference_to_the_notes_that_name_them(
+	client: AsyncClient, session: AsyncSession, admin_engine: AsyncEngine
+) -> None:
+	await _faith(client, True)
+	older = await _note(client, session, "Psalm 23 before the interview", space="faith")
+	await _backdate(admin_engine, "captures", older, 3)
+	newer = await _note(
+		client, session, "Psalm 23 again, and Romans 8:28 on the train", space="faith"
+	)
+	passages = (await client.get("/v1/faith")).json()["passages"]
+	assert [p["passage"]["ref"] for p in passages] == ["Psalm 23", "Romans 8:28"]
+	psalm = passages[0]
+	assert psalm["count"] == 2
+	assert [n["capture_id"] for n in psalm["notes"]] == [newer, older]
+	assert psalm["notes"][1]["excerpt"].startswith("Psalm 23 before")
 
 
 # --- the one thing a day --------------------------------------------------------------
@@ -443,7 +517,7 @@ async def test_the_moment_is_a_prayer_from_this_day_in_another_year_first(
 async def test_the_weekly_review_has_a_faith_section_only_while_faith_is_on(
 	client: AsyncClient, session: AsyncSession
 ) -> None:
-	await client.post("/v1/faith/readings")
+	await client.post("/v1/faith/readings", json={"ref": "Genesis 1-4"})
 	prayer = (await client.post("/v1/faith/prayers", json={"title": "rain"})).json()
 	await client.patch(f"/v1/faith/prayers/{prayer['id']}", json={"answered": True})
 	await _note(client, session, "1 Cor 13 and Romans 8:28 today", space="faith")
@@ -451,7 +525,7 @@ async def test_the_weekly_review_has_a_faith_section_only_while_faith_is_on(
 	assert (await client.get("/v1/review/week")).json()["faith"] is None
 	await _faith(client, True)
 	faith = (await client.get("/v1/review/week")).json()["faith"]
-	assert [r["label"] for r in faith["read"]] == ["Genesis 1–4"]
+	assert [r["passage"]["ref"] for r in faith["read"]] == ["Genesis 1–4"]
 	assert [p["title"] for p in faith["answered"]] == ["rain"]
 	assert [p["passage"]["ref"] for p in faith["passages"]] == [
 		"1 Corinthians 13",
@@ -465,17 +539,20 @@ async def test_the_weekly_review_has_a_faith_section_only_while_faith_is_on(
 async def test_export_carries_the_readings_and_delete_removes_them(
 	client: AsyncClient, admin_engine: AsyncEngine
 ) -> None:
-	await client.post("/v1/faith/readings")
+	await client.put("/v1/faith/reading", json={"ref": "John"})
+	await client.post("/v1/faith/readings", json={})
 	await client.post("/v1/faith/prayers", json={"title": "kept in the export"})
 	exported = (await client.get("/v1/me/export")).json()
-	assert [r["position"] for r in exported["faith_readings"]] == [0]
-	assert [d["payload"]["title"] for d in exported["derivations_without_note"]] == [
-		"kept in the export"
-	]
+	assert sorted(
+		d["payload"].get("title") or d["payload"]["ref"]
+		for d in exported["derivations_without_note"]
+	) == ["John 1", "kept in the export"]
 	wiped = await client.delete(f"/v1/me/data?confirm={SEED_USER_ID}")
-	assert wiped.json()["deleted"]["faith_readings"] == 1
+	assert wiped.status_code == 200
 	async with admin_engine.connect() as conn:
-		left = await conn.scalar(text("SELECT count(*) FROM faith_readings"))
+		left = await conn.scalar(
+			text("SELECT count(*) FROM derivations WHERE kind = 'reading'")
+		)
 	assert left == 0
 
 

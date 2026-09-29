@@ -118,17 +118,23 @@ export type Passage = {
   end_verse: number | null;
 };
 
-export type Reading = { index: number; label: string; book: string; chapter: number; end_chapter: number };
+// A passage you read, on a day.
+export type ReadingLog = { id: string; passage: Passage; on: string };
 
-export type Plan = {
-  plan: string;
-  title: string; // "Genesis to Revelation"
-  cycle: number; // times through, from 1
-  position: number; // readings marked read this time through
-  total: number;
-  next: Reading | null;
-  last: Reading | null; // what Undo takes back
-  last_read_at: string | null;
+// What you're reading, as you set it; there is no fixed plan (ADR 0042, revised).
+export type ReadingState = {
+  current: Passage | null; // "John", "Romans 8"; null until you set something
+  next: Passage | null; // the chapter after the last one you read in it
+  last: ReadingLog | null; // what Undo takes back
+  recent: ReadingLog[];
+};
+
+// One passage your notes talk about, and the notes that do.
+export type PassageRef = {
+  passage: Passage;
+  count: number;
+  last_on: string;
+  notes: { capture_id: string; on: string; excerpt: string | null }[];
 };
 
 export type Prayer = {
@@ -155,8 +161,10 @@ export type FaithMoment = {
 export type Faith = {
   enabled: boolean;
   translation: string;
-  plan: Plan;
   moment: FaithMoment | null;
+  // Absent from a server older than what-you-read (ADR 0042, revised).
+  reading?: ReadingState;
+  passages?: PassageRef[];
   open: Prayer[];
   answered: Prayer[];
 };
@@ -212,7 +220,7 @@ export type HabitPrompt = {
 export type HabitWeek = { habit_id: string; name: string; days: number; target_per_week: number | null };
 
 export type FaithWeek = {
-  read: Reading[];
+  read?: ReadingLog[];
   answered: Prayer[];
   passages: { passage: Passage; capture_id: string | null }[];
 };
@@ -537,12 +545,21 @@ export class Api {
     return this.request<Prayer>(`/v1/faith/prayers/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
   }
 
-  readNext() {
-    return this.request<Plan>("/v1/faith/readings", { method: "POST" });
+  // What you're reading: "John", "Psalms", "Romans 8". null clears it.
+  setReading(ref: string | null) {
+    return this.request<ReadingState>("/v1/faith/reading", { method: "PUT", body: JSON.stringify({ ref }) });
   }
 
-  undoReading() {
-    return this.request<Plan>("/v1/faith/readings/last", { method: "DELETE" });
+  // You read something: what you typed, or else the next chapter of what you're reading.
+  logReading(ref?: string) {
+    return this.request<ReadingState>("/v1/faith/readings", {
+      method: "POST",
+      body: JSON.stringify(ref ? { ref } : {}),
+    });
+  }
+
+  undoReading(id: string) {
+    return this.request<ReadingState>(`/v1/faith/readings/${id}`, { method: "DELETE" });
   }
 
   // --- Habits (ADR 0043) --------------------------------------------------------

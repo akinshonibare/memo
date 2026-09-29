@@ -65,13 +65,16 @@ class User(Base):
 	voice: Mapped[str | None] = mapped_column(String(64))
 	# Keep what extraction finds without asking (ADR 0030); stored as 'accepted'.
 	auto_accept: Mapped[bool] = mapped_column(default=False, server_default=false())
-	# Faith (ADR 0042): a space for prayers, a reading plan and faith notes. Off by
-	# default; on the account, not the phone, because the server hides faith notes
+	# Faith (ADR 0042): a space for prayers, what you're reading and faith notes. Off
+	# by default; on the account, not the phone, because the server hides faith notes
 	# from Home only while it is on.
 	faith_enabled: Mapped[bool] = mapped_column(default=False, server_default=false())
 	bible_translation: Mapped[str] = mapped_column(
 		String(8), default="NIV", server_default="NIV"
 	)
+	# What you're reading now, as you set it: a passage payload ("John" is the whole
+	# book), or None. There is no fixed plan (ADR 0042, revised).
+	bible_reading: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 	# Habits (ADR 0043): off by default; on, every note is read for what you did.
 	habits_enabled: Mapped[bool] = mapped_column(default=False, server_default=false())
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
@@ -564,34 +567,6 @@ Index(
 	Chunk.user_id,
 	postgresql_where=text("superseded_at IS NULL"),
 )
-
-
-class FaithReading(Base):
-	"""A reading from the plan, marked read (ADR 0042). The plan keeps time by position:
-	the next reading is the one after the last one marked read, so a week away is a
-	week paused, never "behind". `cycle` counts times through the plan."""
-
-	__tablename__ = "faith_readings"
-
-	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
-	user_id: Mapped[uuid.UUID] = mapped_column(
-		ForeignKey("users.id", ondelete="CASCADE")
-	)
-	plan: Mapped[str] = mapped_column(String(32))
-	cycle: Mapped[int] = mapped_column(default=1, server_default="1")
-	position: Mapped[int]
-	read_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
-
-	__table_args__ = (
-		UniqueConstraint(
-			"user_id", "plan", "cycle", "position", name="uq_faith_readings_position"
-		),
-		CheckConstraint("position >= 0", name="ck_faith_readings_position"),
-		CheckConstraint("cycle >= 1", name="ck_faith_readings_cycle"),
-	)
-
-
-Index("ix_faith_readings_user_read", FaithReading.user_id, FaithReading.read_at)
 
 
 HABIT_SOURCES = ("activity", "family", "bible")

@@ -19,7 +19,6 @@ from memo.models import (
 	Capture,
 	Conversation,
 	Derivation,
-	FaithReading,
 	Habit,
 	Message,
 	Person,
@@ -158,7 +157,7 @@ async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> 
 				"faith_enabled must be true or false",
 			)
 		# Turned off, nothing is deleted: faith notes are simply notes again, and
-		# prayers and the plan wait for it to come back on (ADR 0042).
+		# prayers and readings wait for it to come back on (ADR 0042).
 		user.faith_enabled = body.faith_enabled
 	if "bible_translation" in fields and body.bible_translation is not None:
 		user.bible_translation = body.bible_translation
@@ -218,15 +217,6 @@ class PersonExport(BaseModel):
 	created_at: dt.datetime
 
 
-class FaithReadingExport(BaseModel):
-	model_config = ConfigDict(from_attributes=True)
-
-	plan: str
-	cycle: int
-	position: int
-	read_at: dt.datetime
-
-
 class HabitExport(BaseModel):
 	model_config = ConfigDict(from_attributes=True)
 
@@ -249,8 +239,6 @@ class Export(BaseModel):
 	conversations: list[ConversationExport]
 	# Who your notes are about; each mention (a derivation) carries its person_id.
 	people: list[PersonExport] = []
-	# The reading plan's progress (ADR 0042). Prayers are derivations, above.
-	faith_readings: list[FaithReadingExport] = []
 	# Habits tracked or dismissed (ADR 0043); what counted is the activities above.
 	habits: list[HabitExport] = []
 
@@ -351,16 +339,6 @@ async def export_everything(
 		recordings=recordings,
 		conversations=conversations,
 		people=[PersonExport.model_validate(p) for p in people],
-		faith_readings=[
-			FaithReadingExport.model_validate(r)
-			for r in (
-				await session.scalars(
-					select(FaithReading)
-					.where(FaithReading.user_id == user_id)
-					.order_by(FaithReading.read_at)
-				)
-			).all()
-		],
 		habits=[
 			HabitExport.model_validate(h)
 			for h in (
@@ -446,7 +424,6 @@ async def _purge(
 		"recordings",
 		"morning_views",
 		"llm_calls",
-		"faith_readings",
 		"habits",
 	):
 		result = cast(
