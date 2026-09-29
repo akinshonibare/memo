@@ -300,7 +300,13 @@ export function DetailScreen({
           </View>
         )}
         {capture?.status === "ready" && capture.derivations.length === 0 && (
-          <Text style={[ui.bodyMuted, { marginTop: 28 }]}>Nothing to extract from this one.</Text>
+          <Text style={[ui.bodyMuted, { marginTop: 28 }]}>
+            {capture.text?.trim()
+              ? "Nothing to extract from this one."
+              : capture.kind === "audio"
+                ? "Nothing was said in this recording."
+                : "This note is empty."}
+          </Text>
         )}
         {related.length > 0 && (
           <View style={styles.section}>

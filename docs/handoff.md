@@ -92,6 +92,12 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   Settings → Review, off by default. When on, new items are kept as `accepted` (not
   `confirmed`): Ask trusts them, the eval harvester never labels them. Migration 0013.
 
+- **A note with no words is not an error** (2026-09-29): a voice note where nothing was
+  said used to fail at extraction with a Retry that could never work. The pipeline now
+  skips extraction, people and indexing for it (no model calls) and marks it ready; the
+  note says "Nothing was said in this recording." Migration 0014 readies the ones that
+  had already failed that way, and only those.
+
 ## Filed for later
 
 - [#57](https://github.com/akinshonibare/memo/issues/57): the first PITR restore drill.
