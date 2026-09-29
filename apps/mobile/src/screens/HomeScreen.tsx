@@ -19,18 +19,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type Capture } from "../api";
 import { AskBar, Avatar, IconCircle, confirmDelete } from "../components";
 import { ACTIVE_STATUSES, formatClock, formatStamp, headline, statusLabel, toIsoDate } from "../format";
-import { celebrate, InkText, listLayout, PressableScale, rowEnter, rowExit, Wordmark } from "../motion";
+import { celebrate, InkText, PressableScale, rowEnter, Wordmark } from "../motion";
 import { greeting, type Moment, momentText, particleForSearch } from "../delight";
 import { pickPhoto } from "../photo";
 import { playUrl, stopPlayback, usePlayingId } from "../playback";
 import { makeStyles, useTheme } from "../theme";
 import { useUi } from "../ui";
+import { usePullToRefresh } from "../refresh";
 import { OutboxSection } from "./OutboxSection";
 import { TodaySection, useMorning } from "./TodaySection";
 import { haptic } from "../haptics";
 import { captureOrQueue, useOutbox } from "../outbox";
 
 const POLL_MS = 3000;
+// How long a deleted row takes to fade before it leaves the list.
+const LEAVE_MS = 160;
 // How tall the fade above the bottom controls is.
 const BAR_FADE = 28;
 // "Not now" on a reach-out suggestion hides it for a week (PATCH snoozed_until).
@@ -108,11 +111,15 @@ export function HomeScreen({
   const [list, setList] = useState<ListState>(EMPTY);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
-  // Deleted here: gone at once, and kept gone from a refresh or search that was already
-  // on its way when the delete happened and still lists the note.
+  // Deleted here: it fades where it is (`leaving`), then leaves the list (`deleted`),
+  // and stays gone from a refresh or search already on its way that still lists it.
+  // Rows are never moved by a layout animation: in this virtualized list one cut short
+  // (Home covered by a note, the app sent to the background) left every row below
+  // where it was, and a note-sized gap on Home until something else moved.
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
   const [deleted, setDeleted] = useState<ReadonlySet<string>>(new Set());
   const captures = list.items.filter((c) => !deleted.has(c.id));
-  const morning = useMorning(api, refreshKey);
+  const { view: morning, reload: reloadMorning } = useMorning(api, refreshKey);
 
   const refresh = useCallback(async () => {
     try {
@@ -136,6 +143,10 @@ export function HomeScreen({
       clearInterval(timer);
     };
   }, [refresh, anyActive, refreshKey, focused]);
+
+  const pull = usePullToRefresh(
+    useCallback(() => Promise.all([refresh(), reloadMorning()]), [refresh, reloadMorning]),
+  );
 
   const waiting = useOutbox().some((i) => !i.failed);
 
@@ -235,15 +246,18 @@ export function HomeScreen({
       "Delete this note? Its todos, events and ideas are kept.",
       async () => {
         if (playingId === c.id) stopPlayback();
-        setDeleted((prev) => new Set(prev).add(c.id));
+        setLeaving((prev) => new Set(prev).add(c.id));
+        setTimeout(() => setDeleted((prev) => new Set(prev).add(c.id)), LEAVE_MS);
         try {
           await api.deleteCapture(c.id);
         } catch (e) {
-          setDeleted((prev) => {
+          const without = (prev: ReadonlySet<string>) => {
             const next = new Set(prev);
             next.delete(c.id);
             return next;
-          });
+          };
+          setLeaving(without);
+          setDeleted(without);
           setError(`Couldn't delete: ${String(e)}`);
           refresh();
         }
@@ -251,8 +265,8 @@ export function HomeScreen({
       onCancel,
     );
 
-  // Rows slide in and out, except while searching, where results replace each other
-  // on every keystroke and movement would only be noise.
+  // New rows fade in, except while searching, where results replace each other on every
+  // keystroke and movement would only be noise.
   const animateRows = !q;
   return (
     <View style={ui.screen}>
@@ -287,11 +301,11 @@ export function HomeScreen({
       <Animated.FlatList
         data={shown}
         keyExtractor={(c) => c.id}
-        itemLayoutAnimation={animateRows ? listLayout : undefined}
+        refreshControl={pull}
         renderItem={({ item }) => (
           <Animated.View
             entering={animateRows && list.fresh.has(item.id) ? rowEnter : undefined}
-            exiting={animateRows ? rowExit : undefined}
+            style={[styles.fade, leaving.has(item.id) && styles.gone]}
           >
             <SwipeRow
               capture={item}
@@ -573,6 +587,8 @@ function MomentBanner({ moment, onDone }: { moment: Moment; onDone: () => void }
 }
 
 const useStyles = makeStyles((colors) => ({
+  fade: { opacity: 1, transitionProperty: "opacity", transitionDuration: LEAVE_MS },
+  gone: { opacity: 0 },
   // Where Today ends and the notes begin; the same label style as Today's date.
   notesLabel: { paddingHorizontal: 20, paddingTop: 16 },
   wordmark: { marginTop: 12, marginBottom: 2 },

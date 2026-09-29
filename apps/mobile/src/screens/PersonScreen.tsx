@@ -10,6 +10,7 @@ import { fonts, useUi } from "../ui";
 import { makeStyles, useTheme } from "../theme";
 import { useNavigation } from "@react-navigation/native";
 import { useRefetchOnFocus } from "../focus";
+import { usePullToRefresh } from "../refresh";
 import { PersonPicker } from "./PeopleParts";
 
 // Rhythms offered for "suggest getting in touch"; 30 days is everyone's default.
@@ -73,6 +74,7 @@ export function PersonScreen({
       setError(String(e));
     }
   }, [api, id, navigation]);
+  const pull = usePullToRefresh(load);
 
   useEffect(() => {
     const first = setTimeout(load, 0);
@@ -197,7 +199,7 @@ export function PersonScreen({
         <View style={{ flex: 1 }} />
         {person && <IconCircle name="ellipsis-horizontal" onPress={menu} />}
       </View>
-      <ScrollView contentContainerStyle={[ui.pad, { paddingBottom: 60 + insets.bottom }]}>
+      <ScrollView contentContainerStyle={[ui.pad, { paddingBottom: 60 + insets.bottom }]} refreshControl={pull}>
         {error && <Text style={[ui.danger, { marginBottom: 12 }]}>{error}</Text>}
         {person && (
           <>

@@ -23,6 +23,7 @@ import { makeStyles, useTheme } from "../theme";
 import { DerivationSheet } from "./DerivationSheet";
 import { MentionCard } from "./PeopleParts";
 import { haptic } from "../haptics";
+import { usePullToRefresh } from "../refresh";
 
 const KINDS: Derivation["kind"][] = ["todo", "event", "idea"];
 
@@ -105,6 +106,7 @@ export function DetailScreen({
       setError(String(e));
     }
   }, [api, id]);
+  const pull = usePullToRefresh(load);
 
   // The photo comes straight from the bucket on a short-lived URL; fetched once per note.
   const [photo, setPhoto] = useState<{ url: string; ratio: number } | null>(null);
@@ -243,6 +245,7 @@ export function DetailScreen({
       <ScrollView
         contentContainerStyle={[ui.pad, { paddingBottom: 140 + insets.bottom }]}
         keyboardShouldPersistTaps="handled"
+        refreshControl={pull}
       >
         {photo && (
           <Image
