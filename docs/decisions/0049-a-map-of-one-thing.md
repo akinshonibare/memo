@@ -1,6 +1,6 @@
 # 0049 — A map of one thing, not a map of everything
 
-**Status:** active
+**Status:** active on the server; the Map screen was taken out of the app (ADR 0052) until a better design
 **Date:** 2026-09-29
 
 ## Problem

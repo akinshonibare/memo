@@ -22,6 +22,7 @@ import { SentenceSplitter, SpeechQueue } from "../voice";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { ListeningDot, rowEnter, SpeakingBars } from "../motion";
 import { haptic } from "../haptics";
+import { Dialogs } from "../dialogs";
 import { LockCover } from "../lock";
 
 type Turn = Message & { streaming?: boolean };
@@ -384,6 +385,7 @@ export function AskSheet({
           )}
         </View>
         )}
+        <Dialogs />
         <LockCover />
       </View>
     </Modal>

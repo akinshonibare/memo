@@ -1,11 +1,10 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Api, Derivation, Update } from "../api";
 import { IconCircle } from "../components";
 import { useUi } from "../ui";
-import { makeStyles, useTheme } from "../theme";
+import { makeStyles } from "../theme";
 import { usePullToRefresh } from "../refresh";
 import { DerivationSheet } from "./DerivationSheet";
 import { IdeaThread, UpdateCard } from "./UpdateCard";
@@ -20,19 +19,15 @@ export function IdeasScreen({
   onBack,
   onOpenCapture,
   onChanged,
-  onMap,
 }: {
   api: Api;
   refreshKey: number;
   onBack: () => void;
   onOpenCapture: (id: string) => void;
   onChanged: () => void;
-  // The map of an idea (ADR 0049).
-  onMap?: (ideaId: string) => void;
 }) {
   const ui = useUi();
   const styles = useStyles();
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [ideas, setIdeas] = useState<Derivation[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,19 +94,7 @@ export function IdeasScreen({
             onPress={() => setSheet({ existing: item })}
             style={({ pressed }) => [styles.card, pressed && { opacity: 0.7 }]}
           >
-            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
-              <Text style={[ui.rowTitle, { flex: 1 }]}>{String(item.payload.title ?? "")}</Text>
-              {onMap && (
-                <Pressable
-                  onPress={() => onMap(item.id)}
-                  hitSlop={12}
-                  accessibilityRole="button"
-                  accessibilityLabel="Map"
-                >
-                  <Ionicons name="git-network-outline" size={18} color={colors.muted} />
-                </Pressable>
-              )}
-            </View>
+            <Text style={ui.rowTitle}>{String(item.payload.title ?? "")}</Text>
             {typeof item.payload.summary === "string" && item.payload.summary ? (
               <Text style={ui.bodyMuted} numberOfLines={3}>
                 {item.payload.summary}

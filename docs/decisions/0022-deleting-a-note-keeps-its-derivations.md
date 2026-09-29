@@ -1,6 +1,6 @@
 # 0022 — Deleting a note removes the note and keeps what the user got out of it
 
-**Status:** active
+**Status:** superseded by [0053](0053-deleting-a-note-deletes-what-came-from-it.md) (the items now go with the note; the text-chunk trigger and citation cascade stand)
 **Date:** 2026-09-28
 **Closes:** [#55](https://github.com/akinshonibare/memo/issues/55), [#56](https://github.com/akinshonibare/memo/issues/56)
 

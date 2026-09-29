@@ -1,5 +1,6 @@
 """Apple Health (ADR 0050): the phone sends the workouts it read; memo files them as
-activities. Only while Habits is on: workouts are only ever read to count habits."""
+activities. Only while Habits is on (always, ADR 0054, unless an operator switched it
+off): workouts are only ever read to count habits."""
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -21,9 +22,7 @@ async def sync_workouts(
 	sent twice changes nothing the second time."""
 	user = await session.get(User, user_id)
 	if user is None or not user.habits_enabled:
-		raise HTTPException(
-			status.HTTP_409_CONFLICT, "turn on Habits to read workouts from Health"
-		)
+		raise HTTPException(status.HTTP_409_CONFLICT, "Habits is off for this account")
 	out = await health.sync(session, user, body)
 	await commit_and_rebind(session, user_id)
 	return out

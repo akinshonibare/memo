@@ -8,6 +8,7 @@ import { useKeyboardHeight } from "../keyboard";
 import { useUi } from "../ui";
 import { makeStyles, useTheme } from "../theme";
 import { haptic } from "../haptics";
+import { Dialogs } from "../dialogs";
 import { LockCover } from "../lock";
 
 type Kind = Derivation["kind"];
@@ -219,6 +220,7 @@ export function DerivationSheet({
           </SheetActions>
         </ScrollView>
         {error && <Text style={[ui.danger, { marginTop: 12 }]}>{error}</Text>}
+        <Dialogs />
         <LockCover />
       </View>
     </Modal>

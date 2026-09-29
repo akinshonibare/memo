@@ -22,6 +22,7 @@ from sqlalchemy import (
 	false,
 	func,
 	text,
+	true,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -76,8 +77,10 @@ class User(Base):
 	# What you're reading now, as you set it: a passage payload ("John" is the whole
 	# book), or None. There is no fixed plan (ADR 0042, revised).
 	bible_reading: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-	# Habits (ADR 0043): off by default; on, every note is read for what you did.
-	habits_enabled: Mapped[bool] = mapped_column(default=False, server_default=false())
+	# Habits (ADRs 0043, 0054): always on; every note is read for what you did. No
+	# setting reaches it any more: false is the operator's switch, if the cost of
+	# reading every note ever needs one.
+	habits_enabled: Mapped[bool] = mapped_column(default=True, server_default=true())
 	# The morning push (ADR 0047): the local time it arrives, or NULL for none.
 	morning_push_at: Mapped[dt.time | None] = mapped_column(Time())
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
@@ -317,8 +320,9 @@ class Derivation(Base):
 			["capture_id", "user_id"],
 			["captures.id", "captures.user_id"],
 			name="fk_derivations_capture_same_user",
-			# Really ON DELETE SET NULL (capture_id), set in migration 0008: the
-			# column-list form keeps user_id, and SQLAlchemy can't express it.
+			# Deleting a note deletes what was taken from it (ADR 0053, migration
+			# 0022). capture_id stays nullable for items detached before that.
+			ondelete="CASCADE",
 		),
 		ForeignKeyConstraint(
 			["person_id", "user_id"],

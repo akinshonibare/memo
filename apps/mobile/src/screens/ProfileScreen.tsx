@@ -3,24 +3,12 @@ import * as Application from "expo-application";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActionSheetIOS,
-  ActivityIndicator,
-  Alert,
-  Linking,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { Api, type Me, type Voice } from "../api";
 import { asTranslation, TRANSLATIONS, translationName } from "../bible";
 import { Avatar, IconCircle, Pill, SheetHandle } from "../components";
 import { type Config, saveBaseUrl } from "../config";
+import { ask, choose, confirm, Dialogs, tell } from "../dialogs";
 import { fonts, useUi } from "../ui";
 import { makeStyles, useTheme } from "../theme";
 import { disableLock, enableLock, LockCover } from "../lock";
@@ -29,7 +17,7 @@ import { enableReminders, LEAD_CHOICES, remindersPref } from "../reminders";
 import { healthAvailable, healthPref, setHealthSync } from "../health";
 import { setCalendarSync, setRemindersSync, syncPref } from "../sync";
 import { SpeechQueue } from "../voice";
-import { AppearanceGroup, Group, Row, useReveal } from "./SettingsParts";
+import { AppearanceGroup, Group, Row } from "./SettingsParts";
 
 type Busy =
   | "name"
@@ -48,7 +36,6 @@ type Busy =
   | "lock"
   | "faith"
   | "translation"
-  | "habits"
   | "health"
   | "morning";
 
@@ -130,23 +117,16 @@ export function ProfileSheet({
       onProfileChanged(updated);
     });
 
-  const editName = () => {
+  const editName = async () => {
     const current = me?.name ?? "";
-    const apply = (value: string | undefined) => {
-      if (value === undefined || value.trim() === current) return;
-      void saveProfile("name", { name: value.trim() });
-    };
-    if (Platform.OS === "ios") {
-      Alert.prompt(
-        "Your name",
-        "memo uses it when it talks to you. Leave it empty and it just says \"you\".",
-        apply,
-        "plain-text",
-        current,
-      );
-    } else {
-      Alert.alert("Your name", "Editing the name needs iOS for now.");
-    }
+    const value = await ask({
+      title: "Your name",
+      message: "memo uses it when it talks to you. Leave it empty and it just says \"you\".",
+      initial: current,
+      allowEmpty: true,
+    });
+    if (value === null || value === current) return;
+    void saveProfile("name", { name: value });
   };
 
   const voiceLabel = (id: string | null | undefined) =>
@@ -170,15 +150,6 @@ export function ProfileSheet({
       onSettingsChanged();
     });
 
-  // Habits (ADR 0043). On the account: the server reads notes for what you did only
-  // while it's on. Home refreshes because its Habits door appears or goes.
-  const toggleHabits = (on: boolean) =>
-    run("habits", async () => {
-      const updated = await api().updateProfile({ habits_enabled: on });
-      setMe(updated);
-      onProfileChanged(updated);
-      onSettingsChanged();
-    });
 
   // The morning push (ADR 0047). On the account: the server sends it, at this time, only
   // on a day with something in it. Turning it on registers this phone first.
@@ -195,75 +166,40 @@ export function ProfileSheet({
       setMe(updated);
       onProfileChanged(updated);
     });
-  const pickMorning = () => {
+  const pickMorning = async () => {
     const labels = MORNING_CHOICES.map((t) => `${t === morningAt ? "✓ " : ""}${morningLabel(t)}`);
-    const choose = (i: number) => {
-      const chosen = MORNING_CHOICES[i];
-      if (chosen && chosen !== morningAt) void setMorning(chosen);
-    };
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { title: "Morning summary at", options: [...labels, "Cancel"], cancelButtonIndex: labels.length },
-        choose,
-      );
-      return;
-    }
-    Alert.alert("Morning summary at", undefined, [
-      ...labels.map((text, i) => ({ text, onPress: () => choose(i) })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+    const i = await choose({ title: "Morning summary at", options: labels.map((label) => ({ label })) });
+    if (i === null) return;
+    const chosen = MORNING_CHOICES[i];
+    if (chosen && chosen !== morningAt) void setMorning(chosen);
   };
 
-  const pickTranslation = () => {
+  const pickTranslation = async () => {
     const current = asTranslation(me?.bible_translation);
     const labels = TRANSLATIONS.map((t) => `${t === current ? "✓ " : ""}${t} · ${translationName(t)}`);
-    const choose = (i: number) => {
-      const chosen = TRANSLATIONS[i];
-      if (chosen && chosen !== current) void saveProfile("translation", { bible_translation: chosen });
-    };
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: "Bible translation",
-          message: "Passages open in your Bible app in this translation.",
-          options: [...labels, "Cancel"],
-          cancelButtonIndex: labels.length,
-        },
-        choose,
-      );
-      return;
-    }
-    Alert.alert("Bible translation", undefined, [
-      ...labels.map((text, i) => ({ text, onPress: () => choose(i) })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+    const i = await choose({
+      title: "Bible translation",
+      message: "Passages open in your Bible app in this translation.",
+      options: labels.map((label) => ({ label })),
+    });
+    if (i === null) return;
+    const chosen = TRANSLATIONS[i];
+    if (chosen && chosen !== current) void saveProfile("translation", { bible_translation: chosen });
   };
 
-  const pickVoice = () => {
+  const pickVoice = async () => {
     if (voices.length === 0) return;
     const labels = voices.map((v) => (v.id === me?.voice ? `✓ ${v.label}` : v.label));
-    const choose = (i: number) => {
-      const chosen = voices[i];
-      if (!chosen) return;
-      hear(chosen.id);
-      void saveProfile("voice", { voice: chosen.id });
-    };
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: "Voice for spoken answers",
-          message: "You'll hear a short sample.",
-          options: [...labels, "Cancel"],
-          cancelButtonIndex: labels.length,
-        },
-        choose,
-      );
-      return;
-    }
-    Alert.alert("Voice", undefined, [
-      ...labels.map((text, i) => ({ text, onPress: () => choose(i) })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+    const i = await choose({
+      title: "Voice for spoken answers",
+      message: "You'll hear a short sample.",
+      options: labels.map((label) => ({ label })),
+    });
+    if (i === null) return;
+    const chosen = voices[i];
+    if (!chosen) return;
+    hear(chosen.id);
+    void saveProfile("voice", { voice: chosen.id });
   };
 
   // Everything as one JSON file, handed to the share sheet (Files, AirDrop, Mail).
@@ -276,27 +212,24 @@ export function ProfileSheet({
       await Sharing.shareAsync(uri, { UTI: "public.json", mimeType: "application/json" });
     });
 
-  const wipeData = () =>
-    Alert.alert(
-      "Delete all your data?",
-      "Every note, recording, photo, item and conversation is removed for good. Your account stays. Export first if you want a copy.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete all data",
-          style: "destructive",
-          onPress: () =>
-            run("wipe", async () => {
-              const client = api();
-              const current = me ?? (await client.getMe());
-              const result = await client.deleteEverything(current.id);
-              onDataDeleted();
-              const notes = result.deleted.captures ?? 0;
-              return `Deleted ${notes} note${notes === 1 ? "" : "s"}.`;
-            }),
-        },
-      ],
-    );
+  const wipeData = async () => {
+    const sure = await confirm({
+      title: "Delete all your data?",
+      message:
+        "Every note, recording, photo, item and conversation is removed for good. Your account stays. Export first if you want a copy.",
+      action: "Delete all data",
+      icon: "trash-outline",
+    });
+    if (!sure) return;
+    await run("wipe", async () => {
+      const client = api();
+      const current = me ?? (await client.getMe());
+      const result = await client.deleteEverything(current.id);
+      onDataDeleted();
+      const notes = result.deleted.captures ?? 0;
+      return `Deleted ${notes} note${notes === 1 ? "" : "s"}.`;
+    });
+  };
 
   const signOut = () =>
     run("signout", async () => {
@@ -309,64 +242,55 @@ export function ProfileSheet({
       }
     });
 
-  const signOutEverywhere = () =>
-    Alert.alert("Sign out of all devices?", "Every phone signed in to memo, this one included, will need to sign in again.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign out everywhere",
-        style: "destructive",
-        onPress: () =>
-          run("everywhere", async () => {
-            await api().logoutEverywhere();
-            onSignOut();
-          }),
-      },
-    ]);
+  const signOutEverywhere = async () => {
+    const sure = await confirm({
+      title: "Sign out of all devices?",
+      message: "Every phone signed in to memo, this one included, will need to sign in again.",
+      action: "Sign out everywhere",
+      icon: "log-out-outline",
+    });
+    if (!sure) return;
+    await run("everywhere", async () => {
+      await api().logoutEverywhere();
+      onSignOut();
+    });
+  };
 
   // Two steps and a typed word: this one cannot be undone and takes everything.
-  const deleteAccount = () =>
-    Alert.alert(
-      "Delete your account?",
-      "Your account and everything in it - notes, recordings, photos, items and conversations - are deleted permanently. This can't be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Continue",
-          style: "destructive",
-          onPress: () =>
-            Alert.prompt(
-              "Type DELETE to confirm",
-              undefined,
-              (typed) => {
-                if ((typed ?? "").trim().toUpperCase() !== "DELETE") return;
-                void run("account", async () => {
-                  const client = api();
-                  const current = me ?? (await client.getMe());
-                  await client.deleteAccount(current.id);
-                  onSignOut();
-                });
-              },
-              "plain-text",
-            ),
-        },
-      ],
-    );
+  const deleteAccount = async () => {
+    const sure = await confirm({
+      title: "Delete your account?",
+      message:
+        "Your account and everything in it - notes, recordings, photos, items and conversations - are deleted permanently. This can't be undone.",
+      action: "Continue",
+      icon: "trash-outline",
+    });
+    if (!sure) return;
+    const typed = await ask({ title: "Type DELETE to confirm", action: "Delete account" });
+    if ((typed ?? "").toUpperCase() !== "DELETE") return;
+    void run("account", async () => {
+      const client = api();
+      const current = me ?? (await client.getMe());
+      await client.deleteAccount(current.id);
+      onSignOut();
+    });
+  };
 
-  const showShortcutHelp = () =>
-    Alert.alert(
-      "Siri & Action Button",
-      [
+  const showShortcutHelp = async () => {
+    const i = await choose({
+      title: "Siri & Action Button",
+      message: [
         'Siri: say "Take a note in memo" and dictate it, or "Record in memo" to start a voice note. It works right away.',
         "",
         'Action Button: Settings → Action Button → Shortcut → memo → "Record".',
         "",
         "In your own Shortcuts: memo://record, memo://write, memo://ask and memo://planner open memo where you want.",
       ].join("\n"),
-      [
-        { text: "Close", style: "cancel" },
-        { text: "Open Shortcuts", onPress: () => void Linking.openURL("shortcuts://") },
-      ],
-    );
+      options: [{ label: "Open Shortcuts", icon: "open-outline" }],
+      cancel: "Close",
+    });
+    if (i === 0) void Linking.openURL("shortcuts://");
+  };
 
   // What memo may do on this phone (ADR 0034-0036). Each switch asks for its permission
   // when turned on; a refusal leaves it off and says where to change it.
@@ -376,30 +300,19 @@ export function ProfileSheet({
   // A switch that can't turn on says why in an alert, next to where you were looking,
   // not in the note at the foot of the sheet.
   const explain = (message: string | null) => {
-    if (message) Alert.alert("Not turned on", message);
+    if (message) void tell("Not turned on", message);
   };
   const flip = (what: Busy, fn: () => Promise<string | null>) =>
     run(what, async () => {
       explain(await fn());
       onSettingsChanged();
     });
-  const pickLead = () => {
+  const pickLead = async () => {
     const labels = LEAD_CHOICES.map((m) => (m === 60 ? "1 hour before" : `${m} minutes before`));
-    const choose = (i: number) => {
-      const minutes = LEAD_CHOICES[i];
-      if (minutes !== undefined) void flip("notify", () => enableReminders(true, minutes));
-    };
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { title: "Notify me", options: [...labels, "Cancel"], cancelButtonIndex: labels.length },
-        choose,
-      );
-      return;
-    }
-    Alert.alert("Notify me", undefined, [
-      ...labels.map((text, i) => ({ text, onPress: () => choose(i) })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+    const i = await choose({ title: "Notify me", options: labels.map((label) => ({ label })) });
+    if (i === null) return;
+    const minutes = LEAD_CHOICES[i];
+    if (minutes !== undefined) void flip("notify", () => enableReminders(true, minutes));
   };
   const toggleLock = (on: boolean) =>
     run("lock", async () => {
@@ -412,7 +325,6 @@ export function ProfileSheet({
       else explain(result);
       return null;
     });
-  const { layer, reveal, hostRef } = useReveal();
 
   const saveServer = () =>
     run("server", async () => {
@@ -429,7 +341,7 @@ export function ProfileSheet({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" allowSwipeDismissal onRequestClose={onClose}>
-      <View style={styles.sheet} ref={hostRef}>
+      <View style={styles.sheet}>
         <SheetHandle />
         <View style={styles.top}>
           <View style={{ flex: 1 }} />
@@ -456,7 +368,7 @@ export function ProfileSheet({
             </Pressable>
           )}
 
-          <AppearanceGroup reveal={reveal} />
+          <AppearanceGroup />
 
           {signedIn && (
             <>
@@ -515,24 +427,12 @@ export function ProfileSheet({
                 )}
               </Group>
 
-              <Group
-                title="Habits"
-                footer={
-                  "memo notices what you do from your notes - the gym, reading, time with family, reading the Bible - and suggests a habit once it's happened a few times. It counts days and shows your rhythm, never a streak, and notices milestones: a first 10k, your longest run, your heaviest squat. Your last 60 days of notes are read when you turn it on." +
-                  (me?.habits_enabled && healthAvailable()
-                    ? " With Apple Health on, your workouts count too; memo only reads them, and turning it off deletes what it read."
-                    : "")
-                }
-              >
-                <Row icon="leaf-outline" label="Habits" busy={busy === "habits"}>
-                  <Switch
-                    value={!!me?.habits_enabled}
-                    disabled={!me}
-                    onValueChange={(on) => void toggleHabits(on)}
-                    trackColor={{ true: colors.forest }}
-                  />
-                </Row>
-                {me?.habits_enabled && healthAvailable() && (
+              {/* Habits is always on (ADR 0054): no switch for it, only for Apple Health. */}
+              {healthAvailable() && (
+                <Group
+                  title="Habits"
+                  footer="memo notices what you do from your notes and counts it towards your habits. With Apple Health on, your workouts count too; memo only reads them, and turning it off deletes what it read."
+                >
                   <Row icon="fitness-outline" label="Workouts from Apple Health" busy={busy === "health"}>
                     <Switch
                       value={health.on}
@@ -540,8 +440,8 @@ export function ProfileSheet({
                       trackColor={{ true: colors.forest }}
                     />
                   </Row>
-                )}
-              </Group>
+                </Group>
+              )}
 
               <Group
                 title="Morning"
@@ -668,7 +568,7 @@ export function ProfileSheet({
             <Text style={ui.meta}>Version {version}</Text>
           </Pressable>
         </ScrollView>
-        {layer}
+        <Dialogs />
         <LockCover />
       </View>
     </Modal>

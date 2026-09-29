@@ -1,6 +1,6 @@
 # 0031 — Themes are data: two hand-tuned Forest palettes, the rest derived in OKLCH behind a contrast check
 
-**Status:** active
+**Status:** active; the custom palette (two hue sliders) was taken out by [0052](0052-memos-own-dialogs-and-the-places-circle.md). The presets stand.
 **Date:** 2026-09-29
 
 ## Problem

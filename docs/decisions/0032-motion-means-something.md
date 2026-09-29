@@ -1,6 +1,6 @@
 # 0032 — Motion: Reanimated 4, a vocabulary that pairs with the haptics, and a living full stop
 
-**Status:** active
+**Status:** active; the theme-change reveal was taken out by [0052](0052-memos-own-dialogs-and-the-places-circle.md): a theme now just applies
 **Date:** 2026-09-29
 
 ## Problem

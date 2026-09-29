@@ -148,6 +148,7 @@ def tz_or_utc(name: str) -> ZoneInfo:
 
 
 def habits_on(user: User | None) -> bool:
+	"""Always, since ADR 0054, unless an operator switched it off for this account."""
 	return bool(user is not None and user.habits_enabled)
 
 

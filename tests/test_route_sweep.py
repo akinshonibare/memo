@@ -17,7 +17,7 @@ import datetime as dt
 import json
 import re
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 import pytest
@@ -137,6 +137,7 @@ async def test_every_route_survives_every_kind_of_row(
 	client: AsyncClient,
 	session: AsyncSession,
 	admin_engine: AsyncEngine,
+	delete_keeping_items: Callable[..., Any],
 ) -> None:
 	store = FakeObjectStore()
 	app.state.object_store = store
@@ -274,8 +275,9 @@ async def test_every_route_survives_every_kind_of_row(
 	running = await client.post("/v1/habits", json={"name": "Running"})
 	assert running.status_code == 201, running.text
 	habits.append(running.json()["id"])
-	# The first note goes; its items and its mention stay (ADR 0022).
-	assert (await client.delete(f"/v1/captures/{doomed}")).status_code == 204
+	# The first note was deleted before ADR 0053: its items and its mention stayed,
+	# detached. Such rows are still in real data, so every route meets them here.
+	await delete_keeping_items(doomed)
 
 	people = {
 		p["name"]: p["id"] for p in (await client.get("/v1/people")).json()["people"]

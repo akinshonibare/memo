@@ -7,6 +7,7 @@ import { useUi } from "../ui";
 import { makeStyles, useTheme } from "../theme";
 import { haptic } from "../haptics";
 import { captureOrQueue } from "../outbox";
+import { Dialogs } from "../dialogs";
 import { LockCover } from "../lock";
 
 export function ComposeSheet({
@@ -21,7 +22,7 @@ export function ComposeSheet({
   space?: Space; // written from the Faith screen: a faith note (ADR 0042)
 
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (captureId: string | null) => void; // null: kept offline, sent later
 }) {
   const ui = useUi();
   const styles = useStyles();
@@ -44,9 +45,9 @@ export function ComposeSheet({
     if (!body || busy) return;
     setBusy(true);
     try {
-      await captureOrQueue(api, { kind: "text", text: body, space }); // offline: kept, synced later
+      const id = await captureOrQueue(api, { kind: "text", text: body, space }); // offline: kept, synced later
       haptic.done();
-      onSaved();
+      onSaved(id);
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -84,6 +85,7 @@ export function ComposeSheet({
           scrollEnabled
         />
         {error && <Text style={[ui.danger, { marginBottom: 12 }]}>{error}</Text>}
+        <Dialogs />
         <LockCover />
       </View>
     </Modal>

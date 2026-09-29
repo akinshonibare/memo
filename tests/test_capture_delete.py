@@ -1,9 +1,11 @@
-"""Deleting a note keeps what the user got out of it (ADR 0022, #55, #56)."""
+"""Deleting a note deletes everything taken from it (ADR 0053, superseding 0022), and
+items detached by deletes from before that keep working everywhere (#55, #56)."""
 
 import datetime as dt
 import json
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -80,15 +82,16 @@ async def _ask(client: AsyncClient, question: str) -> None:
 		await response.aread()
 
 
-async def test_delete_keeps_derivations_and_removes_the_note(
+async def test_deleting_a_note_deletes_everything_taken_from_it(
 	client: AsyncClient, session: AsyncSession, admin_engine: AsyncEngine
 ) -> None:
 	capture_id, ids = await _processed(
 		client,
 		session,
 		"need to call Tunde about pricing, and price by seat",
-		"tok-keep-1",
+		"tok-del-1",
 	)
+	other, _ = await _processed(client, session, "call Tunde", "tok-del-2")
 	# An answer cites the note's chunks: this delete used to fail on the FK (#55).
 	await _ask(client, "what about Tunde and pricing?")
 
@@ -96,56 +99,66 @@ async def test_delete_keeps_derivations_and_removes_the_note(
 	assert deleted.status_code == 204, deleted.text
 
 	assert (await client.get(f"/v1/captures/{capture_id}")).status_code == 404
-	kept = (await client.get("/v1/derivations")).json()["items"]
-	assert {d["id"]: (d["status"], d["capture_id"]) for d in kept} == {
-		ids["Call Tunde about pricing"]: ("confirmed", None),
-		ids["Price by seat"]: ("pending_review", None),
-	}, "rejected goes with the note; the rest stays, detached"
-
+	left = (await client.get("/v1/derivations")).json()["items"]
+	assert left and {d["capture_id"] for d in left} == {other}, "the other note's stay"
+	assert not {d["id"] for d in left} & set(ids.values())
 	async with admin_engine.connect() as conn:
-		text_chunks = await conn.scalar(
-			text("SELECT count(*) FROM chunks WHERE derivation_id IS NULL")
+		items = await conn.scalar(
+			text("SELECT count(*) FROM derivations WHERE id = ANY(:ids)"),
+			{"ids": [uuid.UUID(i) for i in ids.values()]},
 		)
-		derivation_chunks = await conn.scalar(
+		chunks = await conn.scalar(
 			text(
-				"SELECT count(*) FROM chunks WHERE capture_id IS NULL "
-				"AND derivation_id IS NOT NULL AND superseded_at IS NULL"
-			)
+				"SELECT count(*) FROM chunks WHERE capture_id = :c "
+				"OR derivation_id = ANY(:ids)"
+			),
+			{"c": capture_id, "ids": [uuid.UUID(i) for i in ids.values()]},
 		)
 		messages = await conn.scalar(text("SELECT count(*) FROM messages"))
-	assert text_chunks == 0, "no text of the deleted note is left to answer questions"
-	assert derivation_chunks == 2
+	assert items == 0, "rejected, pending and confirmed alike"
+	assert chunks == 0, "nothing of the deleted note is left to answer questions"
 	assert messages == 2, "the conversation stays; only its citations of the note go"
 
 
-async def test_ask_still_sees_a_kept_derivation(
+async def test_ask_no_longer_sees_a_deleted_notes_items(
 	app: FastAPI, client: AsyncClient, session: AsyncSession
 ) -> None:
 	capture_id, _ = await _processed(
-		client, session, "need to call Tunde about pricing", "tok-keep-2"
+		client, session, "need to call Tunde about pricing", "tok-del-3"
 	)
 	await client.delete(f"/v1/captures/{capture_id}")
 
 	await _ask(client, "Tunde pricing")
 
 	provider: FakeAnswerProvider = app.state.answer_provider
+	assert "Call Tunde about pricing" not in str(provider.last_messages[-1]["content"])
+
+
+async def test_items_detached_before_0053_still_answer_and_export(
+	app: FastAPI,
+	client: AsyncClient,
+	session: AsyncSession,
+	delete_keeping_items: Callable[..., Any],
+) -> None:
+	capture_id, ids = await _processed(
+		client, session, "need to call Tunde about pricing", "tok-del-4"
+	)
+	await delete_keeping_items(capture_id)
+
+	kept = (await client.get("/v1/derivations")).json()["items"]
+	assert {d["id"]: d["capture_id"] for d in kept} == {
+		ids["Call Tunde about pricing"]: None,
+		ids["Price by seat"]: None,
+	}
+	await _ask(client, "Tunde pricing")
+	provider: FakeAnswerProvider = app.state.answer_provider
 	prompt = str(provider.last_messages[-1]["content"])
 	assert "(the note this came from was deleted)" in prompt
 	assert "todo: Call Tunde about pricing · due Thu 1 Oct 2026 (confirmed)" in prompt
-
-
-async def test_export_carries_derivations_without_a_note(
-	client: AsyncClient, session: AsyncSession
-) -> None:
-	capture_id, ids = await _processed(client, session, "call Tunde", "tok-keep-3")
-	await client.delete(f"/v1/captures/{capture_id}")
-
 	export = (await client.get("/v1/me/export")).json()
-	assert export["captures"] == []
-	assert {d["id"] for d in export["derivations_without_note"]} == {
-		ids["Call Tunde about pricing"],
-		ids["Price by seat"],
-	}
+	assert {d["id"] for d in export["derivations_without_note"]} == set(
+		ids[t] for t in ("Call Tunde about pricing", "Price by seat")
+	)
 
 
 async def test_a_text_chunk_cannot_outlive_its_note_on_any_delete_path(
@@ -154,21 +167,16 @@ async def test_a_text_chunk_cannot_outlive_its_note_on_any_delete_path(
 	admin_engine: AsyncEngine,
 	second_user: uuid.UUID,
 ) -> None:
-	# Bypassing the route entirely: the trigger still removes the text chunks, and the
-	# kept derivation chunks survive (ck_chunks_has_owner holds either way).
-	capture_id, _ = await _processed(client, session, "call Tunde", "tok-keep-4")
+	# Bypassing the route entirely: the trigger removes the text chunks, and the items
+	# go too, because the database cascades them (migration 0022), chunks and all.
+	capture_id, _ = await _processed(client, session, "call Tunde", "tok-del-5")
 	async with admin_engine.begin() as conn:
 		await conn.execute(
 			text("DELETE FROM captures WHERE id = :id"), {"id": capture_id}
 		)
-		text_chunks = await conn.scalar(
-			text("SELECT count(*) FROM chunks WHERE derivation_id IS NULL")
-		)
-		kept = await conn.scalar(
-			text("SELECT count(*) FROM chunks WHERE capture_id IS NULL")
-		)
-	assert text_chunks == 0
-	assert kept > 0
+		chunks = await conn.scalar(text("SELECT count(*) FROM chunks"))
+		items = await conn.scalar(text("SELECT count(*) FROM derivations"))
+	assert (chunks, items) == (0, 0)
 
 	# Deleting a whole user cascades to captures and chunks at once; the order of those
 	# two foreign-key actions is Postgres's, and it must not matter (CI found this).
@@ -199,11 +207,14 @@ async def test_a_text_chunk_cannot_outlive_its_note_on_any_delete_path(
 	assert left == 0
 
 
-async def test_delete_everything_takes_kept_derivations_too(
-	client: AsyncClient, session: AsyncSession, admin_engine: AsyncEngine
+async def test_delete_everything_takes_detached_items_too(
+	client: AsyncClient,
+	session: AsyncSession,
+	admin_engine: AsyncEngine,
+	delete_keeping_items: Callable[..., Any],
 ) -> None:
-	capture_id, _ = await _processed(client, session, "call Tunde", "tok-keep-5")
-	await client.delete(f"/v1/captures/{capture_id}")
+	capture_id, _ = await _processed(client, session, "call Tunde", "tok-del-6")
+	await delete_keeping_items(capture_id)
 
 	deleted = await client.delete("/v1/me/data", params={"confirm": str(SEED_USER_ID)})
 	assert deleted.status_code == 200, deleted.text

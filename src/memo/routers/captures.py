@@ -5,7 +5,7 @@ from typing import Annotated, Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import and_, delete, or_, select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -317,24 +317,16 @@ async def delete_capture(
 	user_id: CurrentUser,
 	store: Annotated[ObjectStore, Depends(get_object_store)],
 ) -> None:
-	"""Delete the note, keep what the user got out of it (ADR 0022).
+	"""Delete the note and everything taken from it (ADR 0053, superseding 0022).
 
 	Gone: the text, the recording (bytes removed from the bucket first, while the row
-	still knows its key), every text chunk, and the derivations the user rejected.
-	Kept, with capture_id set to NULL by the foreign key: the todos, events and ideas
-	that weren't rejected, and their chunks, so Ask and Today still see them.
-	Citations of deleted chunks cascade with them. Nothing is soft-deleted: a text
-	chunk left behind would keep answering questions about a note that is gone. The
-	database removes text chunks itself (a BEFORE DELETE trigger, migration 0008), so
-	no deletion path - this route, delete-everything, a user cascade - can forget."""
+	still knows its key), every chunk, and every todo, event, idea, mention, prayer,
+	passage, activity and suggestion that came from it - the database cascades them
+	(migration 0022), and their chunks, citations and resurfacings with them. What
+	the note changed elsewhere stays changed: a prayer it answered stays answered.
+	Nothing is soft-deleted: a chunk left behind would keep answering questions about
+	a note that is gone."""
 	capture = await _owned_capture(session, capture_id, user_id)
-	await session.execute(
-		delete(Derivation).where(
-			Derivation.capture_id == capture.id,
-			Derivation.user_id == user_id,
-			Derivation.status == "rejected",
-		)
-	)
 	if capture.recording_id is not None:
 		recording = await session.scalar(
 			select(Recording).where(

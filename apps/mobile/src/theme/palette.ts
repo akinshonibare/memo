@@ -1,7 +1,7 @@
 // The colours memo draws with (docs/brand.md, ADR 0031). A palette is plain data: two
 // hand-tuned Forest palettes, and every other theme derived from a base hue and an
 // accent hue in OKLCH, where equal steps of lightness look equal. A derived palette
-// is checked for contrast before it is used, so no hue a person picks can make memo
+// is checked for contrast before it is used, so no theme's hues can make memo
 // unreadable. Nothing here imports React: it runs anywhere, including a node check.
 
 export type Scheme = "light" | "dark";
@@ -25,18 +25,15 @@ export type Palette = {
   dangerSurface: string;
 };
 
-export type ThemeId = "forest" | "tide" | "clay" | "plum" | "ink" | "custom";
+export type ThemeId = "forest" | "tide" | "clay" | "plum" | "ink";
 export type Mode = "system" | "light" | "dark";
 
 export type ThemePrefs = {
   mode: Mode;
   theme: ThemeId;
-  // Used when theme is "custom"; presets carry their own.
-  hue: number;
-  accent: number;
 };
 
-export const DEFAULT_PREFS: ThemePrefs = { mode: "system", theme: "forest", hue: 160, accent: 70 };
+export const DEFAULT_PREFS: ThemePrefs = { mode: "system", theme: "forest" };
 
 // Forest, dark: the palette memo shipped with. Unchanged, so nobody's app looks
 // different until they choose it to.
@@ -81,7 +78,7 @@ const FOREST_LIGHT: Palette = {
 type Preset = { label: string; hue: number; accent: number; chroma: number };
 
 // Chroma scales how tinted the neutrals are; Ink is nearly grey.
-export const PRESETS: Record<Exclude<ThemeId, "custom">, Preset> = {
+export const PRESETS: Record<ThemeId, Preset> = {
   forest: { label: "Forest", hue: 160, accent: 70, chroma: 1 },
   tide: { label: "Tide", hue: 240, accent: 60, chroma: 1 },
   clay: { label: "Clay", hue: 40, accent: 165, chroma: 1 },
@@ -89,7 +86,7 @@ export const PRESETS: Record<Exclude<ThemeId, "custom">, Preset> = {
   ink: { label: "Ink", hue: 250, accent: 70, chroma: 0.3 },
 };
 
-export const THEME_ORDER: ThemeId[] = ["forest", "tide", "clay", "plum", "ink", "custom"];
+export const THEME_ORDER: ThemeId[] = ["forest", "tide", "clay", "plum", "ink"];
 
 // --- OKLCH to sRGB (Björn Ottosson's OKLab) -----------------------------------------
 
@@ -209,7 +206,6 @@ export function resolveScheme(mode: Mode, system: string | null | undefined): Sc
 
 export function paletteFor(prefs: ThemePrefs, scheme: Scheme): Palette {
   if (prefs.theme === "forest") return scheme === "dark" ? FOREST_DARK : FOREST_LIGHT;
-  if (prefs.theme === "custom") return derive(prefs.hue, prefs.accent, scheme);
   const p = PRESETS[prefs.theme];
   return derive(p.hue, p.accent, scheme, p.chroma);
 }
@@ -221,16 +217,15 @@ export function swatch(theme: ThemeId, prefs: ThemePrefs, scheme: Scheme): { bg:
 }
 
 // Stored prefs come from an older build, or were edited by hand: anything unknown
-// falls back to the default rather than throwing at launch.
+// falls back to the default rather than throwing at launch. That includes "custom",
+// the hand-picked palette that was taken out: it becomes Forest.
 export function parsePrefs(raw: string | null): ThemePrefs {
   if (!raw) return DEFAULT_PREFS;
   try {
     const v = JSON.parse(raw) as Partial<ThemePrefs>;
     const mode: Mode = v.mode === "light" || v.mode === "dark" ? v.mode : "system";
     const theme: ThemeId = THEME_ORDER.includes(v.theme as ThemeId) ? (v.theme as ThemeId) : "forest";
-    const hue = Number.isFinite(v.hue) ? ((Number(v.hue) % 360) + 360) % 360 : DEFAULT_PREFS.hue;
-    const accent = Number.isFinite(v.accent) ? ((Number(v.accent) % 360) + 360) % 360 : DEFAULT_PREFS.accent;
-    return { mode, theme, hue, accent };
+    return { mode, theme };
   } catch {
     return DEFAULT_PREFS;
   }

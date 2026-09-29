@@ -109,6 +109,10 @@ only way to find that out is to ask when Akin isn't braced for it.
 47. Two parts of an iOS app want the microphone at once: a recorder and a live
     transcription stream. What goes wrong with the audio session, and what did memo's
     patch change (ADR 0051)?
+48. memo replaced the system action sheet and alert with its own. What do you lose,
+    and why does its dialog host have to be drawn inside every sheet (ADR 0052)?
+49. Deleting a note now deletes its items through `ON DELETE CASCADE` rather than in
+    the route. Why the database? And what premise changed from ADR 0022 (ADR 0053)?
 
 ---
 

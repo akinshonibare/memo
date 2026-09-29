@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   type Api,
@@ -15,6 +15,7 @@ import {
 } from "../api";
 import { asTranslation, openInBible, type Translation } from "../bible";
 import { IconCircle, Pill } from "../components";
+import { ask } from "../dialogs";
 import { useRefetchOnFocus } from "../focus";
 import { formatDay, formatStamp, headline, lookBack, toIsoDate } from "../format";
 import { haptic } from "../haptics";
@@ -103,21 +104,18 @@ export function FaithScreen({
   };
 
   // Typed, because a passage is quicker to type than to pick: "John", "Psalm 23".
-  const ask = (title: string, message: string, initial: string, then: (value: string) => void) => {
-    if (Platform.OS !== "ios") return; // Alert.prompt is iOS-only; memo ships on iOS
-    Alert.prompt(title, message, (value) => value?.trim() && then(value.trim()), "plain-text", initial);
+  const choose = async () => {
+    const ref = await ask({
+      title: "What are you reading?",
+      message: "A book, or a chapter or a few, like John, Psalms or Romans 8.",
+      initial: faith?.reading?.current?.ref ?? "",
+    });
+    if (ref) void change(() => api.setReading(ref), haptic.tap);
   };
-  const choose = () =>
-    ask(
-      "What are you reading?",
-      "A book, or a chapter or a few, like John, Psalms or Romans 8.",
-      faith?.reading?.current?.ref ?? "",
-      (ref) => void change(() => api.setReading(ref), haptic.tap),
-    );
-  const readOther = () =>
-    ask("What did you read?", "Like Psalm 23, or John 3–4.", "", (ref) =>
-      void change(() => api.logReading(ref), haptic.done),
-    );
+  const readOther = async () => {
+    const ref = await ask({ title: "What did you read?", message: "Like Psalm 23, or John 3–4." });
+    if (ref) void change(() => api.logReading(ref), haptic.done);
+  };
 
   return (
     <View style={ui.screen}>

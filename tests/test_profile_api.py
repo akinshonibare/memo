@@ -2,6 +2,8 @@
 the account (App Store guideline 5.1.1(v))."""
 
 import uuid
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -111,6 +113,7 @@ async def test_deleting_the_account_leaves_no_row_anywhere(
 	client: AsyncClient,
 	admin_engine: AsyncEngine,
 	second_user: uuid.UUID,
+	delete_keeping_items: Callable[..., Any],
 ) -> None:
 	# The account being deleted is second_user's; the seeded user (everyone else's
 	# fixture) must come through untouched.
@@ -138,7 +141,7 @@ async def test_deleting_the_account_leaves_no_row_anywhere(
 		)
 		capture_id = uuid.UUID(created.json()["id"])
 		await process_capture(ctx, capture_id, second_user)
-		await them.delete(f"/v1/captures/{capture_id}")  # leaves a kept derivation
+		await delete_keeping_items(capture_id)  # a detached item, as before ADR 0053
 		await them.post(
 			"/v1/derivations", json={"kind": "todo", "payload": {"title": "MOT"}}
 		)

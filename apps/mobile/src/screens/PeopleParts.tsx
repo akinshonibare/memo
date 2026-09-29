@@ -1,20 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import {
-  ActionSheetIOS,
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { Api, Mention, Person, PersonRef } from "../api";
 import { IconCircle, Pill, SheetHandle } from "../components";
+import { choose, Dialogs } from "../dialogs";
 import { contactWord, formatAgo } from "../format";
 import { haptic } from "../haptics";
 import { useUi } from "../ui";
@@ -98,6 +87,7 @@ export function PersonPicker({
             people ? <Text style={[ui.empty, { marginTop: 32 }]}>Nobody by that name.</Text> : null
           }
         />
+        <Dialogs />
         <LockCover />
       </View>
     </Modal>
@@ -161,31 +151,21 @@ export function MentionCard({
 
   if (mention.person) {
     const person = mention.person;
-    const options = [`Open ${person.name}`, "It's someone else…", "Someone new", "Not a person", "Cancel"];
-    const choose = (i: number) => {
+    const more = async () => {
+      haptic.tap();
+      const i = await choose({
+        title: `"${mention.name}" in this note`,
+        options: [
+          { label: `Open ${person.name}`, icon: "person-outline" },
+          { label: "It's someone else…", icon: "swap-horizontal-outline" },
+          { label: "Someone new", icon: "person-add-outline" },
+          { label: "Not a person", icon: "close-circle-outline", destructive: true },
+        ],
+      });
       if (i === 0) onOpenPerson(person.id);
       if (i === 1) setPicking(true);
       if (i === 2) void answer("new", { new_person: true });
       if (i === 3) void notAPerson();
-    };
-    const more = () => {
-      haptic.tap();
-      if (Platform.OS === "ios") {
-        ActionSheetIOS.showActionSheetWithOptions(
-          {
-            title: `"${mention.name}" in this note`,
-            options,
-            cancelButtonIndex: 4,
-            destructiveButtonIndex: 3,
-          },
-          choose,
-        );
-        return;
-      }
-      Alert.alert(`"${mention.name}" in this note`, undefined, [
-        ...options.slice(0, 4).map((text, i) => ({ text, onPress: () => choose(i) })),
-        { text: "Cancel", style: "cancel" as const },
-      ]);
     };
     return (
       <>

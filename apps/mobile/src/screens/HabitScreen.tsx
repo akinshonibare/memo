@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Api, HabitDetail, HabitEvidence, Milestone } from "../api";
 import { confirmDelete, IconCircle, Pill, SheetAction, SheetActions } from "../components";
+import { ask, confirm } from "../dialogs";
 import { useRefetchOnFocus } from "../focus";
 import { formatDay, toIsoDate } from "../format";
 import { haptic } from "../haptics";
@@ -88,45 +89,30 @@ export function HabitScreen({
   const removeDay = (date: string) =>
     confirmDelete(`Remove ${formatDay(date)}?`, () => void run(`day:${date}`, () => api.removeHabitDay(id, date)));
 
-  const rename = () => {
-    if (!habit || Platform.OS !== "ios") return;
-    Alert.prompt(
-      "Name",
-      undefined,
-      (value) => {
-        const name = value?.trim();
-        if (name) void run("name", () => api.updateHabit(id, { name }));
-      },
-      "plain-text",
-      habit.name,
-    );
+  const rename = async () => {
+    if (!habit) return;
+    const name = await ask({ title: "Name", initial: habit.name });
+    if (name && name !== habit.name) void run("name", () => api.updateHabit(id, { name }));
   };
 
-  const stop = () => {
+  const stop = async () => {
     if (!habit) return;
-    const go = async () => {
-      setBusy("stop");
-      try {
-        await api.stopHabit(id);
-        onChanged();
-        onBack();
-      } catch (e) {
-        setError(String(e));
-        setBusy(null);
-      }
-    };
-    const message = "Its days stay in your notes, so tracking it again brings them back.";
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { title: `Stop tracking ${habit.name}?`, message, options: ["Stop tracking", "Cancel"], destructiveButtonIndex: 0, cancelButtonIndex: 1 },
-        (i) => i === 0 && void go(),
-      );
-      return;
+    const yes = await confirm({
+      title: `Stop tracking ${habit.name}?`,
+      message: "Its days stay in your notes, so tracking it again brings them back.",
+      action: "Stop tracking",
+      icon: "close-circle-outline",
+    });
+    if (!yes) return;
+    setBusy("stop");
+    try {
+      await api.stopHabit(id);
+      onChanged();
+      onBack();
+    } catch (e) {
+      setError(String(e));
+      setBusy(null);
     }
-    Alert.alert(`Stop tracking ${habit.name}?`, message, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Stop tracking", style: "destructive", onPress: () => void go() },
-    ]);
   };
 
   return (
@@ -134,9 +120,7 @@ export function HabitScreen({
       <View style={[styles.topBar, ui.pad]}>
         <IconCircle name="chevron-back" size={38} onPress={onBack} />
         <View style={{ flex: 1 }} />
-        {Platform.OS === "ios" && (
-          <IconCircle name="pencil" size={38} onPress={rename} accessibilityLabel="Rename" />
-        )}
+        <IconCircle name="pencil" size={38} onPress={() => void rename()} accessibilityLabel="Rename" />
       </View>
       <ScrollView contentContainerStyle={[ui.pad, { paddingBottom: 60 + insets.bottom }]}>
         {error && <Text style={[ui.danger, { marginTop: 12 }]}>{error}</Text>}
@@ -219,7 +203,7 @@ export function HabitScreen({
             </View>
 
             <SheetActions>
-              <SheetAction icon="close-circle-outline" label="Stop tracking" danger busy={busy === "stop"} onPress={stop} />
+              <SheetAction icon="close-circle-outline" label="Stop tracking" danger busy={busy === "stop"} onPress={() => void stop()} />
             </SheetActions>
           </>
         )}

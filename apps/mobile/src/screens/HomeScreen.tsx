@@ -3,10 +3,7 @@ import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
-  ActionSheetIOS,
   ActivityIndicator,
-  Alert,
-  Platform,
   Pressable,
   Text,
   TextInput,
@@ -18,6 +15,9 @@ import Animated, { FadeOut, interpolate, type SharedValue, useAnimatedStyle } fr
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type Capture } from "../api";
 import { AskBar, Avatar, IconCircle, confirmDelete } from "../components";
+import { choose } from "../dialogs";
+import { useNews } from "../news";
+import { Places, PLACES_SIZE } from "./Places";
 import { ACTIVE_STATUSES, formatClock, formatStamp, headline, statusLabel, toIsoDate } from "../format";
 import { celebrate, InkText, PressableScale, rowEnter, Wordmark } from "../motion";
 import { greeting, type Moment, momentText, particleForSearch } from "../delight";
@@ -36,6 +36,7 @@ const POLL_MS = 3000;
 const LEAVE_MS = 160;
 // How tall the fade above the bottom controls is.
 const BAR_FADE = 28;
+const RECORD_SIZE = 64;
 // "Not now" on a reach-out suggestion hides it for a week (PATCH snoozed_until).
 const SNOOZE_DAYS = 7;
 
@@ -90,7 +91,7 @@ export function HomeScreen({
   // Faith (ADR 0042): its door on Home, only while it's turned on in Settings.
   onFaith?: () => void;
   // Habits (ADR 0043): the same, while Habits is on.
-  onHabits?: () => void;
+  onHabits: () => void;
   onOpenHabit?: (habitId: string) => void;
   onPlanner: () => void;
   onReview: () => void;
@@ -122,6 +123,7 @@ export function HomeScreen({
   const [deleted, setDeleted] = useState<ReadonlySet<string>>(new Set());
   const captures = list.items.filter((c) => !deleted.has(c.id));
   const { view: morning, reload: reloadMorning } = useMorning(api, refreshKey);
+  const fresh = useNews(api, refreshKey);
 
   const refresh = useCallback(async () => {
     try {
@@ -215,37 +217,34 @@ export function HomeScreen({
       const uri = await pickPhoto(source);
       if (!uri) return;
       setUploading(true);
-      await captureOrQueue(api, { kind: "image", file: uri });
+      const id = await captureOrQueue(api, { kind: "image", file: uri });
       haptic.done();
       await refresh();
+      if (id) onOpen(id); // watch what memo takes from it arrive
     } catch (e) {
       setError(`Couldn't add the photo: ${String(e)}`);
     } finally {
       setUploading(false);
     }
   };
-  const add = () => {
-    const options = ["Write a note", "Take a photo", "Choose a photo", "Cancel"];
-    const choose = (i: number) => {
-      if (i === 0) onCompose();
-      if (i === 1) addPhoto("camera");
-      if (i === 2) addPhoto("library");
-    };
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 3 }, choose);
-      return;
-    }
-    Alert.alert("Add", undefined, [
-      ...options.slice(0, 3).map((text, i) => ({ text, onPress: () => choose(i) })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+  const add = async () => {
+    const picked = await choose({
+      options: [
+        { label: "Write a note", icon: "create-outline" },
+        { label: "Take a photo", icon: "camera-outline" },
+        { label: "Choose a photo", icon: "images-outline" },
+      ],
+    });
+    if (picked === 0) onCompose();
+    if (picked === 1) void addPhoto("camera");
+    if (picked === 2) void addPhoto("library");
   };
 
   // Swipe left on a row, long-press it, or use the VoiceOver action: all three ask
   // the same question before anything is deleted.
   const remove = (c: Capture, onCancel?: () => void) =>
     confirmDelete(
-      "Delete this note? Its todos, events and ideas are kept.",
+      "Delete this note and everything memo took from it?",
       async () => {
         if (playingId === c.id) stopPlayback();
         setLeaving((prev) => new Set(prev).add(c.id));
@@ -274,12 +273,6 @@ export function HomeScreen({
     <View style={ui.screen}>
       <View style={[styles.topBar, ui.pad]}>
         <Avatar name={name} size={44} onPress={onSettings} />
-        <View style={{ flex: 1 }} />
-        {onHabits && <IconCircle name="leaf-outline" onPress={onHabits} accessibilityLabel="Habits" />}
-        {onFaith && <IconCircle name="book-outline" onPress={onFaith} accessibilityLabel="Faith" />}
-        <IconCircle name="people-outline" onPress={onPeople} />
-        <IconCircle name="reader-outline" onPress={onReview} />
-        <IconCircle name="calendar-outline" onPress={onPlanner} />
       </View>
       <Wordmark live={anyActive || waiting} glow={!!moment} playful style={[ui.pad, styles.wordmark]} />
       <Text style={[ui.meta, ui.pad, styles.greeting]}>{greeting(name)}</Text>
@@ -322,7 +315,7 @@ export function HomeScreen({
         ItemSeparatorComponent={() => (
           <View style={[ui.hairline, { marginHorizontal: 20 }]} />
         )}
-        contentContainerStyle={{ paddingBottom: 140 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: 140 + PLACES_SIZE + 12 + insets.bottom }}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           q ? null : (
@@ -357,7 +350,7 @@ export function HomeScreen({
                     await api.logHabit(id);
                     onChanged();
                   }}
-                  onOpenHabits={() => onHabits?.()}
+                  onOpenHabits={onHabits}
                   onOpenHabit={onOpenHabit}
                 />
               )}
@@ -400,7 +393,7 @@ export function HomeScreen({
             <ActivityIndicator color={colors.text} />
           </View>
         ) : (
-          <IconCircle name="add" size={56} onPress={add} accessibilityLabel="Write a note or add a photo" />
+          <IconCircle name="add" size={56} onPress={() => void add()} accessibilityLabel="Write a note or add a photo" />
         )}
         <PressableScale
           onPress={() => {
@@ -414,6 +407,19 @@ export function HomeScreen({
         />
         </View>
       </View>
+      <Places
+        right={20 + (RECORD_SIZE - PLACES_SIZE) / 2}
+        bottom={Math.max(insets.bottom, 16) + 6 + RECORD_SIZE + 12}
+        places={[
+          { key: "planner", icon: "calendar-outline", label: "Planner", onPress: onPlanner, fresh: fresh.has("planner") },
+          { key: "review", icon: "reader-outline", label: "Review", onPress: onReview, fresh: fresh.has("review") },
+          { key: "people", icon: "people-outline", label: "People", onPress: onPeople, fresh: fresh.has("people") },
+          { key: "habits", icon: "leaf-outline", label: "Habits", onPress: onHabits, fresh: fresh.has("habits") },
+          ...(onFaith
+            ? [{ key: "faith", icon: "book-outline" as const, label: "Faith", onPress: onFaith, fresh: fresh.has("faith") }]
+            : []),
+        ]}
+      />
     </View>
   );
 }
@@ -661,9 +667,9 @@ const useStyles = makeStyles((colors) => ({
     paddingTop: 6,
   },
   record: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: RECORD_SIZE,
+    height: RECORD_SIZE,
+    borderRadius: RECORD_SIZE / 2,
     backgroundColor: colors.record,
     borderWidth: 6,
     borderColor: colors.recordRing,
