@@ -82,6 +82,18 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0028](0028-search-related-review-offline-siri.md) | Meaning search, related notes, weekly review, offline outbox, Siri | active |
 | [0029](0029-people-last-contact-and-reach-out.md) | People: mentions, deterministic resolution that asks, last contact, reach-out | active |
 | [0030](0030-auto-accept-is-not-confirmation.md) | Auto-accept keeps extractions as `accepted`, never `confirmed` | active |
+| [0031](0031-themes-are-data-derived-with-a-contrast-guard.md) | Themes are data: two hand-tuned Forest palettes, the rest derived behind a contrast check | active |
+| [0032](0032-motion-means-something.md) | Motion: Reanimated 4, a vocabulary paired with the haptics | active |
+| [0033](0033-native-stack-navigation.md) | React Navigation's native stack, not Expo Router | active |
+| [0034](0034-memo-on-the-phone-calendar-and-reminders.md) | Calendar and Reminders: Settings switches that sync, memo → phone only | active |
+| [0035](0035-face-id-lock.md) | Face ID lock: a cover over everything, a minute away | active |
+| [0036](0036-event-reminders-are-local-notifications.md) | Event reminders are local notifications, scheduled by reconciling | active |
+| [0037](0037-ota-updates-with-a-fingerprint.md) | Over-the-air updates keyed to the native fingerprint | active |
+| [0038](0038-recording-keeps-going-in-the-background.md) | Recording keeps going with the phone locked, as a Live Activity | active |
+| [0039](0039-word-timings-on-the-capture.md) | Word timings live on the capture | active |
+| [0040](0040-on-this-day.md) | On this day: one note from this date in another year, read live | active |
+| [0041](0041-easter-eggs-are-rare-and-earned.md) | Easter eggs: rare, earned, never a score | active |
+| [0042](0042-faith-a-space-of-its-own.md) | Faith: a space of its own; prayers answered, not done; a plan by position | provisional |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes
