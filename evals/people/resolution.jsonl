@@ -1,0 +1,19 @@
+{"id": "r01", "people": [{"name": "Tunde Bakare"}], "mention": {"name": "Tunde"}, "expected": {"outcome": "link", "person": "Tunde Bakare"}, "note": "first name of the only Tunde"}
+{"id": "r02", "people": [{"name": "Tunde Bakare"}, {"name": "Tunde Ade"}], "mention": {"name": "Tunde"}, "expected": {"outcome": "ask", "candidates": ["Tunde Bakare", "Tunde Ade"]}, "note": "two Tundes: ask, never pick"}
+{"id": "r03", "people": [{"name": "Tunde Bakare"}, {"name": "Tunde Ade"}], "mention": {"name": "Tunde", "full_name": "Tunde Ade"}, "expected": {"outcome": "link", "person": "Tunde Ade"}, "note": "the full name settles it"}
+{"id": "r04", "people": [{"name": "Folake Shonibare", "aliases": ["Mum"]}], "mention": {"name": "Mum"}, "expected": {"outcome": "link", "person": "Folake Shonibare"}}
+{"id": "r05", "people": [{"name": "Folake Shonibare", "aliases": ["Mum"]}], "mention": {"name": "my mum"}, "expected": {"outcome": "link", "person": "Folake Shonibare"}}
+{"id": "r06", "people": [{"name": "Tunde Bakare"}], "mention": {"name": "Tunday"}, "expected": {"outcome": "ask", "candidates": ["Tunde Bakare"]}, "note": "a misheard name is asked about, not linked"}
+{"id": "r07", "people": [{"name": "Tunde"}], "mention": {"name": "Kemi"}, "expected": {"outcome": "new"}}
+{"id": "r08", "people": [{"name": "Tunde"}], "mention": {"name": "Túndé"}, "expected": {"outcome": "link", "person": "Tunde"}, "note": "accents"}
+{"id": "r09", "people": [{"name": "Tunde Bakare"}], "mention": {"name": "Tunde Ade"}, "expected": {"outcome": "new"}, "note": "a different surname is a different person"}
+{"id": "r10", "people": [{"name": "Tunde Bakare"}, {"name": "Kemi Bakare"}], "mention": {"name": "Bakare"}, "expected": {"outcome": "ask", "candidates": ["Tunde Bakare", "Kemi Bakare"]}}
+{"id": "r11", "people": [{"name": "Adaeze Obi"}], "mention": {"name": "Ada"}, "expected": {"outcome": "ask", "candidates": ["Adaeze Obi"]}, "note": "a short form is asked about"}
+{"id": "r12", "people": [{"name": "Chinedu Okafor"}], "mention": {"name": "Dr Okafor"}, "expected": {"outcome": "new"}, "note": "known split: titles are kept, because stripping 'Uncle' would merge Uncle Tunde into Tunde"}
+{"id": "r13", "people": [{"name": "Tunde"}], "mention": {"name": "T"}, "expected": {"outcome": "new"}, "note": "known split: an initial; merge fixes it and teaches the alias"}
+{"id": "r14", "people": [], "mention": {"name": "Tunde"}, "expected": {"outcome": "new"}}
+{"id": "r15", "people": [{"name": "Olufunmilayo Ade", "aliases": ["Funmi"]}], "mention": {"name": "Funmi"}, "expected": {"outcome": "link", "person": "Olufunmilayo Ade"}}
+{"id": "r16", "people": [{"name": "Shola Ade"}], "mention": {"name": "Sola"}, "expected": {"outcome": "ask", "candidates": ["Shola Ade"]}}
+{"id": "r17", "people": [{"name": "Tunde"}, {"name": "Kemi Ade"}], "mention": {"name": "Tunde", "full_name": "Tunde Bakare"}, "expected": {"outcome": "link", "person": "Tunde"}, "note": "a first-name-only person takes the fuller name"}
+{"id": "r18", "people": [{"name": "Tobi"}, {"name": "Toni"}], "mention": {"name": "Tobi"}, "expected": {"outcome": "link", "person": "Tobi"}, "note": "an exact match is not second-guessed by a near one"}
+{"id": "r19", "people": [{"name": "Tunde Bakare"}, {"name": "Ada"}], "mention": {"name": "Tunde", "full_name": "Tunde Ade"}, "expected": {"outcome": "new"}, "note": "a surname one letter off another person's first name is not a question (found seeding the simulator)"}

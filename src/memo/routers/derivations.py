@@ -15,6 +15,7 @@ from memo.routers.captures import get_queue
 from memo.schemas.derivations import (
 	DERIVATION_STATUSES,
 	KINDS,
+	MENTION,
 	DerivationCreate,
 	DerivationOut,
 	DerivationPage,
@@ -42,9 +43,11 @@ async def list_derivations(
 	if kind is not None and kind not in KINDS:
 		raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown kind")
 
+	# Items only. Mentions (ADR 0029) have their own routes, and an app built before
+	# them must not find a "mention" in its Planner.
 	stmt = (
 		select(Derivation)
-		.where(Derivation.user_id == user_id)
+		.where(Derivation.user_id == user_id, Derivation.kind.in_(KINDS))
 		.order_by(Derivation.created_at.desc(), Derivation.id.desc())
 		.limit(limit + 1)
 	)
@@ -119,6 +122,12 @@ async def review_derivation(
 	)
 	if derivation is None:
 		raise HTTPException(status.HTTP_404_NOT_FOUND)
+	if derivation.kind == MENTION:
+		# Who a mention is, and whether it is real, changes people too (pruning,
+		# aliases); that lives in one place.
+		raise HTTPException(
+			status.HTTP_422_UNPROCESSABLE_CONTENT, "review a mention at /v1/mentions"
+		)
 	if body.completed is not None:
 		if derivation.kind != "todo":
 			raise HTTPException(

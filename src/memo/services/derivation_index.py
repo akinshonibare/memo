@@ -23,8 +23,33 @@ from memo.services.queue import Queue
 log = structlog.get_logger("memo.derivation_index")
 
 
+_CONTACT_WORDS = {
+	"in_person": "met in person",
+	"call": "spoke on the phone",
+	"message": "messaged",
+	"unspecified": "was in touch",
+}
+
+
+def _mention_text(payload: dict[str, object]) -> str:
+	"""A person in a note (ADR 0029), worded so "when did I last speak to Tunde?"
+	matches the contact and its resolved date, not only the note's own words."""
+	name = str(payload.get("full_name") or payload.get("name") or "")
+	parts = [f"person: {name}"]
+	if payload.get("hint"):
+		parts.append(str(payload["hint"]))
+	contact = str(payload.get("contact") or "none")
+	if contact in _CONTACT_WORDS and payload.get("occurred_on"):
+		parts.append(f"{_CONTACT_WORDS[contact]} on {payload['occurred_on']}")
+	if payload.get("context"):
+		parts.append(str(payload["context"]))
+	return ". ".join(parts)
+
+
 def derivation_text(derivation: Derivation) -> str:
 	payload = derivation.payload
+	if derivation.kind == "mention":
+		return _mention_text(payload)
 	parts = [f"{derivation.kind}: {payload.get('title', '')}"]
 	# The resolved date is what a question like "what's on 6 October" matches on.
 	if payload.get("due"):

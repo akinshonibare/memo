@@ -106,6 +106,7 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 			"llm_calls",
 			"job_runs",
 			"derivations",
+			"people",
 			"captures",
 			"recordings",
 		):

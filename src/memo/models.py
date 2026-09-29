@@ -21,11 +21,11 @@ from sqlalchemy import (
 	func,
 	text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from memo.ids import uuid7
-from memo.schemas.derivations import DERIVATION_STATUSES, KINDS
+from memo.schemas.derivations import ALL_KINDS, DERIVATION_STATUSES, MENTION
 from memo.status import CaptureStatus
 
 CAPTURE_KINDS = ("text", "audio", "image")
@@ -190,6 +190,49 @@ class JobRun(Base):
 	)
 
 
+class Person(Base):
+	"""Someone the user's notes are about (ADR 0029). The one entity ADR 0008 allows
+	outside the capture -> derivation shape: a person exists independently of any
+	one note, and `mention` derivations point at them. Nothing here is typed in at
+	capture time; the people stage creates a person the first time a name has no
+	match, and the user corrects from there (rename, alias, merge)."""
+
+	__tablename__ = "people"
+	__mapper_args__ = {"eager_defaults": True}
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("users.id", ondelete="CASCADE")
+	)
+	name: Mapped[str] = mapped_column(String(120))
+	# Other names a note may use for them: "Mum", a nickname, a misheard spelling.
+	aliases: Mapped[list[str]] = mapped_column(
+		ARRAY(String(120)), default=list, server_default="{}"
+	)
+	# A few words that tell two people with one name apart: "from work", "cousin".
+	note: Mapped[str | None] = mapped_column(String(120))
+	# How often to suggest getting in touch. NULL: never. New people get 30.
+	reach_out_every_days: Mapped[int | None]
+	snoozed_until: Mapped[dt.date | None] = mapped_column(Date)
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+	updated_at: Mapped[dt.datetime] = mapped_column(
+		server_default=func.now(), onupdate=func.now()
+	)
+
+	__table_args__ = (
+		# Target for the composite foreign key on derivations (ADR 0010).
+		UniqueConstraint("id", "user_id", name="uq_people_id_user"),
+		CheckConstraint("length(btrim(name)) > 0", name="ck_people_name"),
+		CheckConstraint(
+			"reach_out_every_days IS NULL OR reach_out_every_days BETWEEN 1 AND 365",
+			name="ck_people_reach_out_every_days",
+		),
+	)
+
+
+Index("ix_people_user", Person.user_id)
+
+
 class Derivation(Base):
 	"""A typed extraction pointing back at its capture (ADR 0008). Polymorphic on
 	`kind`; the payload's shape is enforced by the Pydantic model for that kind."""
@@ -211,6 +254,9 @@ class Derivation(Base):
 	# Todos only. Separate from status: status is the review (is this real?), this is
 	# what happened next. A confirmed todo that is done is still confirmed.
 	completed_at: Mapped[dt.datetime | None]
+	# Mentions only (ADR 0029): who this is. NULL while the user is being asked
+	# "which one?", or once the person is deleted.
+	person_id: Mapped[uuid.UUID | None]
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 	updated_at: Mapped[dt.datetime] = mapped_column(
 		server_default=func.now(), onupdate=func.now()
@@ -218,7 +264,7 @@ class Derivation(Base):
 
 	__table_args__ = (
 		UniqueConstraint("id", "user_id", name="uq_derivations_id_user"),
-		CheckConstraint(f"kind IN ({_in_list(KINDS)})", name="ck_derivations_kind"),
+		CheckConstraint(f"kind IN ({_in_list(ALL_KINDS)})", name="ck_derivations_kind"),
 		CheckConstraint(
 			f"status IN ({_in_list(DERIVATION_STATUSES)})",
 			name="ck_derivations_status",
@@ -230,9 +276,25 @@ class Derivation(Base):
 			# Really ON DELETE SET NULL (capture_id), set in migration 0008: the
 			# column-list form keeps user_id, and SQLAlchemy can't express it.
 		),
+		ForeignKeyConstraint(
+			["person_id", "user_id"],
+			["people.id", "people.user_id"],
+			name="fk_derivations_person_same_user",
+			# Really ON DELETE SET NULL (person_id), set in migration 0012.
+		),
+		CheckConstraint(
+			f"person_id IS NULL OR kind = '{MENTION}'",
+			name="ck_derivations_person_only_on_mentions",
+		),
 	)
 
 
+Index(
+	"ix_derivations_user_person",
+	Derivation.user_id,
+	Derivation.person_id,
+	postgresql_where=text("person_id IS NOT NULL"),
+)
 Index(
 	"ix_derivations_user_kind_status",
 	Derivation.user_id,

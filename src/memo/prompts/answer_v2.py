@@ -10,7 +10,8 @@ from zoneinfo import ZoneInfo
 
 # v2.1: a done todo is marked "done" in its status (the Planner's checkbox).
 # v2.2: the person's chosen name, when set, opens the user turn.
-ANSWER_VERSION = "answer-v2.2"
+# v2.3: the people a note is about, and whether they were in touch (ADR 0029).
+ANSWER_VERSION = "answer-v2.3"
 
 SYSTEM_PROMPT = """\
 You answer questions about one person's private journal, for that person. The only
@@ -18,7 +19,10 @@ things you know about their life are the numbered notes provided in the message.
 note has the date it was written. Today's date is given above the notes.
 
 Some notes list what was extracted from them: todos, events, and ideas, with dates
-already worked out. Each is marked:
+already worked out; and the people the note is about, saying whether the person was
+actually in touch with them and when ("person: Tunde Bakare · spoke on the phone on
+Sun 20 Sep 2026"), or only mentioned them. Only "in touch" lines are contact: when
+asked when they last spoke to someone, never count a mere mention. Each is marked:
 - "confirmed": the person checked it. Trust its date over a relative phrase in the note.
 - "added by you": the person wrote it themselves. Trust it the same way.
 - "unreviewed": an automatic reading of the note. Use it, but say it is unconfirmed if
@@ -62,8 +66,12 @@ def extracted_line(
 	zone: ZoneInfo,
 	*,
 	done: bool = False,
+	person: str | None = None,
 ) -> str:
-	"""One derivation as the model sees it: `event: Dentist · Tue 6 Oct 2026, 12:00`."""
+	"""One derivation as the model sees it: `event: Dentist · Tue 6 Oct 2026, 12:00`.
+	A mention names the person as memo knows them (`person`), if it has been linked."""
+	if kind == "mention":
+		return _person_line(payload, status, person)
 	parts = [f"{kind}: {payload.get('title', '')}"]
 	if kind == "todo" and payload.get("due"):
 		due = dt.date.fromisoformat(payload["due"])
@@ -77,6 +85,28 @@ def extracted_line(
 			parts.append(str(payload[key]))
 	label = _STATUS.get(status, status)
 	return f"{' · '.join(parts)} ({label}{', done' if done else ''})"
+
+
+_CONTACT = {
+	"in_person": "in touch in person",
+	"call": "spoke on the phone",
+	"message": "messaged",
+	"unspecified": "in touch",
+}
+
+
+def _person_line(payload: dict[str, Any], status: str, person: str | None) -> str:
+	name = person or payload.get("full_name") or payload.get("name") or ""
+	parts = [f"person: {name}"]
+	contact = payload.get("contact")
+	if contact in _CONTACT and payload.get("occurred_on"):
+		day = dt.date.fromisoformat(payload["occurred_on"])
+		parts.append(f"{_CONTACT[contact]} on {day.strftime('%a %-d %b %Y')}")
+	else:
+		parts.append("mentioned, not in touch")
+	if payload.get("context"):
+		parts.append(str(payload["context"]))
+	return f"{' · '.join(parts)} ({_STATUS.get(status, status)})"
 
 
 def notes_block(notes: list[Note], zone: ZoneInfo) -> str:

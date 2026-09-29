@@ -26,7 +26,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from memo.config import Settings
 from memo.db import commit_and_rebind
 from memo.ids import uuid7
-from memo.models import Derivation, LLMCallRow, Message, MessageCitation, User
+from memo.models import (
+	Derivation,
+	LLMCallRow,
+	Message,
+	MessageCitation,
+	Person,
+	User,
+)
 from memo.prompts import answer_v2, rewrite_v1
 from memo.services.embeddings import Embedder
 from memo.services.extraction import RawCompletion
@@ -318,9 +325,29 @@ async def _notes(
 			)
 			.order_by(Derivation.created_at, Derivation.id)
 		)
-		for d in rows:
+		derivations = list(rows)
+		# A linked mention reads as the person memo knows ("Mum" in the note,
+		# "Folake Shonibare" in the line), so both names can match the question.
+		person_ids = {d.person_id for d in derivations if d.person_id is not None}
+		names: dict[uuid.UUID, str] = {}
+		if person_ids:
+			names = dict(
+				(
+					await session.execute(
+						select(Person.id, Person.name).where(
+							Person.user_id == user_id, Person.id.in_(person_ids)
+						)
+					)
+				).tuples()
+			)
+		for d in derivations:
 			line = answer_v2.extracted_line(
-				d.kind, d.payload, d.status, zone, done=d.completed_at is not None
+				d.kind,
+				d.payload,
+				d.status,
+				zone,
+				done=d.completed_at is not None,
+				person=names.get(d.person_id) if d.person_id is not None else None,
 			)
 			by_id[d.id] = line
 			if d.capture_id is not None:

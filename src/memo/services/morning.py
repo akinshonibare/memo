@@ -23,6 +23,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.ids import uuid7
 from memo.models import Derivation, MorningView, Resurfacing, User
+from memo.schemas.people import ReachOut
+from memo.services.people import reach_out
 
 log = structlog.get_logger("memo.morning")
 
@@ -66,6 +68,10 @@ class MorningViewOut(BaseModel):
 	events: list[EventItem]
 	resurfaced_idea: ResurfacedIdea | None
 	built_at: dt.datetime
+	# People it may be time to get in touch with (ADR 0029). Read live, like todos,
+	# so "Spoke to them" takes someone off today's list at once. Defaulted so a view
+	# stored before this field existed still reads.
+	reach_out: list[ReachOut] = []
 
 
 def tz_or_utc(name: str) -> ZoneInfo:
@@ -195,6 +201,7 @@ async def build_morning_view(
 	today = now.astimezone(zone).date()
 
 	todos, events = await _todays_items(session, user_id, today=today, zone=zone)
+	people = await reach_out(session, user_id, today=today, zone=zone)
 
 	existing = await session.scalar(
 		select(MorningView).where(
@@ -227,6 +234,7 @@ async def build_morning_view(
 		events=events,
 		resurfaced_idea=idea,
 		built_at=now,
+		reach_out=people,
 	)
 	payload: dict[str, Any] = view.model_dump(mode="json")
 	await session.execute(
@@ -276,11 +284,13 @@ async def todays_view(
 		if source is None or source.status == "rejected":
 			idea = None
 	todos, events = await _todays_items(session, user_id, today=today, zone=zone)
+	people = await reach_out(session, user_id, today=today, zone=zone)
 	return pinned.model_copy(
 		update={
 			"timezone": timezone,
 			"todos": todos,
 			"events": events,
 			"resurfaced_idea": idea,
+			"reach_out": people,
 		}
 	)

@@ -19,6 +19,7 @@ from tests.fakes import (
 	FakeEmbedder,
 	FakeExtractor,
 	FakeObjectStore,
+	FakePeopleReader,
 	FakeTranscriber,
 )
 
@@ -74,6 +75,7 @@ async def test_a_photo_is_described_then_extracted_like_any_note(
 		object_store=store,
 		extractor=extractor,
 		embedder=FakeEmbedder(),
+		people=FakePeopleReader(),
 		describer=describer,
 	)
 
@@ -106,7 +108,7 @@ async def test_a_photo_is_described_then_extracted_like_any_note(
 		costed = await conn.scalar(
 			text("SELECT count(*) FROM llm_calls WHERE stage = 'describe'")
 		)
-	assert list(stages) == ["describe", "embed", "extract"]
+	assert list(stages) == ["describe", "embed", "extract", "people"]
 	assert costed == 1, "the vision call is priced and logged like every other"
 
 
@@ -120,6 +122,7 @@ async def test_a_photo_the_model_cannot_read_fails_visibly(
 		object_store=store,
 		extractor=FakeExtractor(),
 		embedder=FakeEmbedder(),
+		people=FakePeopleReader(),
 		describer=FakeDescriber(fail_with=TerminalError("model declined")),
 	)
 	outcome = await process_capture(ctx, uuid.UUID(capture_id), SEED_USER_ID)

@@ -12,7 +12,12 @@ from memo.db import bind_system, bind_user
 from memo.models import Capture, Recording
 from memo.services.derivation_index import reembed_derivation
 from memo.services.morning import build_morning_view, is_build_hour
-from memo.services.pipeline import PipelineContext, process_capture
+from memo.services.people import unread_notes
+from memo.services.pipeline import (
+	PipelineContext,
+	process_capture,
+	read_people_in_old_note,
+)
 from memo.services.queue import PROCESS_CAPTURE
 from memo.services.retry import RetryableError, TerminalError, backoff_delay
 
@@ -35,6 +40,7 @@ async def process_capture_task(
 			object_store=ctx["object_store"],
 			extractor=ctx["extractor"],
 			embedder=ctx["embedder"],
+			people=ctx["people"],
 			max_attempts=ctx["settings"].max_attempts,
 			describer=ctx["describer"],
 		)
@@ -163,3 +169,35 @@ async def requeue_stale_captures_task(ctx: dict[str, Any]) -> int:
 		)
 	log.info("sweep.stale_pending", requeued=len(rows))
 	return len(rows)
+
+
+PEOPLE_BACKLOG_BATCH = 40
+
+
+async def read_people_backlog_task(ctx: dict[str, Any]) -> int:
+	"""Read people in notes written before the people stage existed (ADR 0029).
+
+	A sweep rather than a one-off script: it needs no terminal session to run, it
+	resumes after a deploy or a crash where it left off (the job_runs ledger is the
+	bookmark), and once the backlog is empty it costs one query every few minutes.
+	Newest notes first, since recent contact is what the reminders depend on."""
+	structlog.contextvars.clear_contextvars()
+	structlog.contextvars.bind_contextvars(job_id=ctx.get("job_id"))
+	async with ctx["session_factory"]() as session:
+		await bind_system(session)
+		backlog = await unread_notes(session, limit=PEOPLE_BACKLOG_BATCH)
+	outcomes: dict[str, int] = {}
+	for capture_id, user_id in backlog:
+		async with ctx["session_factory"]() as session:
+			pipeline = PipelineContext(
+				session=session,
+				transcriber=ctx["transcriber"],
+				object_store=ctx["object_store"],
+				extractor=ctx["extractor"],
+				embedder=ctx["embedder"],
+				people=ctx["people"],
+			)
+			outcome = await read_people_in_old_note(pipeline, capture_id, user_id)
+		outcomes[outcome] = outcomes.get(outcome, 0) + 1
+	log.info("sweep.people_backlog", notes=len(backlog), **outcomes)
+	return len(backlog)

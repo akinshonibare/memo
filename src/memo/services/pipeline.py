@@ -31,10 +31,11 @@ from memo.models import (
 	User,
 )
 from memo.services.chunking import CHUNKER_VERSION, chunk_text
-from memo.services.derivation_index import derivation_text
+from memo.services.derivation_index import derivation_text, reembed_derivation
 from memo.services.embeddings import Embedder
 from memo.services.extraction import ExtractionFailed, ExtractorLike
 from memo.services.llm import LLMCall
+from memo.services.people import PeopleReaderLike, apply_mentions
 from memo.services.retry import RetryableError, TerminalError, backoff_delay
 from memo.services.storage import ObjectStore
 from memo.services.transcription import Transcriber
@@ -64,6 +65,9 @@ class PipelineContext:
 	object_store: ObjectStore
 	extractor: ExtractorLike
 	embedder: Embedder
+	# Required, not defaulted: a pipeline built without a people reader must be a
+	# TypeError, not notes silently marked as read for people (ADR 0029).
+	people: PeopleReaderLike
 	max_attempts: int = 5
 	describer: Describer = field(default_factory=UnconfiguredDescriber)
 
@@ -214,6 +218,40 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 	)
 
 
+async def _people(ctx: PipelineContext, capture: Capture) -> None:
+	"""Who the note is about (ADR 0029). Its own model call, after extraction and
+	before embedding, so each mention gets a chunk in the same pass as the rest."""
+	if not capture.text or not capture.text.strip():
+		raise TerminalError("nothing to read for people: the capture has no text")
+	user = await ctx.session.get(User, capture.user_id)
+	timezone = user.timezone if user is not None else "UTC"
+	author = user.display_name if user is not None else None
+	version = ctx.people.version
+	started = time.perf_counter()
+	try:
+		result = await ctx.people.read(
+			capture.text,
+			captured_at=capture.created_at,
+			timezone=timezone,
+			author=author,
+		)
+	except ExtractionFailed as exc:
+		await _record_calls(ctx, capture, exc.calls)
+		raise TerminalError(str(exc)) from exc
+	await _record_calls(ctx, capture, result.calls)
+	mentions = await apply_mentions(
+		ctx.session, capture, result.extraction, version=version, timezone=timezone
+	)
+	log.info(
+		"stage.people",
+		capture_id=str(capture.id),
+		version=version,
+		mentions=len(mentions),
+		linked=sum(1 for m in mentions if m.person_id is not None),
+		stage_ms=round((time.perf_counter() - started) * 1000),
+	)
+
+
 async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 	"""Dual granularity: capture chunks for recall, derivation rows for precision."""
 	source = capture.text or ""
@@ -309,6 +347,15 @@ STAGES: tuple[Stage, ...] = (
 		status=CaptureStatus.EXTRACTING,
 		version=lambda ctx: ctx.extractor.version,
 		run=_extract,
+		applies=lambda c: True,
+	),
+	Stage(
+		name="people",
+		# Still "extracting" to anyone watching: reading who a note is about is
+		# part of reading the note, and the app's labels need no new state.
+		status=CaptureStatus.EXTRACTING,
+		version=lambda ctx: ctx.people.version,
+		run=_people,
 		applies=lambda c: True,
 	),
 	Stage(
@@ -444,3 +491,67 @@ async def process_capture(
 	await commit_and_rebind(session, user_id)
 	log.info("capture.ready", capture_id=str(capture.id))
 	return Outcome(status=capture.status)
+
+
+async def read_people_in_old_note(
+	ctx: PipelineContext, capture_id: uuid.UUID, user_id: uuid.UUID
+) -> str:
+	"""Run the people stage over a note that was ready before the stage existed, then
+	index its mentions. The same ledger row (capture, "people", version) as the
+	pipeline, so a note is read once however it gets there.
+
+	A failed read is logged and its ledger row marked failed (with the calls it paid
+	for); the backlog sweep tries it again, up to people.BACKLOG_MAX_ATTEMPTS. The note
+	itself is untouched: it stays ready and searchable whatever happens here.
+
+	Returns what happened: missing | done | read | failed."""
+	session = ctx.session
+	await bind_user(session, user_id)
+	capture = await session.scalar(
+		select(Capture).where(Capture.id == capture_id, Capture.user_id == user_id)
+	)
+	if capture is None or capture.status != CaptureStatus.READY.value:
+		return "missing"
+	stage = next(s for s in STAGES if s.name == "people")
+	run_id = await _claim_run(session, capture, stage, stage.version(ctx))
+	await commit_and_rebind(session, user_id)
+	if run_id is None:
+		return "done"
+	try:
+		await _people(ctx, capture)
+	except (RetryableError, TerminalError) as exc:
+		# Raised by the read, before anything was written but the paid-for calls.
+		await _finish_run(session, run_id, "failed", repr(exc))
+		await commit_and_rebind(session, user_id)
+		log.warning(
+			"people.backlog_failed", capture_id=str(capture_id), error=repr(exc)
+		)
+		return "failed"
+	await _finish_run(session, run_id, "succeeded")
+	await commit_and_rebind(session, user_id)
+
+	# Best-effort, like any derivation's re-embed (ADR 0021): until a mention has its
+	# chunk, Ask still sees it live through its note.
+	mentions = (
+		await session.scalars(
+			select(Derivation.id).where(
+				Derivation.capture_id == capture.id,
+				Derivation.user_id == user_id,
+				Derivation.kind == "mention",
+				Derivation.status != "rejected",
+			)
+		)
+	).all()
+	for mention_id in mentions:
+		try:
+			await reembed_derivation(session, ctx.embedder, mention_id, user_id)
+			await commit_and_rebind(session, user_id)
+		except (RetryableError, TerminalError) as exc:
+			await session.rollback()
+			await bind_user(session, user_id)
+			log.warning(
+				"people.backlog_embed_failed",
+				derivation_id=str(mention_id),
+				error=repr(exc),
+			)
+	return "read"

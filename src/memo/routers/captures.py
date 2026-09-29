@@ -25,12 +25,14 @@ from memo.schemas.captures import (
 	CapturePage,
 )
 from memo.schemas.derivations import (
+	MENTION,
 	DerivationCreate,
 	DerivationOut,
 	validate_payload,
 	validation_detail,
 )
 from memo.services.derivation_index import enqueue_reembed
+from memo.services.people import last_contacts, load_people, mention_out
 from memo.services.queue import Queue
 from memo.services.storage import ObjectStore
 from memo.status import CaptureStatus, transition
@@ -252,15 +254,26 @@ async def get_capture(
 ) -> CaptureDetail:
 	"""The capture, its processing status, and its derivations (design doc, Step 3)."""
 	capture = await _owned_capture(session, capture_id, user_id)
-	derivations = await session.scalars(
-		select(Derivation)
-		.where(Derivation.capture_id == capture.id, Derivation.user_id == user_id)
-		.order_by(Derivation.created_at, Derivation.id)
-	)
+	rows = (
+		await session.scalars(
+			select(Derivation)
+			.where(Derivation.capture_id == capture.id, Derivation.user_id == user_id)
+			.order_by(Derivation.created_at, Derivation.id)
+		)
+	).all()
+	mentions = [d for d in rows if d.kind == MENTION and d.status != "rejected"]
+	people_out = []
+	if mentions:
+		people = {p.id: p for p in await load_people(session, user_id)}
+		lasts = await last_contacts(session, user_id)
+		people_out = [mention_out(d, people=people, lasts=lasts) for d in mentions]
 	(item,) = await _with_durations(session, [capture], user_id)
 	return CaptureDetail(
 		**item.model_dump(),
-		derivations=[DerivationOut.model_validate(d) for d in derivations.all()],
+		derivations=[
+			DerivationOut.model_validate(d) for d in rows if d.kind != MENTION
+		],
+		people=people_out,
 	)
 
 

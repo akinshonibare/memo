@@ -18,6 +18,7 @@ from tests.fakes import (
 	FakeEmbedder,
 	FakeExtractor,
 	FakeObjectStore,
+	FakePeopleReader,
 	FakeSpeaker,
 	FakeTranscriber,
 )
@@ -130,6 +131,7 @@ async def test_deleting_the_account_leaves_no_row_anywhere(
 				Extraction(todos=[TodoPayload(title="Call Tunde")])
 			),
 			embedder=FakeEmbedder(),
+			people=FakePeopleReader(),
 		)
 		created = await them.post(
 			"/v1/captures", json={"text": "call Tunde", "client_token": "tok-account-1"}

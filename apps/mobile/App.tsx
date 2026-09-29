@@ -17,13 +17,15 @@ import { IdeasScreen } from "./src/screens/IdeasScreen";
 import { PlannerScreen } from "./src/screens/PlannerScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
+import { PeopleScreen } from "./src/screens/PeopleScreen";
+import { PersonScreen } from "./src/screens/PersonScreen";
 import { RecordSheet } from "./src/screens/RecordSheet";
 import { ProfileSheet } from "./src/screens/ProfileScreen";
 import { ReviewScreen } from "./src/screens/ReviewScreen";
 import { colors } from "./src/ui";
 import { captureOrQueue, flushOutbox, useOutbox } from "./src/outbox";
 
-type Back = "home" | "planner" | "ideas" | "review";
+type Back = "home" | "planner" | "ideas" | "review" | "people";
 
 // memo://record, write, ask, planner: what a Shortcut or widget opens (ADR 0027).
 // memo://capture?text=...: a note dictated to Siri (ADR 0028), saved as it is.
@@ -41,7 +43,9 @@ function linkAction(url: string | null): LinkAction | null {
   }
   return text ? `capture:${text}` : null;
 }
-type View_ = { name: Back } | { name: "detail"; id: string; back: Back };
+// A note or a person remembers the view it was opened from, so back retraces the path:
+// a note -> the person in it -> another of their notes -> back, back.
+type View_ = { name: Back } | { name: "detail"; id: string; back: View_ } | { name: "person"; id: string; back: View_ };
 
 export default function App() {
   const [fontsLoaded] = useFonts({ InstrumentSerif_400Regular });
@@ -97,6 +101,8 @@ export default function App() {
   }, [config?.baseUrl, config?.token]);
 
   const bump = () => setRefreshKey((k) => k + 1);
+  const openNote = (id: string) => setView((v) => ({ name: "detail", id, back: v }));
+  const openPerson = (id: string) => setView((v) => ({ name: "person", id, back: v }));
 
   const ready = !!api && onboarded === true;
 
@@ -205,9 +211,12 @@ export default function App() {
           <HomeScreen
             api={api}
             refreshKey={refreshKey}
-            onOpen={(id) => setView({ name: "detail", id, back: "home" })}
+            onOpen={openNote}
             onPlanner={() => setView({ name: "planner" })}
             onReview={() => setView({ name: "review" })}
+            onPeople={() => setView({ name: "people" })}
+            onOpenPerson={openPerson}
+            onChanged={bump}
             onAsk={() => setAsk(true)}
             onRecord={() => setRecord(true)}
             onCompose={() => setCompose(true)}
@@ -221,7 +230,7 @@ export default function App() {
             refreshKey={refreshKey}
             onBack={() => setView({ name: "home" })}
             onIdeas={() => setView({ name: "ideas" })}
-            onOpenCapture={(id) => setView({ name: "detail", id, back: "planner" })}
+            onOpenCapture={openNote}
             onChanged={bump}
           />
         )}
@@ -229,7 +238,7 @@ export default function App() {
           <ReviewScreen
             api={api}
             onBack={() => setView({ name: "home" })}
-            onOpenCapture={(id) => setView({ name: "detail", id, back: "review" })}
+            onOpenCapture={openNote}
             onChanged={bump}
           />
         )}
@@ -238,7 +247,30 @@ export default function App() {
             api={api}
             refreshKey={refreshKey}
             onBack={() => setView({ name: "planner" })}
-            onOpenCapture={(id) => setView({ name: "detail", id, back: "ideas" })}
+            onOpenCapture={openNote}
+            onChanged={bump}
+          />
+        )}
+        {api && view.name === "people" && (
+          <PeopleScreen
+            api={api}
+            refreshKey={refreshKey}
+            onBack={() => setView({ name: "home" })}
+            onOpenPerson={openPerson}
+            onOpenCapture={openNote}
+            onChanged={bump}
+          />
+        )}
+        {api && view.name === "person" && (
+          <PersonScreen
+            key={view.id}
+            api={api}
+            id={view.id}
+            onBack={() => setView(view.back)}
+            onOpenCapture={openNote}
+            // Only a merge opens another person from here: it replaces this one,
+            // which no longer exists.
+            onOpenPerson={(id) => setView({ name: "person", id, back: view.back })}
             onChanged={bump}
           />
         )}
@@ -247,10 +279,12 @@ export default function App() {
             key={view.id}
             api={api}
             id={view.id}
-            onBack={() => setView({ name: view.back })}
+            onBack={() => setView(view.back)}
             onAsk={() => setAsk(true)}
             onChanged={bump}
+            // A related note replaces this one: back still returns where you came from.
             onOpen={(id) => setView({ name: "detail", id, back: view.back })}
+            onOpenPerson={openPerson}
           />
         )}
         {api && (
@@ -260,7 +294,7 @@ export default function App() {
             onClose={() => setAsk(false)}
             onOpenCapture={(id) => {
               setAsk(false);
-              setView({ name: "detail", id, back: "home" });
+              setView({ name: "detail", id, back: { name: "home" } });
             }}
           />
         )}

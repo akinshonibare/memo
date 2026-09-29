@@ -8,6 +8,7 @@ error appended, then terminal. Never a silent drop.
 
 import datetime as dt
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -16,7 +17,7 @@ import structlog
 from anthropic import AsyncAnthropic
 from anthropic.lib._parse._transform import transform_schema
 from anthropic.types import MessageParam, OutputConfigParam
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from memo.config import Settings
 from memo.prompts.extract_v1 import (
@@ -54,7 +55,13 @@ class ExtractionProvider(Protocol):
 
 
 class AnthropicExtractionProvider:
-	def __init__(self, client: AsyncAnthropic, *, model: str) -> None:
+	def __init__(
+		self,
+		client: AsyncAnthropic,
+		*,
+		model: str,
+		schema: type[BaseModel] = Extraction,
+	) -> None:
 		self._client = client
 		self.model = model
 		# The SDK's own schema transform (what messages.parse uses), so the constraint
@@ -66,7 +73,7 @@ class AnthropicExtractionProvider:
 				# Serialization mode: every field required, so the grammar leaves the
 				# model no field it can skip and then try to write inside a string.
 				"schema": transform_schema(
-					Extraction.model_json_schema(mode="serialization")
+					schema.model_json_schema(mode="serialization")
 				),
 			},
 			"effort": "low",
@@ -150,49 +157,69 @@ class Extractor:
 	async def extract(
 		self, text: str, *, captured_at: dt.datetime, timezone: str
 	) -> ExtractResult:
-		messages: list[MessageParam] = [
-			{
-				"role": "user",
-				"content": user_message(
-					text, captured_at=captured_at, timezone=timezone
-				),
-			}
-		]
-		calls: list[LLMCall] = []
-		last_raw = ""
-		last_errors = ""
-		for attempt in range(1, self._max_repairs + 2):
-			raw = await self._provider.complete(system=SYSTEM_PROMPT, messages=messages)
-			calls.append(
-				LLMCall.priced(
-					provider="anthropic",
-					model=raw.model,
-					stage=STAGE,
-					input_tokens=raw.input_tokens,
-					output_tokens=raw.output_tokens,
-					cache_read_tokens=raw.cache_read_tokens,
-					cache_write_tokens=raw.cache_write_tokens,
-					latency_ms=raw.latency_ms,
-				)
-			)
-			try:
-				extraction = Extraction.model_validate_json(raw.text)
-			except ValidationError as exc:
-				last_raw, last_errors = raw.text, _format_errors(exc)
-				log.info("extraction.repair", attempt=attempt, errors=last_errors)
-				messages = [
-					*messages,
-					{"role": "assistant", "content": raw.text},
-					{"role": "user", "content": repair_message(last_errors)},
-				]
-				continue
-			return ExtractResult(extraction=extraction, raw=raw.text, calls=calls)
-
-		raise ExtractionFailed(
-			f"schema_validation after {self._max_repairs + 1} attempts:\n{last_errors}",
-			raw=last_raw,
-			calls=calls,
+		extraction, raw, calls = await complete_validated(
+			self._provider,
+			system=SYSTEM_PROMPT,
+			first=user_message(text, captured_at=captured_at, timezone=timezone),
+			parse=Extraction.model_validate_json,
+			repair=repair_message,
+			stage=STAGE,
+			max_repairs=self._max_repairs,
 		)
+		return ExtractResult(extraction=extraction, raw=raw, calls=calls)
+
+
+async def complete_validated[T](
+	provider: ExtractionProvider,
+	*,
+	system: str,
+	first: str,
+	parse: Callable[[str], T],
+	repair: Callable[[str], str],
+	stage: str,
+	max_repairs: int,
+) -> tuple[T, str, list[LLMCall]]:
+	"""One call, validated; on a validation error, the error goes back to the model
+	for a repair, at most `max_repairs` times, then ExtractionFailed (ADR 0015).
+	Shared by every stage that asks a model for a schema: extraction and people."""
+	messages: list[MessageParam] = [{"role": "user", "content": first}]
+	calls: list[LLMCall] = []
+	last_raw = ""
+	last_errors = ""
+	for attempt in range(1, max_repairs + 2):
+		raw = await provider.complete(system=system, messages=messages)
+		calls.append(
+			LLMCall.priced(
+				provider="anthropic",
+				model=raw.model,
+				stage=stage,
+				input_tokens=raw.input_tokens,
+				output_tokens=raw.output_tokens,
+				cache_read_tokens=raw.cache_read_tokens,
+				cache_write_tokens=raw.cache_write_tokens,
+				latency_ms=raw.latency_ms,
+			)
+		)
+		try:
+			parsed = parse(raw.text)
+		except ValidationError as exc:
+			last_raw, last_errors = raw.text, _format_errors(exc)
+			log.info(
+				"extraction.repair", stage=stage, attempt=attempt, errors=last_errors
+			)
+			messages = [
+				*messages,
+				{"role": "assistant", "content": raw.text},
+				{"role": "user", "content": repair(last_errors)},
+			]
+			continue
+		return parsed, raw.text, calls
+
+	raise ExtractionFailed(
+		f"schema_validation after {max_repairs + 1} attempts:\n{last_errors}",
+		raw=last_raw,
+		calls=calls,
+	)
 
 
 class ExtractorLike(Protocol):

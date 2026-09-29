@@ -15,7 +15,15 @@ from sqlalchemy.engine import CursorResult
 from memo.auth import CurrentUser
 from memo.config import Settings, get_settings
 from memo.db import DbSession
-from memo.models import Capture, Conversation, Derivation, Message, Recording, User
+from memo.models import (
+	Capture,
+	Conversation,
+	Derivation,
+	Message,
+	Person,
+	Recording,
+	User,
+)
 from memo.routers.recordings import get_object_store
 from memo.schemas.ask import MessageOut
 from memo.schemas.captures import CaptureOut
@@ -142,14 +150,29 @@ class CaptureExport(CaptureOut):
 	derivations: list[DerivationOut]
 
 
+class PersonExport(BaseModel):
+	model_config = ConfigDict(from_attributes=True)
+
+	id: uuid.UUID
+	name: str
+	aliases: list[str]
+	note: str | None
+	reach_out_every_days: int | None
+	snoozed_until: dt.date | None
+	created_at: dt.datetime
+
+
 class Export(BaseModel):
 	exported_at: dt.datetime
 	user_id: uuid.UUID
 	captures: list[CaptureExport]
-	# Derivations kept after their note was deleted (ADR 0022).
+	# Derivations kept after their note was deleted (ADR 0022), and people contact
+	# you logged by hand (ADR 0029), which never had a note.
 	derivations_without_note: list[DerivationOut]
 	recordings: list[RecordingExport]
 	conversations: list[ConversationExport]
+	# Who your notes are about; each mention (a derivation) carries its person_id.
+	people: list[PersonExport] = []
 
 
 @router.get("/export", response_model=Export)
@@ -228,6 +251,12 @@ async def export_everything(
 			)
 		)
 
+	people = (
+		await session.scalars(
+			select(Person).where(Person.user_id == user_id).order_by(Person.name)
+		)
+	).all()
+
 	return Export(
 		exported_at=dt.datetime.now(dt.UTC),
 		user_id=user_id,
@@ -241,6 +270,7 @@ async def export_everything(
 		derivations_without_note=unattached,
 		recordings=recordings,
 		conversations=conversations,
+		people=[PersonExport.model_validate(p) for p in people],
 	)
 
 
@@ -311,6 +341,7 @@ async def _purge(
 		"conversations",
 		"chunks",
 		"derivations",
+		"people",
 		"captures",
 		"recordings",
 		"morning_views",

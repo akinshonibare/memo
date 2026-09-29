@@ -9,10 +9,12 @@ from dataclasses import dataclass, field
 from anthropic.types import MessageParam
 
 from memo.schemas.derivations import Extraction
+from memo.schemas.people import PeopleExtraction
 from memo.services.apple import AppleIdentity, InvalidIdentityToken
 from memo.services.embeddings import EmbedResult
 from memo.services.extraction import ExtractResult, RawCompletion
 from memo.services.llm import LLMCall
+from memo.services.people import PeopleResult
 from memo.services.transcription import Transcript
 from memo.services.vision import DescribeResult
 
@@ -159,6 +161,45 @@ class FakeExtractor:
 			extraction=self.extraction,
 			raw=self.extraction.model_dump_json(),
 			calls=[fake_llm_call()],
+		)
+
+
+class FakePeopleReader:
+	"""Scripted people (ADR 0029): a fixed answer, or one per note text."""
+
+	model = "fake"
+	version = "people-v1/fake"
+
+	def __init__(
+		self,
+		extraction: PeopleExtraction | None = None,
+		*,
+		by_text: dict[str, PeopleExtraction] | None = None,
+		fail_with: Exception | None = None,
+	) -> None:
+		self.extraction = extraction or PeopleExtraction()
+		self.by_text = by_text or {}
+		self.fail_with = fail_with
+		self.calls = 0
+		self.seen: list[tuple[str, dt.datetime, str, str | None]] = []
+
+	async def read(
+		self,
+		text: str,
+		*,
+		captured_at: dt.datetime,
+		timezone: str,
+		author: str | None,
+	) -> PeopleResult:
+		self.calls += 1
+		self.seen.append((text, captured_at, timezone, author))
+		if self.fail_with is not None:
+			raise self.fail_with
+		extraction = self.by_text.get(text, self.extraction)
+		return PeopleResult(
+			extraction=extraction,
+			raw=extraction.model_dump_json(),
+			calls=[fake_llm_call("people")],
 		)
 
 
