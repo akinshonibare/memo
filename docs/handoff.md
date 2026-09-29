@@ -108,8 +108,8 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   added in Atlas billing (it stays free under the 200M-token allowance); the app fixes
   in #71 need the next EAS build.
 
-- **Look, feel and the phone** (2026-09-29, ADRs 0031-0041; **not built or deployed
-  yet**):
+- **Look, feel and the phone** (2026-09-29, ADRs 0031-0041; PR #72, main `8535c6d`;
+  server deployed, EAS build 17 submitted to TestFlight):
   - *Themes:* System / Light / Dark, with Forest as the default and a hand-designed light
     Forest, plus Tide, Clay, Plum, Ink and Custom (two hues, contrast-checked).
   - *Motion:* the living full stop, the voice orb, ink-in, fireflies, springy lists, the
@@ -136,14 +136,12 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
     phone at sign-out; "On this day" now queries UTC ranges an index can serve.
   - *Updates:* OTA via EAS Update, keyed to a native fingerprint.
 
-  **To ship:**
-  1. Deploy the server first: migration 0015 is additive and nullable, and an old app
-     ignores the new fields.
-  2. Then an EAS build. New native modules: reanimated, worklets, gesture handler,
-     screens, calendar, notifications, local auth, updates, system UI, asset.
-  3. After that, JavaScript changes can go out with `eas update`.
-
-  Local simulator builds need a workaround for Xcode 26.2 (see the release runbook).
+  **Shipped** in this order: api (migration 0015 applied) and worker with `railway up`
+  from `origin/main`, then EAS production build 17 with `--auto-submit`. Build 16
+  failed at "Configure expo-updates": the local Xcode 26.2 patch to
+  `node_modules/expo-modules-jsi` changed the native fingerprint, so the runtime version
+  computed on the Mac didn't match EAS's. `npm ci` before any EAS build (see the release
+  runbook). From build 17 on, JavaScript-only changes can go out with `eas update`.
   **Untested by hand:** the five-tap swarm (the simulator tools are too slow for a
   two-second window); try it on the phone.
 

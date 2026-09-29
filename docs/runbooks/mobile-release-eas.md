@@ -87,7 +87,8 @@ npx eas-cli@latest update --channel preview --message "what changed"
 - The phone downloads it on the next launch and applies it on the launch after that.
 - It only reaches builds whose native fingerprint matches. Adding a native module, a
   config plugin or an `app.json` change that touches native code needs a new build.
-  `npx expo-fingerprint fingerprint:generate` shows the current fingerprint if in doubt.
+  `npx @expo/fingerprint fingerprint:generate --platform ios` prints the current one
+  (its `hash`) if in doubt.
 - Build 14 and earlier don't contain `expo-updates` and never get updates.
 - `expo-notifications` adds the push entitlement (`aps-environment`). EAS syncs the
   capability to the App ID on the next build; answer `Y` at the Apple prompt if it asks.
@@ -109,4 +110,8 @@ npx expo run:ios --device "iPhone 17"
   machine): a C++ `SWIFT_RETURNS_RETAINED` annotation and Swift 6 "sending … risks
   causing data races" errors. EAS's Xcode builds it fine; build 14 came from the same
   version. Locally, either use EAS, or wait for an Expo patch release. The errors are in
-  Expo's code, not memo's.
+  Expo's code, not memo's. A local-only patch to `node_modules/expo-modules-jsi` gets a
+  simulator build through, but **run `npm ci` before any EAS build**: the patch changes
+  the native fingerprint computed on the Mac, EAS computes it again from a clean install,
+  and the mismatch fails the build at "Configure expo-updates" ("Runtime version
+  mismatch"). That cost build 16.
