@@ -16,7 +16,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   record and write, detail with review, delete, playback, Ask sheet, Settings.
 - **Quality gates**: 122 tests against real Postgres, ruff, mypy strict, migrations cycled,
   evals for extraction (recorded), retrieval and faithfulness. CI runs on every PR.
-- **Decisions**: ADRs 0001–0048 in [decisions/](decisions/) (0046 is on the parked deploy-on-merge branch). 0006 and 0018 are superseded.
+- **Decisions**: ADRs 0001–0049 in [decisions/](decisions/) (0046 is on the parked deploy-on-merge branch). 0006 and 0018 are superseded.
 
 ## Not done, in the order it should happen
 
@@ -221,9 +221,11 @@ native change into that one build, when the quota resets or from a local build (
 needs the Xcode 26.2 `expo-modules-jsi` patch committed with patch-package first, or the
 fingerprint won't match later updates).
 
-6. **A map of memo** (Akin, 2026-09-29, asked for next): a mind-map view over what
-   memo already links: people and the notes about them, prayers and who they're for,
-   ideas and their threads (ADR 0048), passages, related notes. To be designed.
+6. **A map of one thing** ([ADR 0049](decisions/0049-a-map-of-one-thing.md), asked for
+   by Akin). _Built:_ `GET /v1/map` and a Map screen: a person, note, idea or prayer in
+   the middle, up to 14 linked things around it, tap to re-centre, hold to open. From a
+   person's page, a note's page and each idea. No new data, no model; JavaScript only
+   (fingerprint `79d9bbf7`). Next step when there are enough notes: themes.
 
 Not now: **Sentry** (Akin, 2026-09-29). Still Akin's to do: the PITR drill (#57), a
 payment method on Voyage/Atlas (3 requests a minute until then).

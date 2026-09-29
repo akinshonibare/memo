@@ -27,6 +27,7 @@ export function PersonScreen({
   onOpenCapture,
   onOpenPerson,
   onChanged,
+  onMap,
   habits = false,
 }: {
   api: Api;
@@ -36,6 +37,8 @@ export function PersonScreen({
   onOpenCapture: (id: string) => void;
   onOpenPerson: (id: string) => void;
   onChanged: () => void;
+  // The map of this person (ADR 0049).
+  onMap?: () => void;
   // Habits on (ADR 0043): the Family switch, for the "time with family" habit.
   habits?: boolean;
 }) {
@@ -197,6 +200,7 @@ export function PersonScreen({
       <View style={[styles.topBar, ui.pad]}>
         <IconCircle name="chevron-back" onPress={onBack} />
         <View style={{ flex: 1 }} />
+        {person && onMap && <IconCircle name="git-network-outline" onPress={onMap} accessibilityLabel="Map" />}
         {person && <IconCircle name="ellipsis-horizontal" onPress={menu} />}
       </View>
       <ScrollView contentContainerStyle={[ui.pad, { paddingBottom: 60 + insets.bottom }]} refreshControl={pull}>

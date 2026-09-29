@@ -311,6 +311,21 @@ export type Me = {
 
 export type Voice = { id: string; label: string };
 
+// The map of one thing (ADR 0049): a person, note, idea or prayer in the middle, and
+// what memo has linked to it around it.
+export type MapKind = "person" | "note" | "idea" | "prayer";
+export type MapNode = {
+  kind: MapKind | "passage" | "todo" | "event";
+  id: string; // a uuid, or a passage's reference
+  label: string;
+  detail: string | null;
+  when: string | null;
+  capture_id: string | null;
+  passage: PassageRef["passage"] | null;
+  centrable: boolean;
+};
+export type MindMap = { center: MapNode; links: { node: MapNode; relation: string }[] };
+
 // A later note that may answer a prayer or carry on an idea (ADR 0048). A question
 // until you say yes or no; nothing changes before then.
 export type Update = {
@@ -416,6 +431,12 @@ export class Api {
     morning_push_at?: string | null;
   }) {
     return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  // --- the map (ADR 0049) --------------------------------------------------------
+
+  getMap(kind: MapKind, id: string) {
+    return this.request<MindMap>(`/v1/map?kind=${kind}&id=${encodeURIComponent(id)}`);
   }
 
   // --- updates (ADR 0048) --------------------------------------------------------

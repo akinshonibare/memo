@@ -59,6 +59,7 @@ export function DetailScreen({
   onChanged,
   onOpen,
   onOpenPerson,
+  onMap,
   faith = false,
   translation,
 }: {
@@ -70,6 +71,8 @@ export function DetailScreen({
   onChanged: () => void;
   onOpen: (id: string) => void;
   onOpenPerson: (id: string) => void;
+  // The map of this note (ADR 0049).
+  onMap?: () => void;
   // Faith (ADR 0042): whether it's on (a note can then move in or out), and the
   // translation a passage opens in.
   faith?: boolean;
@@ -240,6 +243,7 @@ export function DetailScreen({
         {capture?.status === "failed" && (
           <Pill label="Retry" tone="light" onPress={retry} busy={busy === "retry"} />
         )}
+        {capture && onMap && <IconCircle name="git-network-outline" onPress={onMap} accessibilityLabel="Map" />}
         {capture && <IconCircle name="trash-outline" onPress={remove} accessibilityLabel="Delete note" />}
       </View>
       <ScrollView

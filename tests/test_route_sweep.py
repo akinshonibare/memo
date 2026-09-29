@@ -337,6 +337,13 @@ async def test_every_route_survives_every_kind_of_row(
 		+ [""],
 		"/v1/review/week": ["?weeks_ago=0", "?weeks_ago=1"],
 		"/v1/captures": ["", "?space=faith", "?space=main"],
+		# The map (ADR 0049), every kind of centre against every kind of id: a
+		# mismatch is a 404, never a 500.
+		"/v1/map": [
+			f"?kind={kind}&id={node}"
+			for kind in ("person", "note", "idea", "prayer")
+			for node in [*people.values(), *corpus.captures, doomed, *derivation_ids]
+		],
 	}
 
 	swept = 0

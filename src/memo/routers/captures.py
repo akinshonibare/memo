@@ -5,7 +5,7 @@ from typing import Annotated, Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ValidationError
-from sqlalchemy import and_, delete, or_, select, text, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -36,6 +36,7 @@ from memo.schemas.derivations import (
 from memo.schemas.faith import CaptureMove, Space
 from memo.services.derivation_index import enqueue_reembed
 from memo.services.faith import faith_hidden, faith_on, passage_out, replace_passages
+from memo.services.mindmap import related_notes
 from memo.services.people import last_contacts, load_people, mention_out
 from memo.services.queue import Queue
 from memo.services.storage import ObjectStore
@@ -160,26 +161,6 @@ async def create_capture(
 	return capture
 
 
-_RELATED_SQL = text(
-	"""
-	WITH this AS (
-		SELECT avg(embedding) AS centroid FROM chunks
-		WHERE capture_id = :cid AND user_id = :uid
-			AND derivation_id IS NULL AND superseded_at IS NULL
-	)
-	SELECT k.capture_id, min(k.embedding <=> this.centroid) AS distance
-	FROM chunks k, this
-	WHERE this.centroid IS NOT NULL
-		AND k.user_id = :uid AND k.capture_id <> :cid AND k.capture_id IS NOT NULL
-		AND k.derivation_id IS NULL AND k.superseded_at IS NULL
-		AND (CAST(:space AS text) IS NULL OR k.space = :space)
-	GROUP BY k.capture_id
-	ORDER BY distance
-	LIMIT :n
-	"""
-)
-
-
 class RelatedOut(BaseModel):
 	capture: CaptureOut
 	similarity: float
@@ -201,17 +182,16 @@ async def related_captures(
 	# (ADR 0042); with it off, every note is simply a note.
 	user = await session.get(User, user_id)
 	space = capture.space if faith_hidden(user) else None
-	rows = (
-		await session.execute(
-			_RELATED_SQL,
-			{"cid": capture_id, "uid": user_id, "n": limit, "space": space},
+	near = dict(
+		await related_notes(
+			session,
+			user_id,
+			capture_id,
+			space=space,
+			limit=limit,
+			max_distance=settings.related_max_distance,
 		)
-	).all()
-	near = {
-		cid: float(distance)
-		for cid, distance in rows
-		if distance is not None and distance <= settings.related_max_distance
-	}
+	)
 	if not near:
 		return []
 	captures = (
