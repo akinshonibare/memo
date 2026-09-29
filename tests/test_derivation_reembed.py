@@ -1,5 +1,6 @@
 """Adds and edits keep a derivation's own chunk current (ADR 0021's open gap)."""
 
+import datetime as dt
 import uuid
 from collections.abc import AsyncIterator
 
@@ -10,9 +11,18 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from memo.config import SEED_USER_ID
-from memo.db import bind_user
-from memo.services.derivation_index import reembed_derivation
-from tests.fakes import FakeEmbedder, FakeQueue
+from memo.db import bind_system, bind_user
+from memo.schemas.derivations import Extraction, TodoPayload
+from memo.services.derivation_index import reembed_derivation, refresh_stale_chunks
+from memo.services.pipeline import PipelineContext, process_capture
+from tests.fakes import (
+	FakeEmbedder,
+	FakeExtractor,
+	FakeObjectStore,
+	FakePeopleReader,
+	FakeQueue,
+	FakeTranscriber,
+)
 
 
 @pytest.fixture
@@ -106,3 +116,51 @@ async def test_reembed_creates_supersedes_and_is_idempotent(
 
 	await client.patch(f"/v1/derivations/{added['id']}", json={"status": "rejected"})
 	assert await _live_chunks(admin_engine, added["id"]) == []
+
+
+async def test_the_hourly_sweep_rewrites_chunks_written_before_dates_were_in_them(
+	client: AsyncClient, app: FastAPI, admin_engine: AsyncEngine
+) -> None:
+	capture_id = uuid.UUID(await _capture(client, "tok-sweep-1"))
+	async with app.state.session_factory() as s:
+		await bind_user(s, SEED_USER_ID)
+		ctx = PipelineContext(
+			session=s,
+			transcriber=FakeTranscriber(),
+			object_store=FakeObjectStore(),
+			extractor=FakeExtractor(
+				Extraction(
+					todos=[TodoPayload(title="Call Tunde", due=dt.date(2026, 10, 1))]
+				)
+			),
+			embedder=FakeEmbedder(),
+			people=FakePeopleReader(),
+		)
+		assert (await process_capture(ctx, capture_id, SEED_USER_ID)).status == "ready"
+	async with admin_engine.begin() as conn:
+		derivation_id = str(
+			await conn.scalar(
+				text("SELECT id FROM derivations WHERE capture_id = :c"),
+				{"c": capture_id},
+			)
+		)
+		# What a chunk looked like before derivation_text carried the date.
+		await conn.execute(
+			text(
+				"UPDATE chunks SET text = 'todo: Call Tunde' WHERE derivation_id = :d"
+			),
+			{"d": derivation_id},
+		)
+
+	async def sweep() -> int:
+		async with app.state.session_factory() as s:
+			await bind_system(s)
+			refreshed = await refresh_stale_chunks(s, FakeEmbedder())
+			await s.commit()
+			return refreshed
+
+	assert await sweep() == 1
+	assert await _live_chunks(admin_engine, derivation_id) == [
+		"todo: Call Tunde. due 2026-10-01"
+	]
+	assert await sweep() == 0, "a current index costs one query and no embedding"

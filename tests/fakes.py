@@ -3,7 +3,7 @@ import hashlib
 import math
 import re
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Sequence
 from dataclasses import dataclass, field
 
 from anthropic.types import MessageParam
@@ -345,9 +345,13 @@ class FakeTranscriber:
 		self.fail_with = fail_with
 		self.model = model
 		self.calls = 0
+		self.keyterms: list[str] = []
 
-	async def transcribe(self, audio: bytes, mime: str) -> Transcript:
+	async def transcribe(
+		self, audio: bytes, mime: str, *, keyterms: Sequence[str] = ()
+	) -> Transcript:
 		self.calls += 1
+		self.keyterms = list(keyterms)
 		if self.fail_with is not None:
 			raise self.fail_with
 		# One word every 400ms, the way Deepgram reports them (ADR 0039).

@@ -16,7 +16,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   record and write, detail with review, delete, playback, Ask sheet, Settings.
 - **Quality gates**: 122 tests against real Postgres, ruff, mypy strict, migrations cycled,
   evals for extraction (recorded), retrieval and faithfulness. CI runs on every PR.
-- **Decisions**: ADRs 0001–0025 in [decisions/](decisions/). 0006 and 0018 are superseded.
+- **Decisions**: ADRs 0001–0044 in [decisions/](decisions/). 0006 and 0018 are superseded.
 
 ## Not done, in the order it should happen
 
@@ -55,8 +55,8 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
 6. **Ask should see what you confirmed.** _Done_ ([ADR 0021](decisions/0021-ask-reads-derivations-live.md)):
    `answer-v2` attaches each retrieved note's live derivations (date, review status) and
    states today's date; derivation chunks now carry their dates; rejecting retires a chunk.
-   Re-embedding on add/edit is done too (ADR 0021 update). Not done: date-range questions
-   ("what's this week?"), and backfilling dates into pre-existing derivation chunks.
+   Re-embedding on add/edit is done too (ADR 0021 update). Date-range questions and the
+   backfill of dates into older item chunks: done in [ADR 0044](decisions/0044-ask-reads-dates-and-people-before-it-searches.md).
 7. **Housekeeping.** _Done:_ `API_TOKEN` removed from both Railway services (2026-09-28).
    Settings has Export (JSON through the share sheet, via `expo-sharing`) and Delete
    everything. Delete-everything was failing for anyone who had used Ask (citation FK,
@@ -85,8 +85,8 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   reads older notes 40 at a time. Ask is `answer-v2.3`. No new native modules, but the app
   changes ship with the next EAS build. The reading gate is armed (a live `claude-opus-5`
   recording, 1.00 on a starter set that is too easy: replace it with real notes).
-  **Open:** Deepgram keyterms from people's names; Ask answering "when did I last see X"
-  from the person rather than retrieval.
+  Deepgram keyterms from people's names and "when did I last see X" from the person:
+  done in [ADR 0044](decisions/0044-ask-reads-dates-and-people-before-it-searches.md).
 
 - **Keep without asking** ([ADR 0030](decisions/0030-auto-accept-is-not-confirmation.md)):
   Settings → Review, off by default. When on, new items are kept as `accepted` (not
@@ -167,6 +167,37 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    in CI).
 3. **Still open from build 17:** a gap Akin sees after deleting a note, not reproduced in
    the simulator. Waiting on his build number and how he deleted.
+4. **The five-tap dot "doesn't work"** (2026-09-29): not a bug. Akin's phone had Reduce
+   Motion on, which hides every particle and the dot's hop by design (ADR 0032). The
+   whole path was checked in the simulator: five taps, the burst, autumn's leaves.
+
+## The next round (agreed with Akin, 2026-09-29)
+
+Asked "what are we missing?", the gaps against the brief's roadmap were listed and Akin
+picked these, one PR each, in this order:
+
+1. **The gaps in Ask and People** ([ADR 0044](decisions/0044-ask-reads-dates-and-people-before-it-searches.md)).
+   _Built:_ Ask reads the days a question names ("this week", "last Friday", "in
+   March") and pins the items dated in them; "when did I last see X" comes from the
+   person's recorded contact; retrieval searches inside those days first; people's names
+   go to Deepgram as keyterms (voice notes, hold-to-talk, live voice); an hourly sweep
+   rewrites item chunks from before dates were in their text. `answer-v2.4`. New gate:
+   `evals/timewindow` (41/45, zero wrong windows). _Still open:_ the extraction golden
+   set is still Claude-written; `evals.extraction.harvest` can turn Akin's reviewed notes
+   into cases, but his own text has to be read by him before it lands in the repo.
+2. **Push**: a daily morning push (Akin reversed [ADR 0023](decisions/0023-no-daily-morning-push.md);
+   a new ADR supersedes it: specific content, skipped on empty mornings, a Settings
+   switch and a time), then event-driven nudges with 👍/👎 and act-on rate measured
+   (V4). Needs an APNs key through EAS (Akin's terminal) and a new EAS build.
+3. **A live transcript while recording a note** (V1.5): the Ask WebSocket path, applied
+   to capture.
+4. **A new note updates an old idea** (V4 reconciliation), behind its own eval.
+5. **Health**: light workout milestones noticed without logging ("first 5k", "heaviest
+   squat yet"). **Akin said yes to reading Apple Health** (workouts, steps, sleep): the
+   first exception to memo → phone only. Still a Settings switch.
+
+Not now: **Sentry** (Akin, 2026-09-29). Still Akin's to do: the PITR drill (#57), a
+payment method on Voyage/Atlas (3 requests a minute until then).
 
 ## Filed for later
 

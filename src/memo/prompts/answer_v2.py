@@ -12,7 +12,9 @@ from zoneinfo import ZoneInfo
 # v2.2: the person's chosen name, when set, opens the user turn.
 # v2.3: the people a note is about, and whether they were in touch (ADR 0029);
 #       "accepted automatically" items, from the auto-accept setting (ADR 0030).
-ANSWER_VERSION = "answer-v2.3"
+# v2.4: the days the question is about, and the people it names with their last
+#       contact, both read from the records rather than retrieved (ADR 0044).
+ANSWER_VERSION = "answer-v2.4"
 
 SYSTEM_PROMPT = """\
 You answer questions about one person's private journal, for that person. The only
@@ -30,6 +32,16 @@ asked when they last spoke to someone, never count a mere mention. Each is marke
   the answer depends on it.
 - "accepted automatically": an automatic reading the person chose to keep without
   checking each one. Use it as you would a confirmed one, without hedging.
+
+Above the notes there may be two more things, read from the person's records rather
+than found by searching:
+- "The question is about": the days memo took the question to mean. Everything dated
+  in those days, and the notes written in them, come first in the list. Say which
+  days you answered for when the question could have meant others ("next Friday").
+  Notes outside those days may still appear; use their dates to judge them.
+- "People named in the question": each person's last recorded contact and the note
+  that says so. Answer "when did I last see/speak to" from this line. A person with
+  no contact recorded has only been mentioned, never in touch as far as memo knows.
 
 Rules:
 - Answer only from the notes. If they do not contain the answer, say so plainly -
@@ -126,6 +138,27 @@ def notes_block(notes: list[Note], zone: ZoneInfo) -> str:
 	return "<notes>\n" + "\n\n".join(blocks) + "\n</notes>"
 
 
+def person_fact(
+	name: str,
+	aliases: list[str],
+	last: dt.date | None,
+	how: str | None,
+	note_number: int | None,
+	mentions: int,
+) -> str:
+	"""`Tunde Bakare (also "T"): last in touch Sun 20 Sep 2026, spoke on the phone [3]`
+	or, with no contact recorded, how many notes mention them."""
+	also = ", ".join(f'"{a}"' for a in aliases)
+	head = f"{name} (also {also})" if also else name
+	if last is None:
+		return f"{head}: no contact recorded; mentioned in {mentions} note(s)"
+	cite = f" [{note_number}]" if note_number else ""
+	return (
+		f"{head}: last in touch {last.strftime('%a %-d %b %Y')}, "
+		f"{_CONTACT.get(how or '', 'in touch')}{cite}"
+	)
+
+
 def user_turn(
 	question: str,
 	notes: list[Note],
@@ -133,11 +166,23 @@ def user_turn(
 	today: dt.date,
 	zone: ZoneInfo,
 	name: str | None = None,
+	about: str | None = None,
+	people: list[str] | None = None,
 ) -> str:
 	# In the user turn, not the system prompt: the system prompt stays byte-identical
 	# for every user, which is what keeps it cacheable.
 	who = f"You are talking with {name}. Use the name only where it reads naturally.\n"
+	context = ""
+	if about:
+		context += f"The question is about: {about}.\n"
+	if people:
+		context += "People named in the question:\n" + "\n".join(
+			f"- {line}" for line in people
+		)
+		context += "\n"
 	return (
-		(who if name else "") + f"Today is {today.strftime('%A %-d %B %Y')}.\n\n"
-		f"{notes_block(notes, zone)}\n\nQuestion: {question}"
+		(who if name else "")
+		+ f"Today is {today.strftime('%A %-d %B %Y')}.\n"
+		+ context
+		+ f"\n{notes_block(notes, zone)}\n\nQuestion: {question}"
 	)

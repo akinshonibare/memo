@@ -95,6 +95,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0041](0041-easter-eggs-are-rare-and-earned.md) | Easter eggs: rare, earned, never a score | active |
 | [0042](0042-faith-a-space-of-its-own.md) | Faith: a space of its own, off until turned on; prayers answered, not done; a plan by position | active |
 | [0043](0043-habits-noticed-not-logged.md) | Habits: noticed in your notes, suggested when they repeat, counted by rhythm, never a streak | active |
+| [0044](0044-ask-reads-dates-and-people-before-it-searches.md) | Ask reads dates and people from the records before it searches; names go to Deepgram as keyterms | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

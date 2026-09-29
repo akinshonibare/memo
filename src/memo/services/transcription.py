@@ -1,4 +1,5 @@
 import time
+from collections.abc import Sequence
 from typing import Protocol
 
 import httpx
@@ -48,7 +49,14 @@ def _words(alternative: dict[str, object]) -> list[Word]:
 class Transcriber(Protocol):
 	model: str
 
-	async def transcribe(self, audio: bytes, mime: str) -> Transcript: ...
+	async def transcribe(
+		self, audio: bytes, mime: str, *, keyterms: Sequence[str] = ()
+	) -> Transcript: ...
+
+
+def supports_keyterms(model: str) -> bool:
+	"""Keyterm prompting is a Nova-3 and Flux feature; other models reject it."""
+	return model.startswith(("nova-3", "flux"))
 
 
 class DeepgramTranscriber:
@@ -59,17 +67,23 @@ class DeepgramTranscriber:
 		self._http = http
 		self.model = model
 
-	async def transcribe(self, audio: bytes, mime: str) -> Transcript:
+	async def transcribe(
+		self, audio: bytes, mime: str, *, keyterms: Sequence[str] = ()
+	) -> Transcript:
 		started = time.perf_counter()
+		params: dict[str, str | list[str]] = {
+			"model": self.model,
+			"smart_format": "true",
+			# Deepgram trains on API traffic unless each request opts out.
+			"mip_opt_out": "true",
+		}
+		if keyterms and supports_keyterms(self.model):
+			# A list becomes one `keyterm=` parameter per name.
+			params["keyterm"] = list(keyterms)
 		try:
 			response = await self._http.post(
 				DEEPGRAM_URL,
-				# Deepgram trains on API traffic unless each request opts out.
-				params={
-					"model": self.model,
-					"smart_format": "true",
-					"mip_opt_out": "true",
-				},
+				params=params,
 				headers={
 					"Authorization": f"Token {self._api_key}",
 					"Content-Type": mime,
@@ -104,6 +118,7 @@ class DeepgramTranscriber:
 			audio_ms=transcript.duration_ms,
 			latency_ms=round((time.perf_counter() - started) * 1000),
 			chars=len(text),
+			keyterms=len(keyterms),
 		)
 		return transcript
 
@@ -113,7 +128,9 @@ class UnconfiguredTranscriber:
 
 	model = "unconfigured"
 
-	async def transcribe(self, audio: bytes, mime: str) -> Transcript:
+	async def transcribe(
+		self, audio: bytes, mime: str, *, keyterms: Sequence[str] = ()
+	) -> Transcript:
 		raise TerminalError(
 			"transcription is not configured (DEEPGRAM_API_KEY is unset)"
 		)

@@ -17,7 +17,7 @@ import contextlib
 import json
 import ssl
 import time
-from collections.abc import AsyncIterator, MutableMapping
+from collections.abc import AsyncIterator, MutableMapping, Sequence
 from decimal import Decimal
 from typing import Any, Protocol
 from urllib.parse import urlencode
@@ -28,6 +28,7 @@ from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
 
 from memo.config import Settings
+from memo.services.transcription import supports_keyterms
 
 log = structlog.get_logger("memo.live_stt")
 
@@ -62,7 +63,7 @@ class LiveTranscriber(Protocol):
 	model: str
 
 	def open(
-		self, *, sample_rate: int
+		self, *, sample_rate: int, keyterms: Sequence[str] = ()
 	) -> contextlib.AbstractAsyncContextManager[Upstream]: ...
 
 
@@ -116,7 +117,10 @@ class DeepgramLiveTranscriber:
 		self.model = model
 
 	@contextlib.asynccontextmanager
-	async def open(self, *, sample_rate: int) -> AsyncIterator[Upstream]:
+	async def open(
+		self, *, sample_rate: int, keyterms: Sequence[str] = ()
+	) -> AsyncIterator[Upstream]:
+		terms = list(keyterms) if supports_keyterms(self.model) else []
 		params = urlencode(
 			{
 				"model": self.model,
@@ -130,7 +134,9 @@ class DeepgramLiveTranscriber:
 				"endpointing": 400,  # ms of silence that ends a turn
 				"utterance_end_ms": 1200,
 				"vad_events": "true",
-			}
+				"keyterm": terms,
+			},
+			doseq=True,
 		)
 		async with connect(
 			f"{DEEPGRAM_LIVE_URL}?{params}",
@@ -191,7 +197,7 @@ class UnconfiguredLiveTranscriber:
 	model = "unconfigured"
 
 	def open(
-		self, *, sample_rate: int
+		self, *, sample_rate: int, keyterms: Sequence[str] = ()
 	) -> contextlib.AbstractAsyncContextManager[Upstream]:
 		raise RuntimeError("live transcription is not configured (DEEPGRAM_API_KEY)")
 

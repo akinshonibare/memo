@@ -10,6 +10,7 @@ and rejection supersedes the chunk directly.
 import datetime as dt
 import hashlib
 import uuid
+from collections.abc import Sequence
 
 import structlog
 from sqlalchemy import select, update
@@ -85,6 +86,45 @@ async def enqueue_reembed(queue: Queue, derivation: Derivation) -> None:
 		log.exception("enqueue.failed", derivation_id=str(derivation.id))
 
 
+def ordinal_of(live: Sequence[Chunk]) -> int:
+	return live[0].ordinal if live else 0
+
+
+async def _replace_chunk(
+	session: AsyncSession,
+	embedder: Embedder,
+	derivation: Derivation,
+	body: str,
+	vector: list[float],
+	ordinal: int,
+) -> None:
+	# Superseded, not deleted: a past answer's citation still resolves to what it saw.
+	await session.execute(
+		update(Chunk)
+		.where(
+			Chunk.derivation_id == derivation.id,
+			Chunk.user_id == derivation.user_id,
+			Chunk.superseded_at.is_(None),
+		)
+		.values(superseded_at=dt.datetime.now(dt.UTC))
+	)
+	session.add(
+		Chunk(
+			id=uuid7(),
+			user_id=derivation.user_id,
+			capture_id=derivation.capture_id,
+			derivation_id=derivation.id,
+			ordinal=ordinal,
+			text=body,
+			char_start=0,
+			char_end=0,
+			embedding=vector,
+			embedding_model=embedder.model,
+			embedding_dim=embedder.dim,
+		)
+	)
+
+
 async def reembed_derivation(
 	session: AsyncSession,
 	embedder: Embedder,
@@ -123,31 +163,8 @@ async def reembed_derivation(
 		return "unchanged"
 
 	result = await embedder.embed_documents([body])
-	now = dt.datetime.now(dt.UTC)
-	# Superseded, not deleted: a past answer's citation still resolves to what it saw.
-	await session.execute(
-		update(Chunk)
-		.where(
-			Chunk.derivation_id == derivation.id,
-			Chunk.user_id == user_id,
-			Chunk.superseded_at.is_(None),
-		)
-		.values(superseded_at=now)
-	)
-	session.add(
-		Chunk(
-			id=uuid7(),
-			user_id=user_id,
-			capture_id=derivation.capture_id,
-			derivation_id=derivation.id,
-			ordinal=live[0].ordinal if live else 0,
-			text=body,
-			char_start=0,
-			char_end=0,
-			embedding=result.vectors[0],
-			embedding_model=embedder.model,
-			embedding_dim=embedder.dim,
-		)
+	await _replace_chunk(
+		session, embedder, derivation, body, result.vectors[0], ordinal_of(live)
 	)
 	log.info(
 		"derivation.reembedded",
@@ -156,3 +173,51 @@ async def reembed_derivation(
 		tokens=result.total_tokens,
 	)
 	return "embedded"
+
+
+# One embedding call's worth: under Voyage's 3 requests a minute (the Atlas cap until a
+# payment method is added), a sweep is one request however stale the index is.
+STALE_BATCH = 64
+
+
+async def stale_derivations(
+	session: AsyncSession, limit: int = STALE_BATCH
+) -> list[tuple[Derivation, Chunk]]:
+	"""Items whose live chunk no longer reads as the item does now: chunks written
+	before `derivation_text` learned dates (ADR 0021's open backfill), and any written
+	before a later change to it. Compared in Python, because the text is built there;
+	at one person's scale the scan is a few thousand short rows."""
+	rows = await session.execute(
+		select(Derivation, Chunk)
+		.join(
+			Chunk,
+			(Chunk.derivation_id == Derivation.id)
+			& (Chunk.user_id == Derivation.user_id),
+		)
+		.where(
+			Chunk.superseded_at.is_(None),
+			Derivation.status != "rejected",
+		)
+		.order_by(Derivation.created_at.desc(), Derivation.id)
+	)
+	stale = [(d, c) for d, c in rows.all() if c.text != derivation_text(d)]
+	return stale[:limit]
+
+
+async def refresh_stale_chunks(
+	session: AsyncSession, embedder: Embedder, limit: int = STALE_BATCH
+) -> int:
+	"""Re-embed a batch of stale item chunks in one call. The caller commits."""
+	stale = await stale_derivations(session, limit)
+	if not stale:
+		return 0
+	bodies = [derivation_text(d) for d, _ in stale]
+	result = await embedder.embed_documents(bodies)
+	for (derivation, chunk), body, vector in zip(
+		stale, bodies, result.vectors, strict=True
+	):
+		await _replace_chunk(session, embedder, derivation, body, vector, chunk.ordinal)
+	log.info(
+		"derivation.chunks_refreshed", count=len(stale), tokens=result.total_tokens
+	)
+	return len(stale)

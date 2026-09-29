@@ -63,6 +63,45 @@ _KEYWORD_SQL = text(
 )
 
 
+# Inside a time window (ADR 0044) the candidates are the chunks of notes written in
+# those days: a few dozen, not the whole corpus. HNSW post-filters, so a narrow window
+# would come back nearly empty from an index walk; a MATERIALIZED CTE fences the index
+# off and the distance is computed exactly over the window, which at this size is
+# cheaper than the walk it replaces.
+_IN_WINDOW = """
+	capture_id IN (
+		SELECT id FROM captures
+		WHERE user_id = :user_id AND created_at >= :since AND created_at < :until
+	)
+"""
+
+_VECTOR_WINDOW_SQL = text(
+	f"""
+	WITH candidates AS MATERIALIZED (
+		SELECT {_COLUMNS}, embedding
+		FROM chunks
+		WHERE user_id = :user_id AND superseded_at IS NULL
+			AND (:include_faith OR space = 'main') AND {_IN_WINDOW}
+	)
+	SELECT {_COLUMNS}
+	FROM candidates
+	ORDER BY embedding <=> CAST(:query_vector AS vector)
+	LIMIT :limit
+	"""
+)
+
+_KEYWORD_WINDOW_SQL = text(
+	f"""
+	SELECT {_COLUMNS}
+	FROM chunks, websearch_to_tsquery('english', :query) AS q
+	WHERE user_id = :user_id AND superseded_at IS NULL AND tsv @@ q
+		AND (:include_faith OR space = 'main') AND {_IN_WINDOW}
+	ORDER BY ts_rank_cd(tsv, q) DESC, created_at DESC
+	LIMIT :limit
+	"""
+)
+
+
 def _to_pgvector(vector: list[float]) -> str:
 	return "[" + ",".join(f"{v:.8f}" for v in vector) + "]"
 
@@ -97,39 +136,48 @@ async def search(
 	candidates: int = 40,
 	ef_search: int = 100,
 	include_faith: bool = True,
+	window: tuple[dt.datetime, dt.datetime] | None = None,
+	query_vector: list[float] | None = None,
 ) -> RetrievalResult:
 	"""Top-k chunks for `query`, one per capture, fused across both branches.
 
 	`user_id` is bound by the caller from the authenticated principal; it is passed
 	here (not read from any request) and applied in both branches on top of RLS.
 	`include_faith=False` leaves faith notes out (ADR 0042), in both branches, on the
-	chunks table alone.
+	chunks table alone. `window`, [since, until), keeps only notes written in it
+	(ADR 0044); a derivation chunk whose note was deleted has no note time and is left
+	out, since Ask pins dated items by their own dates instead. `query_vector` skips
+	the embedding call when the caller searches twice for one question.
 	"""
-	query_vector = await embedder.embed_query(query)
+	if query_vector is None:
+		query_vector = await embedder.embed_query(query)
 
 	# Post-filtered HNSW can return fewer than `candidates` rows when the tenant
 	# filter is selective; a larger ef_search widens the graph walk for this
 	# transaction only (pgvector's own mitigation, ADR 0010).
 	await session.execute(text(f"SET LOCAL hnsw.ef_search = {int(ef_search)}"))
+	bounds = {"since": window[0], "until": window[1]} if window else {}
 	vector_rows = (
 		await session.execute(
-			_VECTOR_SQL,
+			_VECTOR_WINDOW_SQL if window else _VECTOR_SQL,
 			{
 				"user_id": user_id,
 				"query_vector": _to_pgvector(query_vector),
 				"limit": candidates,
 				"include_faith": include_faith,
+				**bounds,
 			},
 		)
 	).all()
 	keyword_rows = (
 		await session.execute(
-			_KEYWORD_SQL,
+			_KEYWORD_WINDOW_SQL if window else _KEYWORD_SQL,
 			{
 				"user_id": user_id,
 				"query": lexical_query(query),
 				"limit": candidates,
 				"include_faith": include_faith,
+				**bounds,
 			},
 		)
 	).all()
