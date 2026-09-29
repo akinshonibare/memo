@@ -71,6 +71,12 @@ export type MorningView = {
   built_at: string;
 };
 
+export type Once = { clientToken: string; capturedAt: string };
+
+export function newOnce(): Once {
+  return { clientToken: Crypto.randomUUID(), capturedAt: new Date().toISOString() };
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -208,18 +214,26 @@ export class Api {
 
   // --- captures -----------------------------------------------------------------
 
-  createTextCapture(text: string) {
+  // `once` identifies a capture across retries (the server's idempotency key) and
+  // carries the time it was actually taken, for one synced later from the outbox.
+  createTextCapture(text: string, once: Once = newOnce()) {
     return this.request<Capture>("/v1/captures", {
       method: "POST",
-      body: JSON.stringify({ text, client_token: Crypto.randomUUID() }),
+      body: JSON.stringify({ text, client_token: once.clientToken, captured_at: once.capturedAt }),
     });
   }
 
-  async createAudioCapture(fileUri: string, mime = "audio/m4a", durationMs?: number) {
-    const presigned = await this.request<{
-      recording_id: string;
-      upload_url: string;
-    }>("/v1/recordings", {
+  createAudioCapture(fileUri: string, mime = "audio/m4a", durationMs?: number, once: Once = newOnce()) {
+    return this.uploadCapture(fileUri, mime, once, durationMs);
+  }
+
+  // A photo (ADR 0024): resized JPEG, uploaded like a recording, described on the server.
+  createImageCapture(fileUri: string, once: Once = newOnce()) {
+    return this.uploadCapture(fileUri, "image/jpeg", once);
+  }
+
+  private async uploadCapture(fileUri: string, mime: string, once: Once, durationMs?: number) {
+    const presigned = await this.request<{ recording_id: string; upload_url: string }>("/v1/recordings", {
       method: "POST",
       body: JSON.stringify({ mime, duration_ms: durationMs }),
     });
@@ -235,29 +249,8 @@ export class Api {
       method: "POST",
       body: JSON.stringify({
         recording_id: presigned.recording_id,
-        client_token: Crypto.randomUUID(),
-      }),
-    });
-  }
-
-  // A photo (ADR 0024): resized JPEG, uploaded like a recording, described on the server.
-  async createImageCapture(fileUri: string) {
-    const presigned = await this.request<{ recording_id: string; upload_url: string }>(
-      "/v1/recordings",
-      { method: "POST", body: JSON.stringify({ mime: "image/jpeg" }) },
-    );
-    const upload = await FileSystem.uploadAsync(presigned.upload_url, fileUri, {
-      httpMethod: "PUT",
-      headers: { "Content-Type": "image/jpeg" },
-    });
-    if (upload.status < 200 || upload.status >= 300) {
-      throw new ApiError(upload.status, "upload to storage failed");
-    }
-    return this.request<Capture>("/v1/captures", {
-      method: "POST",
-      body: JSON.stringify({
-        recording_id: presigned.recording_id,
-        client_token: Crypto.randomUUID(),
+        client_token: once.clientToken,
+        captured_at: once.capturedAt,
       }),
     });
   }

@@ -1,0 +1,124 @@
+import * as FileSystem from "expo-file-system/legacy";
+import { useEffect, useState } from "react";
+import { type Api, ApiError, type Once, newOnce } from "./api";
+
+// Offline capture (ADR 0028). A capture that can't reach the server is written here -
+// with the time it was taken and the client token that makes a retry idempotent - and
+// sent later. Audio and photos are copied out of the cache into the app's documents,
+// which iOS does not purge. Nothing is dropped silently: an item the server rejects
+// for good (a 4xx) stays, marked, until the user removes it.
+
+export type OutboxItem = Once & {
+  kind: "text" | "audio" | "image";
+  text?: string;
+  file?: string;
+  mime?: string;
+  durationMs?: number;
+  attempts: number;
+  failed?: string; // set once the server refused it for good
+};
+
+const DIR = `${FileSystem.documentDirectory}outbox/`;
+const INDEX = `${DIR}index.json`;
+
+let items: OutboxItem[] | null = null;
+let flushing = false;
+const listeners = new Set<(items: OutboxItem[]) => void>();
+
+async function load(): Promise<OutboxItem[]> {
+  if (items) return items;
+  try {
+    await FileSystem.makeDirectoryAsync(DIR, { intermediates: true });
+    const raw = await FileSystem.readAsStringAsync(INDEX);
+    items = JSON.parse(raw) as OutboxItem[];
+  } catch {
+    items = [];
+  }
+  return items;
+}
+
+async function save(next: OutboxItem[]) {
+  items = next;
+  await FileSystem.writeAsStringAsync(INDEX, JSON.stringify(next));
+  for (const l of listeners) l(next);
+}
+
+// A failure worth retrying: no network, a timeout, a server error, a rate limit.
+// Anything else from the server (a 4xx) will fail the same way every time.
+function retryable(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return true; // fetch/upload threw: offline
+  return error.status >= 500 || error.status === 408 || error.status === 429;
+}
+
+async function send(api: Api, item: OutboxItem) {
+  const once = { clientToken: item.clientToken, capturedAt: item.capturedAt };
+  if (item.kind === "text") return api.createTextCapture(item.text ?? "", once);
+  if (item.kind === "audio") return api.createAudioCapture(item.file!, item.mime, item.durationMs, once);
+  return api.createImageCapture(item.file!, once);
+}
+
+// Try to save now; if the network is the problem, keep it for later. Returns "sent"
+// or "queued"; throws only for a real refusal, which the caller should show.
+export async function captureOrQueue(
+  api: Api,
+  capture: Pick<OutboxItem, "kind" | "text" | "file" | "mime" | "durationMs">,
+): Promise<"sent" | "queued"> {
+  const item: OutboxItem = { ...newOnce(), ...capture, attempts: 0 };
+  try {
+    await send(api, item);
+    return "sent";
+  } catch (error) {
+    if (!retryable(error)) throw error;
+  }
+  if (item.file) {
+    const kept = `${DIR}${item.clientToken}.${item.kind === "audio" ? "m4a" : "jpg"}`;
+    await FileSystem.makeDirectoryAsync(DIR, { intermediates: true });
+    await FileSystem.copyAsync({ from: item.file, to: kept });
+    item.file = kept;
+  }
+  await save([...(await load()), item]);
+  return "queued";
+}
+
+// Send what's waiting, oldest first; stop at the first network failure (the rest
+// would fail the same way). Safe to call often and concurrently.
+export async function flushOutbox(api: Api): Promise<void> {
+  if (flushing) return;
+  flushing = true;
+  try {
+    for (const item of [...(await load())]) {
+      if (item.failed) continue;
+      try {
+        await send(api, item);
+        await forget(item);
+      } catch (error) {
+        const current = (await load()).map((i) =>
+          i.clientToken === item.clientToken
+            ? { ...i, attempts: i.attempts + 1, failed: retryable(error) ? undefined : String(error) }
+            : i,
+        );
+        await save(current);
+        if (retryable(error)) break;
+      }
+    }
+  } finally {
+    flushing = false;
+  }
+}
+
+export async function forget(item: OutboxItem) {
+  if (item.file) await FileSystem.deleteAsync(item.file, { idempotent: true }).catch(() => {});
+  await save((await load()).filter((i) => i.clientToken !== item.clientToken));
+}
+
+export function useOutbox(): OutboxItem[] {
+  const [state, setState] = useState<OutboxItem[]>(items ?? []);
+  useEffect(() => {
+    listeners.add(setState);
+    load().then(setState);
+    return () => {
+      listeners.delete(setState);
+    };
+  }, []);
+  return state;
+}

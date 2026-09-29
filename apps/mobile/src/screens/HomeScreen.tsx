@@ -19,8 +19,10 @@ import { ACTIVE_STATUSES, formatClock, formatStamp, headline, statusLabel } from
 import { pickPhoto } from "../photo";
 import { playUrl, stopPlayback, usePlayingId } from "../playback";
 import { colors, ui } from "../ui";
+import { OutboxSection } from "./OutboxSection";
 import { TodaySection, useMorning } from "./TodaySection";
 import { haptic } from "../haptics";
+import { captureOrQueue } from "../outbox";
 
 const POLL_MS = 3000;
 
@@ -127,7 +129,7 @@ export function HomeScreen({
       const uri = await pickPhoto(source);
       if (!uri) return;
       setUploading(true);
-      await api.createImageCapture(uri);
+      await captureOrQueue(api, { kind: "image", file: uri });
       haptic.done();
       await refresh();
     } catch (e) {
@@ -211,7 +213,12 @@ export function HomeScreen({
         contentContainerStyle={{ paddingBottom: 140 + insets.bottom }}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
-          morning && !q ? <TodaySection view={morning} onOpen={onOpen} /> : null
+          q ? null : (
+            <>
+              <OutboxSection />
+              {morning && <TodaySection view={morning} onOpen={onOpen} />}
+            </>
+          )
         }
         ListEmptyComponent={
           <Text style={[ui.empty, { marginTop: 48 }]}>

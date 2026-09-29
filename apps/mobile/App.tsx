@@ -2,7 +2,7 @@ import { InstrumentSerif_400Regular, useFonts } from "@expo-google-fonts/instrum
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import { useShareIntent } from "expo-share-intent";
-import { Linking, StyleSheet, View } from "react-native";
+import { AppState, Linking, StyleSheet, View } from "react-native";
 import { haptic } from "./src/haptics";
 import { preparePhoto } from "./src/photo";
 import { publishRecord } from "./src/widgets";
@@ -21,6 +21,7 @@ import { RecordSheet } from "./src/screens/RecordSheet";
 import { ProfileSheet } from "./src/screens/ProfileScreen";
 import { ReviewScreen } from "./src/screens/ReviewScreen";
 import { colors } from "./src/ui";
+import { captureOrQueue, flushOutbox, useOutbox } from "./src/outbox";
 
 type Back = "home" | "planner" | "ideas" | "review";
 
@@ -103,7 +104,7 @@ export default function App() {
       setView({ name: "home" });
       if (image) {
         preparePhoto(image.path, image.width, image.height)
-          .then((uri) => api.createImageCapture(uri))
+          .then((uri) => captureOrQueue(api, { kind: "image", file: uri }))
           .then(() => {
             haptic.done();
             bump();
@@ -117,6 +118,21 @@ export default function App() {
     return () => clearTimeout(run);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, api, hasShareIntent]);
+
+  // The outbox (ADR 0028) empties whenever it can: on sign-in, on returning to the app,
+  // and every 20 seconds while something is waiting.
+  const waiting = useOutbox().filter((i) => !i.failed).length;
+  useEffect(() => {
+    if (!api) return;
+    const flush = () => void flushOutbox(api).then(bump);
+    flush();
+    const sub = AppState.addEventListener("change", (s) => s === "active" && flush());
+    const timer = waiting > 0 ? setInterval(flush, 20_000) : null;
+    return () => {
+      sub.remove();
+      if (timer) clearInterval(timer);
+    };
+  }, [api, waiting]);
 
   // The Record widget needs one snapshot from the app before it can render.
   useEffect(() => {

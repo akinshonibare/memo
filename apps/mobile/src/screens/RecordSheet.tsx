@@ -7,11 +7,12 @@ import {
 } from "expo-audio";
 import { useEffect, useRef, useState } from "react";
 import { Modal, StyleSheet, Text, View } from "react-native";
-import { Api, ApiError, type Capture } from "../api";
+import { Api, ApiError } from "../api";
 import { IconCircle, Pill, SheetHandle } from "../components";
 import { formatClock } from "../format";
 import { colors, ui } from "../ui";
 import { haptic } from "../haptics";
+import { captureOrQueue } from "../outbox";
 
 // Tap record → this sheet opens already recording. End uploads straight to the
 // bucket and attaches the recording to a capture; close discards.
@@ -22,7 +23,7 @@ export function RecordSheet({
 }: {
   api: Api;
   onClose: () => void;
-  onSaved: (capture: Capture) => void;
+  onSaved: () => void;
 }) {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const state = useAudioRecorderState(recorder, 250);
@@ -74,9 +75,9 @@ export function RecordSheet({
       await recorder.stop();
       const uri = recorder.uri;
       if (!uri) throw new Error("No recording was produced.");
-      const saved = await api.createAudioCapture(uri, "audio/m4a", durationMs);
+      await captureOrQueue(api, { kind: "audio", file: uri, mime: "audio/m4a", durationMs });
       haptic.done();
-      onSaved(saved);
+      onSaved();
       onClose();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
