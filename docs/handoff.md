@@ -98,6 +98,16 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   note says "Nothing was said in this recording." Migration 0014 readies the ones that
   had already failed that way, and only those.
 
+- **Review of the people work** (2026-09-29, PRs #69-#71): Ask crashed on any note
+  naming a linked person (a `dict(Result)` bug; fixed, and `tests/test_route_sweep.py`
+  now calls every route against every kind of row). A failed people read no longer
+  fails its note; the backlog doesn't count 429s/5xx as attempts; merges keep one
+  mention per person per note; a logged contact can be undone in the app. Migration
+  0008's downgrade was broken on real data (fixed; `tests/test_migrations.py`).
+  **Open:** Voyage via Atlas is capped at 3 requests/minute until a payment method is
+  added in Atlas billing (it stays free under the 200M-token allowance); the app fixes
+  in #71 need the next EAS build.
+
 ## Filed for later
 
 - [#57](https://github.com/akinshonibare/memo/issues/57): the first PITR restore drill.
