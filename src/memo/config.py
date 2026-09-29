@@ -87,6 +87,10 @@ class Settings(BaseSettings):
 	rate_ask_per_minute: int = 10
 	rate_capture_per_minute: int = 60
 	rate_voice_per_minute: int = 90
+	rate_search_per_minute: int = 60
+	# Cosine distance under which two notes count as related. A starting guess for
+	# voyage-4 (ADR 0028), not a measured one: calibrate on real notes.
+	related_max_distance: float = 0.45
 
 
 @lru_cache

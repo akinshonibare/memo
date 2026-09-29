@@ -4,8 +4,8 @@ from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import ValidationError
-from sqlalchemy import and_, delete, or_, select
+from pydantic import BaseModel, ValidationError
+from sqlalchemy import and_, delete, or_, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -105,6 +105,8 @@ async def create_capture(
 		"user_id": user_id,
 		"client_token": body.client_token,
 	}
+	if body.captured_at is not None:
+		values["created_at"] = body.captured_at
 	if body.recording_id is not None:
 		recording = await session.scalar(
 			select(Recording).where(
@@ -149,6 +151,68 @@ async def create_capture(
 	await commit_and_rebind(session, user_id)
 	await _enqueue(queue, capture)
 	return capture
+
+
+_RELATED_SQL = text(
+	"""
+	WITH this AS (
+		SELECT avg(embedding) AS centroid FROM chunks
+		WHERE capture_id = :cid AND user_id = :uid
+			AND derivation_id IS NULL AND superseded_at IS NULL
+	)
+	SELECT k.capture_id, min(k.embedding <=> this.centroid) AS distance
+	FROM chunks k, this
+	WHERE this.centroid IS NOT NULL
+		AND k.user_id = :uid AND k.capture_id <> :cid AND k.capture_id IS NOT NULL
+		AND k.derivation_id IS NULL AND k.superseded_at IS NULL
+	GROUP BY k.capture_id
+	ORDER BY distance
+	LIMIT :n
+	"""
+)
+
+
+class RelatedOut(BaseModel):
+	capture: CaptureOut
+	similarity: float
+
+
+@router.get("/{capture_id}/related", response_model=list[RelatedOut])
+async def related_captures(
+	capture_id: uuid.UUID,
+	session: DbSession,
+	user_id: CurrentUser,
+	settings: Annotated[Settings, Depends(get_settings)],
+	limit: Annotated[int, Query(ge=1, le=10)] = 3,
+) -> list[RelatedOut]:
+	"""Notes about the same thing (ADR 0028): the nearest other notes to this one's
+	embedding centroid. No model call; the threshold keeps it quiet rather than always
+	showing *something*, because a wrong "related" is worse than none."""
+	await _owned_capture(session, capture_id, user_id)
+	rows = (
+		await session.execute(
+			_RELATED_SQL, {"cid": capture_id, "uid": user_id, "n": limit}
+		)
+	).all()
+	near = {
+		cid: float(distance)
+		for cid, distance in rows
+		if distance is not None and distance <= settings.related_max_distance
+	}
+	if not near:
+		return []
+	captures = (
+		await session.scalars(
+			select(Capture).where(
+				Capture.id.in_(near.keys()), Capture.user_id == user_id
+			)
+		)
+	).all()
+	out = [
+		RelatedOut(capture=CaptureOut.model_validate(c), similarity=1 - near[c.id])
+		for c in captures
+	]
+	return sorted(out, key=lambda r: -r.similarity)
 
 
 @router.get("", response_model=CapturePage)

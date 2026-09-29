@@ -49,3 +49,5 @@ limit_capture = _limiter("capture", "open")
 # Fail closed: every voice call is a paid Deepgram call. A spoken answer is one speak
 # call per sentence, so the limit is sized for sentences, not questions.
 limit_voice = _limiter("voice", "closed")
+# Fail open: search is a read, and a query embedding costs a fraction of a cent.
+limit_search = _limiter("search", "open")
