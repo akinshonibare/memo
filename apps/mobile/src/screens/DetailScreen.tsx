@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type Capture, type CaptureDetail, type Derivation, type Word } from "../api";
+import { asTranslation, openInBible } from "../bible";
 import { AskBar, IconCircle, Pill, confirmDelete } from "../components";
 import { ACTIVE_STATUSES, formatClock, formatDue, formatStamp, formatWhen, headline, statusLabel } from "../format";
 import { useRefetchOnFocus } from "../focus";
@@ -57,6 +58,8 @@ export function DetailScreen({
   onChanged,
   onOpen,
   onOpenPerson,
+  faith = false,
+  translation,
 }: {
   api: Api;
   id: string;
@@ -66,6 +69,10 @@ export function DetailScreen({
   onChanged: () => void;
   onOpen: (id: string) => void;
   onOpenPerson: (id: string) => void;
+  // Faith (ADR 0042): whether it's on (a note can then move in or out), and the
+  // translation a passage opens in.
+  faith?: boolean;
+  translation?: string;
 }) {
   const ui = useUi();
   const styles = useStyles();
@@ -182,6 +189,23 @@ export function DetailScreen({
       setError(`Couldn't play: ${String(e)}`);
     }
   };
+  // Into Faith, or back out (ADR 0042): the server moves its chunks with it and finds
+  // its passages again. Back to wherever it now lives is the next screen's job.
+  const move = async (space: "main" | "faith") => {
+    if (!capture) return;
+    setBusy("move");
+    try {
+      await api.moveCapture(capture.id, space);
+      haptic.done();
+      onChanged();
+      await load();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const remove = () =>
     confirmDelete("Delete this note? Its todos, events and ideas are kept.", async () => {
       if (!capture) return;
@@ -271,6 +295,22 @@ export function DetailScreen({
           <View style={styles.failure}>
             <Text style={ui.danger}>{"Couldn't process this note."}</Text>
             <Text style={[ui.bodyMuted, { marginTop: 4 }]}>{capture.failure_reason}</Text>
+          </View>
+        )}
+
+        {(capture?.passages?.length ?? 0) > 0 && (
+          <View style={styles.section}>
+            <Text style={ui.label}>Passages</Text>
+            <View style={styles.passages}>
+              {capture!.passages!.map((p) => (
+                <Pill
+                  key={p.ref}
+                  label={p.ref}
+                  icon="book-outline"
+                  onPress={() => openInBible(p, asTranslation(translation))}
+                />
+              ))}
+            </View>
           </View>
         )}
 
@@ -367,6 +407,18 @@ export function DetailScreen({
               onPress={() => chooseKind((kind) => setEditing({ kind }))}
             />
           </View>
+        )}
+        {capture && faith && (
+          <Pressable
+            onPress={() => void move(capture.space === "faith" ? "main" : "faith")}
+            disabled={busy === "move"}
+            style={({ pressed }) => [styles.move, pressed && { opacity: 0.6 }]}
+            accessibilityRole="button"
+          >
+            <Text style={ui.meta}>
+              {capture.space === "faith" ? "Move to your notes" : "Move to Faith"}
+            </Text>
+          </Pressable>
         )}
       </ScrollView>
       <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) }]}>
@@ -491,6 +543,8 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.dangerSurface,
   },
   section: { marginTop: 32 },
+  passages: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  move: { alignSelf: "center", marginTop: 28, padding: 8 },
   chips: { flexDirection: "row", flexWrap: "wrap", columnGap: 8 },
   card: {
     backgroundColor: colors.surface,

@@ -77,10 +77,13 @@ export function HomeScreen({
   onChanged,
   moment,
   onMomentSeen,
+  onFaith,
 }: {
   api: Api;
   refreshKey: number;
   onOpen: (id: string) => void;
+  // Faith (ADR 0042): its door on Home, only while it's turned on in Settings.
+  onFaith?: () => void;
   onPlanner: () => void;
   onReview: () => void;
   onPeople: () => void;
@@ -253,6 +256,7 @@ export function HomeScreen({
       <View style={[styles.topBar, ui.pad]}>
         <Avatar name={name} size={44} onPress={onSettings} />
         <View style={{ flex: 1 }} />
+        {onFaith && <IconCircle name="book-outline" onPress={onFaith} accessibilityLabel="Faith" />}
         <IconCircle name="people-outline" onPress={onPeople} />
         <IconCircle name="reader-outline" onPress={onReview} />
         <IconCircle name="calendar-outline" onPress={onPlanner} />

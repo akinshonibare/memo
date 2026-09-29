@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { type GestureResponderEvent, Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Api, Derivation, Week } from "../api";
+import type { Api, Derivation, FaithWeek, Week } from "../api";
+import { asTranslation, openInBible } from "../bible";
 import { IconCircle, TickCircle } from "../components";
 import { useRefetchOnFocus } from "../focus";
 import { formatDue, formatWhen } from "../format";
@@ -21,12 +22,14 @@ export function ReviewScreen({
   onBack,
   onOpenCapture,
   onChanged,
+  translation,
 }: {
   api: Api;
   refreshKey: number;
   onBack: () => void;
   onOpenCapture: (id: string) => void;
   onChanged: () => void;
+  translation?: string; // what a passage opens in (ADR 0042)
 }) {
   const ui = useUi();
   const styles = useStyles();
@@ -147,7 +150,63 @@ export function ReviewScreen({
         <Section title="New ideas" items={week?.new_ideas ?? []} empty="No new ideas this week.">
           {(d) => <Line key={d.id} d={d} onPress={() => d.capture_id && onOpenCapture(d.capture_id)} />}
         </Section>
+
+        {week?.faith && (
+          <FaithSection faith={week.faith} translation={translation} onOpenCapture={onOpenCapture} />
+        )}
       </ScrollView>
+    </View>
+  );
+}
+
+// The week in Faith (ADR 0042), its own section at the end, only while Faith is on.
+// What was read, which prayers were answered, and the passages written about: facts,
+// nothing to beat.
+function FaithSection({
+  faith,
+  translation,
+  onOpenCapture,
+}: {
+  faith: FaithWeek;
+  translation?: string;
+  onOpenCapture: (id: string) => void;
+}) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const nothing = faith.read.length === 0 && faith.answered.length === 0 && faith.passages.length === 0;
+  return (
+    <View style={styles.section}>
+      <Text style={ui.label}>Faith</Text>
+      {nothing && <Text style={ui.bodyMuted}>A quiet week here.</Text>}
+      {faith.read.length > 0 && (
+        <View style={styles.line}>
+          <Ionicons name="book-outline" size={18} color={colors.muted} style={{ marginTop: 2 }} />
+          <Text style={[styles.lineTitle, { flex: 1 }]}>Read {faith.read.map((r) => r.label).join(", ")}</Text>
+        </View>
+      )}
+      {faith.answered.map((p) => (
+        <View key={p.id} style={styles.line}>
+          <Ionicons name="checkmark-circle" size={18} color={colors.forest} style={{ marginTop: 2 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.lineTitle}>{p.title}</Text>
+            <Text style={ui.meta}>{p.answer ? `Answered. ${p.answer}` : "Answered"}</Text>
+          </View>
+        </View>
+      ))}
+      {faith.passages.map(({ passage, capture_id }) => (
+        <Pressable
+          key={passage.ref}
+          onPress={() => (capture_id ? onOpenCapture(capture_id) : openInBible(passage, asTranslation(translation)))}
+          style={({ pressed }) => [styles.line, pressed && { opacity: 0.6 }]}
+        >
+          <Ionicons name="bookmark-outline" size={18} color={colors.muted} style={{ marginTop: 2 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.lineTitle}>{passage.ref}</Text>
+            <Text style={ui.meta}>You wrote about it</Text>
+          </View>
+        </Pressable>
+      ))}
     </View>
   );
 }

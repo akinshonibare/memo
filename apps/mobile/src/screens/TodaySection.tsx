@@ -4,7 +4,7 @@ import { AppState, type GestureResponderEvent, Pressable, Text, useWindowDimensi
 import Animated from "react-native-reanimated";
 import type { Api, MorningView, OnThisDay, ReachOut } from "../api";
 import { TickCircle } from "../components";
-import { formatAgo, formatDay, formatTime, headline } from "../format";
+import { formatAgo, formatDay, formatTime, headline, lookBack } from "../format";
 import { haptic } from "../haptics";
 import { celebrate, celebrateAt, listLayout, rowExit } from "../motion";
 import { makeStyles, useTheme } from "../theme";
@@ -50,17 +50,6 @@ export function useMorning(api: Api, refreshKey: number): MorningView | null {
   }, [load]);
 
   return view;
-}
-
-// How far back a note from "on this day" is, in words.
-function lookBack(on: string, today: string): string {
-  const a = new Date(`${on}T00:00:00`);
-  const b = new Date(`${today}T00:00:00`);
-  const months = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
-  if (months >= 12 && months % 12 === 0) return months === 12 ? "A year ago today" : `${months / 12} years ago today`;
-  if (months === 6) return "Six months ago today";
-  if (months === 1) return "A month ago today";
-  return `From ${formatDay(on, true)}`;
 }
 
 // A ticked todo stays a moment, checked, before it leaves the list.

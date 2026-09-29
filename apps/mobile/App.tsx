@@ -16,7 +16,7 @@ import { haptic } from "./src/haptics";
 import { preparePhoto } from "./src/photo";
 import { publishRecord } from "./src/widgets";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { Api, type Me } from "./src/api";
+import { Api, type Me, type Space } from "./src/api";
 import { type Config, clearSession, loadConfig, loadOnboarded, saveOnboarded } from "./src/config";
 import { LockCover, LockProvider, useLock } from "./src/lock";
 import { FirefliesHost } from "./src/motion";
@@ -25,6 +25,7 @@ import { clearPhone, usePhoneSync } from "./src/sync";
 import { AskSheet } from "./src/screens/AskScreen";
 import { ComposeSheet } from "./src/screens/ComposeSheet";
 import { DetailScreen } from "./src/screens/DetailScreen";
+import { FaithScreen } from "./src/screens/FaithScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { IdeasScreen } from "./src/screens/IdeasScreen";
 import { PlannerScreen } from "./src/screens/PlannerScreen";
@@ -67,6 +68,7 @@ export type Routes = {
   People: undefined;
   Person: { id: string };
   Detail: { id: string };
+  Faith: undefined;
 };
 const Stack = createNativeStackNavigator<Routes>();
 const nav = createNavigationContainerRef<Routes>();
@@ -93,6 +95,8 @@ function Root() {
   const [settings, setSettings] = useState(false);
   const [record, setRecord] = useState(false);
   const [compose, setCompose] = useState(false);
+  // Where the next note written or recorded goes: Faith's buttons say faith (ADR 0042).
+  const [space, setSpace] = useState<Space>("main");
   const [refreshKey, setRefreshKey] = useState(0);
   const [me, setMe] = useState<Me | null>(null);
   const [meReady, setMeReady] = useState(false);
@@ -180,6 +184,7 @@ function Root() {
           .catch(() => {});
       } else if (text) {
         setComposeText(text);
+        setSpace("main"); // the share sheet always writes an ordinary note
         setCompose(true);
       }
     }, 0);
@@ -224,6 +229,8 @@ function Root() {
           bump();
         });
       }
+      // A Shortcut or widget always captures an ordinary note, wherever the app was.
+      if (pending === "record" || pending === "write") setSpace("main");
       if (pending === "record") setRecord(true);
       if (pending === "write") setCompose(true);
       if (pending === "ask") setAsk(true);
@@ -344,12 +351,19 @@ function Root() {
                   onOpenPerson={openPerson}
                   onChanged={bump}
                   onAsk={() => setAsk(true)}
-                  onRecord={() => setRecord(true)}
-                  onCompose={() => setCompose(true)}
+                  onRecord={() => {
+                    setSpace("main");
+                    setRecord(true);
+                  }}
+                  onCompose={() => {
+                    setSpace("main");
+                    setCompose(true);
+                  }}
                   onSettings={() => setSettings(true)}
                   name={me?.name ?? null}
                   moment={moment}
                   onMomentSeen={() => setMoment(null)}
+                  onFaith={me?.faith_enabled ? () => navigation.navigate("Faith") : undefined}
                 />
               )}
             </Stack.Screen>
@@ -373,6 +387,7 @@ function Root() {
                   onBack={() => navigation.goBack()}
                   onOpenCapture={openNote}
                   onChanged={bump}
+                  translation={me?.bible_translation}
                 />
               )}
             </Stack.Screen>
@@ -414,6 +429,25 @@ function Root() {
                 />
               )}
             </Stack.Screen>
+            <Stack.Screen name="Faith">
+              {({ navigation }) => (
+                <FaithScreen
+                  api={api}
+                  refreshKey={refreshKey}
+                  onBack={() => navigation.goBack()}
+                  onOpenNote={openNote}
+                  onWrite={() => {
+                    setSpace("faith");
+                    setCompose(true);
+                  }}
+                  onRecord={() => {
+                    setSpace("faith");
+                    setRecord(true);
+                  }}
+                  onChanged={bump}
+                />
+              )}
+            </Stack.Screen>
             <Stack.Screen name="Detail">
               {({ navigation, route }) => (
                 <DetailScreen
@@ -426,6 +460,8 @@ function Root() {
                   // A related note replaces this one: back still returns where you came from.
                   onOpen={(id) => navigation.replace("Detail", { id })}
                   onOpenPerson={openPerson}
+                  faith={!!me?.faith_enabled}
+                  translation={me?.bible_translation}
                 />
               )}
             </Stack.Screen>
@@ -444,11 +480,12 @@ function Root() {
           }}
         />
       )}
-      {api && record && <RecordSheet api={api} onClose={() => setRecord(false)} onSaved={bump} />}
+      {api && record && <RecordSheet api={api} space={space} onClose={() => setRecord(false)} onSaved={bump} />}
       {api && compose && (
         <ComposeSheet
           api={api}
           initialText={composeText}
+          space={space}
           onClose={() => {
             setCompose(false);
             setComposeText(undefined);

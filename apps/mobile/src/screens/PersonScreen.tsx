@@ -262,6 +262,21 @@ export function PersonScreen({
               </View>
             )}
 
+            {(person.prayers?.length ?? 0) > 0 && (
+              <View style={styles.section}>
+                <Text style={ui.label}>Praying for them</Text>
+                {person.prayers!.map((p) => (
+                  <Item
+                    key={p.id}
+                    icon={p.answered_at ? "checkmark-circle" : "ellipse-outline"}
+                    title={p.title}
+                    detail={p.answered_at ? (p.answer ? `Answered. ${p.answer}` : "Answered") : p.notes}
+                    onPress={p.capture_id ? () => onOpenCapture(p.capture_id!) : undefined}
+                  />
+                ))}
+              </View>
+            )}
+
             <View style={styles.section}>
               <Text style={ui.label}>
                 {person.mentions.length === 1 ? "1 note" : `${person.mentions.length} notes`}
@@ -357,7 +372,7 @@ function Item({
   detail,
   onPress,
 }: {
-  icon: "calendar-outline" | "ellipse-outline";
+  icon: "calendar-outline" | "ellipse-outline" | "checkmark-circle";
   title: string;
   detail: string | null;
   onPress?: () => void;

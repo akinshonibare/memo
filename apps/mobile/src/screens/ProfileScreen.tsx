@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { Api, type Me, type Voice } from "../api";
+import { asTranslation, TRANSLATIONS, translationName } from "../bible";
 import { Avatar, IconCircle, Pill, SheetHandle } from "../components";
 import { type Config, saveBaseUrl } from "../config";
 import { fonts, useUi } from "../ui";
@@ -42,7 +43,9 @@ type Busy =
   | "calsync"
   | "remsync"
   | "notify"
-  | "lock";
+  | "lock"
+  | "faith"
+  | "translation";
 
 // You first, then how memo looks, then how the assistant treats you, then what memo may
 // do on this phone, then your data, then the account.
@@ -150,6 +153,41 @@ export function ProfileSheet({
     preview.current = q;
     const who = me?.name ? `Hi ${me.name.split(" ")[0]}.` : "Hi.";
     q.enqueue(`${who} This is how I'll read your answers.`);
+  };
+
+  // Faith (ADR 0042). On the account, so the server can keep faith notes out of Home;
+  // Home refreshes because what it lists just changed.
+  const toggleFaith = (on: boolean) =>
+    run("faith", async () => {
+      const updated = await api().updateProfile({ faith_enabled: on });
+      setMe(updated);
+      onProfileChanged(updated);
+      onSettingsChanged();
+    });
+
+  const pickTranslation = () => {
+    const current = asTranslation(me?.bible_translation);
+    const labels = TRANSLATIONS.map((t) => `${t === current ? "✓ " : ""}${t} · ${translationName(t)}`);
+    const choose = (i: number) => {
+      const chosen = TRANSLATIONS[i];
+      if (chosen && chosen !== current) void saveProfile("translation", { bible_translation: chosen });
+    };
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: "Bible translation",
+          message: "Passages open in your Bible app in this translation.",
+          options: [...labels, "Cancel"],
+          cancelButtonIndex: labels.length,
+        },
+        choose,
+      );
+      return;
+    }
+    Alert.alert("Bible translation", undefined, [
+      ...labels.map((text, i) => ({ text, onPress: () => choose(i) })),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
   };
 
   const pickVoice = () => {
@@ -398,6 +436,31 @@ export function ProfileSheet({
                     trackColor={{ true: colors.forest }}
                   />
                 </Row>
+              </Group>
+
+              <Group
+                title="Faith"
+                footer="A space of its own for prayers, a reading plan through the Bible, and the notes you write there. While it's on, faith notes stay out of Home, search and Ask; turn it off and they're ordinary notes again. Passages open in your Bible app."
+              >
+                <Row icon="book-outline" label="Faith" busy={busy === "faith"}>
+                  <Switch
+                    value={!!me?.faith_enabled}
+                    disabled={!me}
+                    onValueChange={(on) => void toggleFaith(on)}
+                    trackColor={{ true: colors.forest }}
+                  />
+                </Row>
+                {me?.faith_enabled && (
+                  <Row
+                    icon="language-outline"
+                    label="Bible translation"
+                    onPress={pickTranslation}
+                    busy={busy === "translation"}
+                    chevron
+                  >
+                    <Text style={styles.value}>{asTranslation(me.bible_translation)}</Text>
+                  </Row>
+                )}
               </Group>
 
               <Group

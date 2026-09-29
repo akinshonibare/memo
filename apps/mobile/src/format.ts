@@ -170,3 +170,14 @@ export const ACTIVE_STATUSES = new Set<Capture["status"]>([
   "extracting",
   "embedding",
 ]);
+
+// How far back "on this day" reaches, in words: a note (ADR 0040) or a prayer (ADR 0042).
+export function lookBack(on: string, today: string): string {
+  const a = new Date(`${on}T00:00:00`);
+  const b = new Date(`${today}T00:00:00`);
+  const months = (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
+  if (months >= 12 && months % 12 === 0) return months === 12 ? "A year ago today" : `${months / 12} years ago today`;
+  if (months === 6) return "Six months ago today";
+  if (months === 1) return "A month ago today";
+  return `From ${formatDay(on, true)}`;
+}
