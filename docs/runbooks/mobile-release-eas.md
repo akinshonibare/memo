@@ -93,6 +93,41 @@ npx eas-cli@latest update --channel preview --message "what changed"
 - `expo-notifications` adds the push entitlement (`aps-environment`). EAS syncs the
   capability to the App ID on the next build; answer `Y` at the Apple prompt if it asks.
 
+## Push notifications: the APNs key (ADR 0047, once)
+
+The morning push is sent through Expo's push service, which needs an Apple Push
+Notifications key on the EAS project. Until it has one, every send fails and the push
+row says `InvalidCredentials`. It needs an Apple login, so it runs in Akin's terminal,
+from `apps/mobile`:
+
+```bash
+npx eas-cli@latest credentials --platform ios
+```
+
+1. **Which build profile?** → `production`.
+2. **Do you want to log in to your Apple account?** → `Y`. Apple ID, password, then the
+   six-digit 2FA code on the phone. (Only for this step; routine builds answer `N`.)
+3. In the menu, choose the **Push Notifications** entry (managing the push key).
+4. Choose to set up a push key, and when asked, **Generate a new Apple Push
+   Notifications service key** (Expo's docs quote this wording). EAS creates the key
+   with Apple and keeps it; nothing is downloaded.
+   - Apple allows two push keys per team. If it says the limit is reached, reuse a key
+     EAS already has, or revoke an unused one at developer.apple.com → Keys and
+     generate again.
+5. The credentials summary now lists a push key for `com.akinshonibare.memo`. It covers
+   TestFlight and development builds, and nothing is needed on the server.
+
+Why it isn't there already: EAS offers this during an *interactive* `eas build`, and
+build 17 ran with `--non-interactive`. (The labels in steps 3-4 are from Expo's docs
+and memory of the CLI; if they read differently, the push-key entry is the one.)
+
+No build is needed: build 17 already has the push entitlement. After the update that
+carries PR 2 is on the phone, turn on Settings → Morning → Morning summary; the phone
+registers, and the next morning with something on sends.
+
+Checking it worked, the morning after: `GET /v1/pushes` lists the push with `status:
+"sent"`; a failed one has the reason (`InvalidCredentials` means step 4 didn't take).
+
 ## Running a development build in the simulator
 
 For checking changes before any EAS build:

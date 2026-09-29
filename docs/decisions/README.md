@@ -74,7 +74,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0020](0020-morning-view-pins-the-idea-reads-items-live.md) | Morning view pins the idea, reads todos and events live | active |
 | [0021](0021-ask-reads-derivations-live.md) | Ask reads retrieved notes' derivations live; knows today | active |
 | [0022](0022-deleting-a-note-keeps-its-derivations.md) | Deleting a note keeps its derivations; citations cascade | active |
-| [0023](0023-no-daily-morning-push.md) | No daily morning push; push waits for V4's quality bar | provisional |
+| [0023](0023-no-daily-morning-push.md) | No daily morning push; push waits for V4's quality bar | superseded by 0047 |
 | [0024](0024-photos-become-text-then-flow-through.md) | A photo becomes text, then flows through the pipeline | active |
 | [0025](0025-voice-conversation-own-pipeline-in-two-steps.md) | Voice conversation: our own pipeline, in two steps | active |
 | [0026](0026-profile-name-voice-and-account-deletion.md) | Profile: assistant's name for you, voice, account deletion | active |
@@ -97,6 +97,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0043](0043-habits-noticed-not-logged.md) | Habits: noticed in your notes, suggested when they repeat, counted by rhythm, never a streak | active |
 | [0044](0044-readings-you-choose.md) | Readings you choose: set what you're reading, log what you read, no fixed plan (supersedes 0042's plan) | active |
 | [0045](0045-ask-reads-dates-and-people-before-it-searches.md) | Ask reads dates and people from the records before it searches; names go to Deepgram as keyterms | active |
+| [0047](0047-a-morning-push-only-when-the-day-has-something.md) | A morning push, only when the day has something in it: once a day, signed-in phones only, measured from the first send (supersedes 0023) | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

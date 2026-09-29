@@ -20,6 +20,7 @@ from memo.services.pipeline import (
 	read_habits_in_old_note,
 	read_people_in_old_note,
 )
+from memo.services.push import check_receipts, send_due_mornings
 from memo.services.queue import PROCESS_CAPTURE
 from memo.services.retry import RetryableError, TerminalError, backoff_delay
 
@@ -226,6 +227,29 @@ async def refresh_derivation_chunks_task(ctx: dict[str, Any]) -> int:
 		return 0
 	log.info("sweep.derivation_chunks", refreshed=refreshed)
 	return refreshed
+
+
+async def send_morning_pushes_task(ctx: dict[str, Any]) -> dict[str, int]:
+	"""Every five minutes: send the morning push to everyone whose time has come
+	(ADR 0047). Once a day each, claimed before sending."""
+	structlog.contextvars.clear_contextvars()
+	structlog.contextvars.bind_contextvars(job_id=ctx.get("job_id"))
+	outcomes = await send_due_mornings(ctx["session_factory"], ctx["push_sender"])
+	if outcomes:
+		log.info("sweep.morning_pushes", **outcomes)
+	return outcomes
+
+
+async def check_push_receipts_task(ctx: dict[str, Any]) -> int:
+	"""Expo's receipts for pushes sent 15 minutes to a day ago: tokens Apple says are
+	gone get disabled. A provider hiccup waits for the next run."""
+	structlog.contextvars.clear_contextvars()
+	structlog.contextvars.bind_contextvars(job_id=ctx.get("job_id"))
+	try:
+		return await check_receipts(ctx["session_factory"], ctx["push_sender"])
+	except (RetryableError, TerminalError) as exc:
+		log.warning("sweep.push_receipts_failed", error=str(exc))
+		return 0
 
 
 HABITS_BACKLOG_BATCH = 40

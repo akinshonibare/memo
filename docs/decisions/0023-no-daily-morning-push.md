@@ -1,6 +1,6 @@
 # 0023 — No daily push for the morning view; push waits for V4's quality bar
 
-**Status:** provisional
+**Status:** superseded by [0047](0047-a-morning-push-only-when-the-day-has-something.md)
 **Date:** 2026-09-28
 
 ## Problem
@@ -57,3 +57,11 @@ and when push comes, make it conditional (only when there's something worth inte
 for) and instrumented (did they act on it?). The costs I'd name: some mornings the view
 goes unseen, and the plumbing (APNs credentials, token lifecycle, a delivery cron) is
 deferred, not avoided.
+
+## Superseded (2026-09-29)
+
+Akin asked for a daily morning push. [ADR 0047](0047-a-morning-push-only-when-the-day-has-something.md)
+builds it the way this ADR's revisit section described: conditional (only a day with
+an event or a todo due), specific, once a day at most, and measured from the first
+send (opened, 👍/👎, act-on rate). What this ADR warned about still stands, and 0047's
+revisit trigger is the check on it.

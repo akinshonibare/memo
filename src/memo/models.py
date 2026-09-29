@@ -17,6 +17,7 @@ from sqlalchemy import (
 	Numeric,
 	String,
 	Text,
+	Time,
 	UniqueConstraint,
 	false,
 	func,
@@ -77,6 +78,8 @@ class User(Base):
 	bible_reading: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 	# Habits (ADR 0043): off by default; on, every note is read for what you did.
 	habits_enabled: Mapped[bool] = mapped_column(default=False, server_default=false())
+	# The morning push (ADR 0047): the local time it arrives, or NULL for none.
+	morning_push_at: Mapped[dt.time | None] = mapped_column(Time())
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 	__table_args__ = (
@@ -608,3 +611,80 @@ class Habit(Base):
 		),
 		CheckConstraint("length(btrim(name)) > 0", name="ck_habits_name"),
 	)
+
+
+PUSH_KINDS = ("morning",)
+PUSH_STATUSES = ("sending", "sent", "skipped", "failed")
+PUSH_FEEDBACK = ("up", "down")
+
+
+class PushToken(Base):
+	"""A phone memo can push to (ADR 0047): an Expo push token, registered under the
+	session that signed that phone in. Pushes go only to tokens whose session is still
+	live, so signing out, or "sign out everywhere" for a lost phone, stops them without
+	the phone having to say anything."""
+
+	__tablename__ = "push_tokens"
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("users.id", ondelete="CASCADE")
+	)
+	session_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("sessions.id", ondelete="CASCADE")
+	)
+	# One account at a time: a phone signed into another account moves its token.
+	token: Mapped[str] = mapped_column(String(200), unique=True)
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+	last_seen_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+	# Apple said the app is gone from that phone (DeviceNotRegistered).
+	disabled_at: Mapped[dt.datetime | None]
+
+
+class Push(Base):
+	"""One push memo meant to send, and what happened to it (ADR 0047). The ledger that
+	makes it once a day (unique per user, kind and local date, claimed before sending),
+	and the feedback the brief asks for from day one: opened, and thumbs up or down."""
+
+	__tablename__ = "pushes"
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("users.id", ondelete="CASCADE")
+	)
+	kind: Mapped[str] = mapped_column(String(16))
+	local_date: Mapped[dt.date] = mapped_column(Date)
+	status: Mapped[str] = mapped_column(String(16))
+	# Why a push wasn't sent ("nothing today", "no phone"), or why it failed.
+	reason: Mapped[str | None] = mapped_column(Text)
+	title: Mapped[str | None] = mapped_column(Text)
+	body: Mapped[str | None] = mapped_column(Text)
+	# Expo's ticket per phone, [{"token_id": ..., "ticket": ...}], for the receipts.
+	tickets: Mapped[list[Any]] = mapped_column(JSONB, default=list, server_default="[]")
+	receipts_checked_at: Mapped[dt.datetime | None]
+	opened_at: Mapped[dt.datetime | None]
+	feedback: Mapped[str | None] = mapped_column(String(8))
+	feedback_at: Mapped[dt.datetime | None]
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+	sent_at: Mapped[dt.datetime | None]
+
+	__table_args__ = (
+		UniqueConstraint("user_id", "kind", "local_date", name="uq_pushes_user_day"),
+		CheckConstraint(f"kind IN ({_in_list(PUSH_KINDS)})", name="ck_pushes_kind"),
+		CheckConstraint(
+			f"status IN ({_in_list(PUSH_STATUSES)})", name="ck_pushes_status"
+		),
+		CheckConstraint(
+			f"feedback IS NULL OR feedback IN ({_in_list(PUSH_FEEDBACK)})",
+			name="ck_pushes_feedback",
+		),
+	)
+
+
+Index("ix_push_tokens_user", PushToken.user_id)
+Index("ix_pushes_user_created", Push.user_id, Push.created_at.desc())
+Index(
+	"ix_pushes_receipts_due",
+	Push.sent_at,
+	postgresql_where=text("status = 'sent' AND receipts_checked_at IS NULL"),
+)

@@ -24,6 +24,7 @@ import { type Config, saveBaseUrl } from "../config";
 import { fonts, useUi } from "../ui";
 import { makeStyles, useTheme } from "../theme";
 import { disableLock, enableLock, LockCover } from "../lock";
+import { DEFAULT_MORNING, forgetPushToken, setMorningPush } from "../push";
 import { enableReminders, LEAD_CHOICES, remindersPref } from "../reminders";
 import { setCalendarSync, setRemindersSync, syncPref } from "../sync";
 import { SpeechQueue } from "../voice";
@@ -46,7 +47,8 @@ type Busy =
   | "lock"
   | "faith"
   | "translation"
-  | "habits";
+  | "habits"
+  | "morning";
 
 // You first, then how memo looks, then how the assistant treats you, then what memo may
 // do on this phone, then your data, then the account.
@@ -176,6 +178,40 @@ export function ProfileSheet({
       onSettingsChanged();
     });
 
+  // The morning push (ADR 0047). On the account: the server sends it, at this time, only
+  // on a day with something in it. Turning it on registers this phone first.
+  const morningAt = me?.morning_push_at ? me.morning_push_at.slice(0, 5) : null;
+  const setMorning = (time: string | null) =>
+    run("morning", async () => {
+      const client = api();
+      const problem = await setMorningPush(client, time);
+      if (problem) {
+        explain(problem);
+        return;
+      }
+      const updated = await client.getMe();
+      setMe(updated);
+      onProfileChanged(updated);
+    });
+  const pickMorning = () => {
+    const labels = MORNING_CHOICES.map((t) => `${t === morningAt ? "✓ " : ""}${morningLabel(t)}`);
+    const choose = (i: number) => {
+      const chosen = MORNING_CHOICES[i];
+      if (chosen && chosen !== morningAt) void setMorning(chosen);
+    };
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { title: "Morning summary at", options: [...labels, "Cancel"], cancelButtonIndex: labels.length },
+        choose,
+      );
+      return;
+    }
+    Alert.alert("Morning summary at", undefined, [
+      ...labels.map((text, i) => ({ text, onPress: () => choose(i) })),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
+  };
+
   const pickTranslation = () => {
     const current = asTranslation(me?.bible_translation);
     const labels = TRANSLATIONS.map((t) => `${t === current ? "✓ " : ""}${t} · ${translationName(t)}`);
@@ -263,6 +299,8 @@ export function ProfileSheet({
   const signOut = () =>
     run("signout", async () => {
       try {
+        // While the session still works; the server stops sending at logout anyway.
+        await forgetPushToken(api());
         await api().logout();
       } finally {
         onSignOut();
@@ -489,6 +527,25 @@ export function ProfileSheet({
               </Group>
 
               <Group
+                title="Morning"
+                footer="A notification with today's events and the todos due today, at the time you choose. Days with nothing on send nothing. Hold it down for 👍 or 👎: that's how memo learns whether it's worth the interruption."
+              >
+                <Row icon="sunny-outline" label="Morning summary" busy={busy === "morning"}>
+                  <Switch
+                    value={!!morningAt}
+                    disabled={!me}
+                    onValueChange={(on) => void setMorning(on ? DEFAULT_MORNING : null)}
+                    trackColor={{ true: colors.forest }}
+                  />
+                </Row>
+                {morningAt && (
+                  <Row icon="time-outline" label="Arrives at" onPress={pickMorning} chevron>
+                    <Text style={styles.value}>{morningLabel(morningAt)}</Text>
+                  </Row>
+                )}
+              </Group>
+
+              <Group
                 title="On this phone"
                 footer="memo keeps its events in a calendar called memo, and its todos in a Reminders list called memo. Tick a todo in either app and it's ticked in both. Turning one off removes memo's calendar or list from the phone. memo never reads your own events."
               >
@@ -599,6 +656,15 @@ export function ProfileSheet({
       </View>
     </Modal>
   );
+}
+
+const MORNING_CHOICES = ["06:00", "06:30", "07:00", "07:30", "08:00", "08:30", "09:00", "09:30"];
+
+// "07:30" -> "7:30am", the way the push itself writes times.
+function morningLabel(time: string): string {
+  const [h = 0, m = 0] = time.split(":").map(Number);
+  const hour = h % 12 || 12;
+  return `${hour}${m ? `:${String(m).padStart(2, "0")}` : ""}${h < 12 ? "am" : "pm"}`;
 }
 
 function deviceTimezone(): string {
