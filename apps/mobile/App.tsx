@@ -20,6 +20,7 @@ import { Api, type Me, type Space } from "./src/api";
 import { type Config, clearSession, loadConfig, loadOnboarded, saveOnboarded } from "./src/config";
 import { LockCover, LockProvider, useLock } from "./src/lock";
 import { FirefliesHost } from "./src/motion";
+import { refreshPushToken, registerMorningCategory, useMorningPushTaps } from "./src/push";
 import { useReminderTaps } from "./src/reminders";
 import { clearPhone, usePhoneSync } from "./src/sync";
 import { AskSheet } from "./src/screens/AskScreen";
@@ -216,10 +217,16 @@ function Root() {
   // change. A tapped notification opens the note the event came from.
   usePhoneSync(api, refreshKey, bump);
   useReminderTaps(ready, (captureId) => (captureId ? openNote(captureId) : goHome("Planner")));
+  // The morning push (ADR 0047): a tap opens Today, a 👍 or 👎 is recorded.
+  const openToday = useCallback(() => goHome(), []);
+  useMorningPushTaps(ready, api, openToday);
 
-  // The Record widget needs one snapshot from the app before it can render.
+  // The Record widget needs one snapshot from the app before it can render. The morning
+  // push's 👍/👎 buttons are registered on every launch, so they exist on the first push
+  // after an install, whatever state the setting is in (ADR 0047).
   useEffect(() => {
     publishRecord();
+    void registerMorningCategory();
   }, []);
   useEffect(() => {
     if (!ready || !pending) return;
@@ -245,11 +252,16 @@ function Root() {
   }, [ready, pending]);
 
   // Who is signed in, for the avatar on Home; refreshed from Profile on every change.
+  // While the morning push is on, this phone registers again: a token can change, and a
+  // new sign-in is a new session for the server to send through.
   useEffect(() => {
     if (!api) return;
     api
       .getMe()
-      .then(setMe)
+      .then((fresh) => {
+        setMe(fresh);
+        void refreshPushToken(api, !!fresh.morning_push_at);
+      })
       .catch(() => setMe(null))
       .finally(() => setMeReady(true));
   }, [api]);

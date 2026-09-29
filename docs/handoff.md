@@ -190,16 +190,29 @@ picked these, one PR each, in this order:
    `evals/timewindow` (41/45, zero wrong windows). _Still open:_ the extraction golden
    set is still Claude-written; `evals.extraction.harvest` can turn Akin's reviewed notes
    into cases, but his own text has to be read by him before it lands in the repo.
-2. **Push**: a daily morning push (Akin reversed [ADR 0023](decisions/0023-no-daily-morning-push.md);
-   a new ADR supersedes it: specific content, skipped on empty mornings, a Settings
-   switch and a time), then event-driven nudges with 👍/👎 and act-on rate measured
-   (V4). Needs an APNs key through EAS (Akin's terminal) and a new EAS build.
+2. **Push** ([ADR 0047](decisions/0047-a-morning-push-only-when-the-day-has-something.md),
+   supersedes 0023; migration 0019). _Built:_ Settings → Morning: a switch and a time.
+   The server sends today's events and the todos due today, once a day at most, only
+   to signed-in phones, only on a day with something in it; 👍/👎 on the notification
+   and taps are recorded (`GET /v1/pushes`: act-on rate). The app side is JavaScript
+   only (fingerprint `79d9bbf7` = build 17), so it ships as an OTA update. **Needs Akin
+   once:** the APNs key via `eas credentials` (runbook: mobile-release-eas.md, "Push
+   notifications"). Checked in the simulator: the Settings row, the timeout message,
+   a push's tap and 👎 reaching the server. Not checkable there: a real token.
+   Event-driven nudges (V4) are the follow-up that reuses this.
 3. **A live transcript while recording a note** (V1.5): the Ask WebSocket path, applied
    to capture.
 4. **A new note updates an old idea** (V4 reconciliation), behind its own eval.
 5. **Health**: light workout milestones noticed without logging ("first 5k", "heaviest
    squat yet"). **Akin said yes to reading Apple Health** (workouts, steps, sleep): the
    first exception to memo → phone only. Still a Settings switch.
+
+**Builds (2026-09-29):** the free EAS iOS build quota is used up for the month. Items
+2-4 and Health-from-notes are JavaScript and ship as OTA updates to build 17; only the
+Apple Health read needs a new build (a HealthKit module and entitlement). Batch every
+native change into that one build, when the quota resets or from a local build (which
+needs the Xcode 26.2 `expo-modules-jsi` patch committed with patch-package first, or the
+fingerprint won't match later updates).
 
 Not now: **Sentry** (Akin, 2026-09-29). Still Akin's to do: the PITR drill (#57), a
 payment method on Voyage/Atlas (3 requests a minute until then).

@@ -55,6 +55,9 @@ class Settings(BaseSettings):
 	# Deepgram Nova-3 (ADR 0013). Unset means audio captures fail visibly, not silently.
 	deepgram_api_key: SecretStr | None = None
 	deepgram_model: str = "nova-3"
+	# Expo's push service (ADR 0047). Only needed if "enhanced push security" is turned
+	# on for the project; the APNs key itself lives with Expo, set by `eas credentials`.
+	expo_access_token: SecretStr | None = None
 	tts_model: str = "aura-2-thalia-en"
 	# Shown on the public privacy page; unset shows TestFlight feedback instead.
 	support_email: str | None = None

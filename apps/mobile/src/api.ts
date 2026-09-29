@@ -306,6 +306,7 @@ export type Me = {
   faith_enabled?: boolean; // ADR 0042; off by default
   bible_translation?: string; // what Bible links open in; NIV by default
   habits_enabled?: boolean; // ADR 0043; off by default
+  morning_push_at?: string | null; // "07:30:00", or null for no morning push (ADR 0047)
 };
 
 export type Voice = { id: string; label: string };
@@ -393,8 +394,30 @@ export class Api {
     faith_enabled?: boolean;
     bible_translation?: string;
     habits_enabled?: boolean;
+    morning_push_at?: string | null;
   }) {
     return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  // --- push (ADR 0047) -----------------------------------------------------------
+
+  registerPushToken(token: string) {
+    return this.request<void>("/v1/push/token", { method: "PUT", body: JSON.stringify({ token }) });
+  }
+
+  forgetPushToken(token: string) {
+    return this.request<void>("/v1/push/token", { method: "DELETE", body: JSON.stringify({ token }) });
+  }
+
+  pushOpened(pushId: string) {
+    return this.request<void>(`/v1/pushes/${pushId}/opened`, { method: "POST" });
+  }
+
+  pushFeedback(pushId: string, vote: "up" | "down") {
+    return this.request<void>(`/v1/pushes/${pushId}/feedback`, {
+      method: "POST",
+      body: JSON.stringify({ vote }),
+    });
   }
 
   listVoices() {

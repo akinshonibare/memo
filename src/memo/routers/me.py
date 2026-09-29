@@ -22,9 +22,11 @@ from memo.models import (
 	Habit,
 	Message,
 	Person,
+	Push,
 	Recording,
 	User,
 )
+from memo.routers.push import PushOut
 from memo.routers.recordings import get_object_store
 from memo.schemas.ask import MessageOut
 from memo.schemas.captures import CaptureOut
@@ -54,6 +56,8 @@ class MeOut(BaseModel):
 	faith_enabled: bool = False
 	bible_translation: str = "NIV"
 	habits_enabled: bool = False  # ADR 0043
+	# The morning push's local time, or None for none (ADR 0047).
+	morning_push_at: dt.time | None = None
 
 
 class MePatch(BaseModel):
@@ -74,6 +78,14 @@ class MePatch(BaseModel):
 		Literal["NIV", "ESV", "KJV", "NKJV", "NLT", "CSB", "NASB", "MSG"] | None
 	) = None
 	habits_enabled: bool | None = None
+	# "07:30", or null to turn the morning push off (ADR 0047).
+	morning_push_at: dt.time | None = None
+
+	@field_validator("morning_push_at")
+	@classmethod
+	def _whole_minutes(cls, value: dt.time | None) -> dt.time | None:
+		# The sweep runs every five minutes; seconds would only look precise.
+		return value.replace(second=0, microsecond=0) if value else value
 
 	@field_validator("timezone")
 	@classmethod
@@ -107,7 +119,7 @@ class MePatch(BaseModel):
 		if not self.model_fields_set:
 			raise ValueError(
 				"provide timezone, name, voice, auto_accept, faith_enabled, "
-				"bible_translation or habits_enabled"
+				"bible_translation, habits_enabled or morning_push_at"
 			)
 		return self
 
@@ -170,6 +182,9 @@ async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> 
 		# On: the next note is read for what you did, and a background sweep reads the
 		# last 60 days. Off: nothing is read; what was found and tracked stays.
 		user.habits_enabled = body.habits_enabled
+	if "morning_push_at" in fields:
+		# null turns it off; a phone's token stays, for when it comes back on.
+		user.morning_push_at = body.morning_push_at
 	await session.flush()
 	return await _me_out(session, user)
 
@@ -241,6 +256,8 @@ class Export(BaseModel):
 	people: list[PersonExport] = []
 	# Habits tracked or dismissed (ADR 0043); what counted is the activities above.
 	habits: list[HabitExport] = []
+	# What memo pushed to your phone, and what you said about it (ADR 0047).
+	pushes: list[PushOut] = []
 
 
 @router.get("/export", response_model=Export)
@@ -349,6 +366,16 @@ async def export_everything(
 				)
 			).all()
 		],
+		pushes=[
+			PushOut.model_validate(p)
+			for p in (
+				await session.scalars(
+					select(Push)
+					.where(Push.user_id == user_id)
+					.order_by(Push.local_date)
+				)
+			).all()
+		],
 	)
 
 
@@ -425,6 +452,9 @@ async def _purge(
 		"morning_views",
 		"llm_calls",
 		"habits",
+		# What memo pushed, and your feedback on it. Not push_tokens: those belong to
+		# a signed-in phone, like the session, and stay with the account.
+		"pushes",
 	):
 		result = cast(
 			CursorResult[Any],

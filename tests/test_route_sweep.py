@@ -6,7 +6,8 @@ builds that corpus - linked and unresolved people, auto-accepted items, a note w
 words, a voice note with word timings, a note from this day last year, a deleted note
 whose items and mention outlive it, a contact with no note, Faith turned on with a
 faith note, its passages, a prayer for someone who is later merged, and a reading, and
-Habits turned on with activities, a tracked habit, a logged day and a removed one - and
+Habits turned on with activities, a tracked habit, a logged day and a removed one, a
+morning push time with a phone and a sent (voted on), a skipped and a failed push - and
 then calls every GET route in the OpenAPI spec (so a route added later is swept too)
 and the people write routes. Nothing may answer 5xx, and no answer stream may crash.
 """
@@ -251,6 +252,33 @@ async def test_every_route_survives_every_kind_of_row(
 		await client.put("/v1/faith/reading", json={"ref": "John"})
 	).status_code == 200
 	assert (await client.post("/v1/faith/readings", json={})).status_code == 201
+
+	# The morning push (ADR 0047): a time, a phone, and one push of each outcome.
+	assert (
+		await client.patch("/v1/me", json={"morning_push_at": "07:30"})
+	).status_code == 200
+	phone = {"token": "ExponentPushToken[sweep-phone-0001]"}
+	assert (await client.put("/v1/push/token", json=phone)).status_code == 204
+	async with admin_engine.begin() as conn:
+		for days_ago, outcome, vote in (
+			(1, "sent", "up"),
+			(2, "skipped", None),
+			(3, "failed", None),
+		):
+			await conn.execute(
+				text(
+					"INSERT INTO pushes (id, user_id, kind, local_date, status, title, "
+					"body, feedback) VALUES (:id, :u, 'morning', :d, :s, "
+					"'Today: 10am Dentist', 'Nothing else on.', :f)"
+				),
+				{
+					"id": uuid.uuid4(),
+					"u": SEED_USER_ID,
+					"d": TODAY - dt.timedelta(days=days_ago),
+					"s": outcome,
+					"f": vote,
+				},
+			)
 
 	conversation = (await client.post("/v1/conversations")).json()["id"]
 	asked = (

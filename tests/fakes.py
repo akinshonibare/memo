@@ -5,6 +5,7 @@ import re
 import uuid
 from collections.abc import AsyncGenerator, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from anthropic.types import MessageParam
 
@@ -19,6 +20,7 @@ from memo.services.faith import FaithResult
 from memo.services.habits import HabitsResult
 from memo.services.llm import LLMCall
 from memo.services.people import PeopleResult
+from memo.services.push import Message, Outgoing, Ticket
 from memo.services.transcription import Transcript
 from memo.services.vision import DescribeResult
 
@@ -396,3 +398,38 @@ class FakeIdentityVerifier:
 		if len(parts) < 2 or parts[0] != "apple" or not parts[1]:
 			raise InvalidIdentityToken("not an apple token")
 		return AppleIdentity(sub=parts[1], email=parts[2] if len(parts) > 2 else None)
+
+
+class FakePushSender:
+	"""Expo's push service, scripted (ADR 0047): records what was sent, answers each
+	phone with a ticket, or with an error per token, and serves receipts."""
+
+	def __init__(
+		self,
+		*,
+		errors: dict[str, str] | None = None,
+		receipts: dict[str, str | None] | None = None,
+		fail_with: Exception | None = None,
+	) -> None:
+		self.errors = errors or {}
+		self.receipt_answers = receipts or {}
+		self.fail_with = fail_with
+		self.sent: list[tuple[list[str], str, str, dict[str, Any]]] = []
+
+	async def send(
+		self, to: Sequence[Outgoing], message: Message, data: dict[str, Any]
+	) -> list[Ticket]:
+		if self.fail_with is not None:
+			raise self.fail_with
+		self.sent.append(([o.token for o in to], message.title, message.body, data))
+		return [
+			Ticket(o.token_id, None, self.errors[o.token])
+			if o.token in self.errors
+			else Ticket(o.token_id, f"ticket-{o.token}", None)
+			for o in to
+		]
+
+	async def receipts(self, ticket_ids: Sequence[str]) -> dict[str, str | None]:
+		return {
+			t: self.receipt_answers[t] for t in ticket_ids if t in self.receipt_answers
+		}

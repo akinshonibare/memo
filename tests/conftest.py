@@ -96,6 +96,8 @@ async def admin_engine(settings: Settings) -> AsyncIterator[AsyncEngine]:
 async def clean_tables(admin_engine: AsyncEngine) -> None:
 	async with admin_engine.begin() as conn:
 		for table in (
+			"pushes",
+			"push_tokens",
 			"sessions",
 			"resurfacings",
 			"morning_views",
@@ -120,7 +122,8 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 				"UPDATE users SET timezone = 'UTC', apple_sub = NULL, email = NULL, "
 				"display_name = NULL, voice = NULL, auto_accept = false, "
 				"faith_enabled = false, bible_translation = 'NIV', "
-				"bible_reading = NULL, habits_enabled = false "
+				"bible_reading = NULL, habits_enabled = false, "
+				"morning_push_at = NULL "
 				"WHERE id = :seed"
 			),
 			{"seed": str(SEED_USER_ID)},
