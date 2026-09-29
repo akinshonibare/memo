@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     padding: 16,
     borderRadius: 18,
-    backgroundColor: "#1f1214",
+    backgroundColor: colors.dangerSurface,
   },
   section: { marginTop: 32 },
   card: {

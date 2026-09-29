@@ -140,7 +140,9 @@ export function HomeScreen({
         <View style={{ flex: 1 }} />
         <IconCircle name="calendar-outline" onPress={onPlanner} />
       </View>
-      <Text style={[ui.h1, ui.pad]}>memo</Text>
+      <Text style={[ui.h1, ui.pad]}>
+        memo<Text style={{ color: colors.record }}>.</Text>
+      </Text>
       <View style={[styles.search, { marginHorizontal: 20 }]}>
         <Ionicons name="search" size={20} color={colors.muted} />
         <TextInput
@@ -307,7 +309,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 34,
   },
-  chipDanger: { backgroundColor: "#2a1214" },
+  chipDanger: { backgroundColor: colors.dangerSurface },
   chipText: { color: colors.text, fontSize: 14, fontWeight: "600" },
   bottom: {
     position: "absolute",
@@ -324,7 +326,7 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     backgroundColor: colors.record,
     borderWidth: 6,
-    borderColor: "#3a1a19",
+    borderColor: "#4A3317",
   },
   recordPressed: { transform: [{ scale: 0.94 }] },
   uploading: {

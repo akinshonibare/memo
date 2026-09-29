@@ -1,19 +1,22 @@
 import { StyleSheet } from "react-native";
 
-// Pure black, one serif for display text, the system sans for everything else,
-// and pills instead of rectangles. Surfaces are iOS's dark greys so the app reads
-// as native rather than themed.
+// Forest (docs/brand.md): blacks tinted deep green, cream instead of white, one serif
+// for display text and the system sans for everything else, pills not rectangles.
+// Amber is the single warm accent - the dot in the icon - and it marks what is live:
+// the record button, today, a voice session.
 export const colors = {
-  bg: "#000000",
-  surface: "#1c1c1e",
-  surfaceAlt: "#2c2c2e",
-  hairline: "#2a2a2c",
-  text: "#ffffff",
-  muted: "#98989d",
-  faint: "#636366",
-  record: "#ff3b30",
-  green: "#30d158",
-  danger: "#ff453a",
+  bg: "#0B1410",
+  surface: "#15221C",
+  surfaceAlt: "#1E2F27",
+  hairline: "#26382F",
+  forest: "#1F5A40",
+  text: "#F1ECDF",
+  muted: "#9FAEA4",
+  faint: "#627368",
+  record: "#E2A04A", // amber: the accent
+  green: "#8FBF96", // moss
+  danger: "#E5645A",
+  dangerSurface: "#2B1A16",
 };
 
 export const fonts = { serif: "InstrumentSerif_400Regular" };

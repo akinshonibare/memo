@@ -61,7 +61,9 @@ export function LoginScreen({
   return (
     <View style={[ui.screen, styles.wrap, { paddingBottom: Math.max(insets.bottom, 24) }]}>
       <View style={{ flex: 1 }} />
-      <Text style={styles.wordmark}>memo</Text>
+      <Text style={styles.wordmark}>
+        memo<Text style={{ color: colors.record }}>.</Text>
+      </Text>
       <Text style={styles.tagline}>Say it or type it. It remembers.</Text>
       <View style={{ flex: 1 }} />
       {error && <Text style={[ui.danger, styles.error]}>{error}</Text>}
