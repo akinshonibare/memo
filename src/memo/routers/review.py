@@ -19,6 +19,8 @@ from memo.auth import CurrentUser
 from memo.db import DbSession
 from memo.models import Capture, Derivation, User
 from memo.schemas.derivations import DerivationOut
+from memo.schemas.faith import FaithWeek
+from memo.services import faith
 from memo.services.morning import tz_or_utc
 
 router = APIRouter(prefix="/review", tags=["review"])
@@ -41,6 +43,9 @@ class WeekOut(BaseModel):
 	still_open_total: int
 	coming_up: list[DerivationOut]  # events in the next 7 days
 	new_ideas: list[DerivationOut]
+	# Its own section at the end, only while Faith is on (ADR 0042). None otherwise,
+	# and absent to an app built before it.
+	faith: FaithWeek | None = None
 
 
 @router.get("/week", response_model=WeekOut)
@@ -133,4 +138,9 @@ async def week(
 		still_open_total=len(open_sorted),
 		coming_up=out(upcoming),
 		new_ideas=out(list(ideas)),
+		faith=(
+			await faith.week(session, user_id, since=since, until=until)
+			if faith.faith_hidden(user)
+			else None
+		),
 	)

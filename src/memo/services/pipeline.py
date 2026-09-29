@@ -30,11 +30,20 @@ from memo.models import (
 	Recording,
 	User,
 )
-from memo.schemas.derivations import UNREVIEWED
+from memo.schemas.derivations import FAITH_KINDS, UNREVIEWED
 from memo.services.chunking import CHUNKER_VERSION, chunk_text
 from memo.services.derivation_index import derivation_text, reembed_derivation
 from memo.services.embeddings import Embedder
 from memo.services.extraction import ExtractionFailed, ExtractorLike
+from memo.services.faith import (
+	SCRIPTURE_VERSION,
+	FaithReaderLike,
+	UnconfiguredFaithReader,
+	apply_prayers,
+	faith_on,
+	might_pray,
+	replace_passages,
+)
 from memo.services.llm import LLMCall
 from memo.services.people import PeopleReaderLike, apply_mentions
 from memo.services.retry import RetryableError, TerminalError, backoff_delay
@@ -71,6 +80,9 @@ class PipelineContext:
 	people: PeopleReaderLike
 	max_attempts: int = 5
 	describer: Describer = field(default_factory=UnconfiguredDescriber)
+	# Faith (ADR 0042). Defaulted, unlike people: it only ever runs for someone who has
+	# turned Faith on, and an unconfigured reader fails the (optional) stage visibly.
+	faith: FaithReaderLike = field(default_factory=UnconfiguredFaithReader)
 
 
 @dataclass(frozen=True)
@@ -213,6 +225,10 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 		)
 	)
 	for kind, item in result.extraction.items():
+		if kind == "idea" and capture.space == "faith":
+			# A reflection is full of thoughts, and Home's Ideas shouldn't fill with
+			# them (ADR 0042). Its todos and events still count: they're commitments.
+			continue
 		ctx.session.add(
 			Derivation(
 				id=uuid7(),
@@ -276,6 +292,43 @@ async def _people(ctx: PipelineContext, capture: Capture) -> None:
 	)
 
 
+async def _faith(ctx: PipelineContext, capture: Capture) -> None:
+	"""The prayers in a note (ADR 0042), filed into Faith. Only for someone with Faith
+	on, and only when the note has a prayer-ish word in it: most notes cost nothing."""
+	user = await ctx.session.get(User, capture.user_id)
+	if not faith_on(user) or not might_pray(capture.text):
+		_skip("faith", capture)
+		return
+	assert user is not None
+	result = await ctx.faith.read(
+		capture.text or "", captured_at=capture.created_at, timezone=user.timezone
+	)
+	await _record_calls(ctx, capture, result.calls)
+	made = await apply_prayers(
+		ctx.session,
+		capture,
+		result.extraction,
+		version=ctx.faith.version,
+		extract_version=ctx.extractor.version,
+	)
+	log.info(
+		"stage.faith",
+		capture_id=str(capture.id),
+		version=ctx.faith.version,
+		prayers=len(made),
+		linked=sum(1 for p in made if p.person_id is not None),
+	)
+
+
+async def _scripture(ctx: PipelineContext, capture: Capture) -> None:
+	"""The Bible passages a note is about (ADR 0042): every faith note, and any note
+	while Faith is on. No model call: references have a regular shape, and
+	services/scripture parses and checks them."""
+	user = await ctx.session.get(User, capture.user_id)
+	found = await replace_passages(ctx.session, capture, enabled=faith_on(user))
+	log.info("stage.scripture", capture_id=str(capture.id), passages=found)
+
+
 async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 	"""Dual granularity: capture chunks for recall, derivation rows for precision."""
 	source = capture.text or ""
@@ -287,6 +340,8 @@ async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 				Derivation.capture_id == capture.id,
 				Derivation.user_id == capture.user_id,
 				Derivation.status != "rejected",
+				# Prayers and passages answer nothing in Home's Ask (ADR 0042).
+				Derivation.kind.not_in(FAITH_KINDS),
 			)
 			.order_by(Derivation.created_at, Derivation.id)
 		)
@@ -324,6 +379,7 @@ async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 				embedding=next(vectors),
 				embedding_model=ctx.embedder.model,
 				embedding_dim=ctx.embedder.dim,
+				space=capture.space,
 			)
 		)
 	for offset, derivation in enumerate(derivations, start=len(pieces)):
@@ -381,6 +437,22 @@ STAGES: tuple[Stage, ...] = (
 		status=CaptureStatus.EXTRACTING,
 		version=lambda ctx: ctx.people.version,
 		run=_people,
+		applies=lambda c: True,
+		optional=True,
+	),
+	Stage(
+		name="faith",
+		status=CaptureStatus.EXTRACTING,
+		version=lambda ctx: ctx.faith.version,
+		run=_faith,
+		applies=lambda c: True,
+		optional=True,
+	),
+	Stage(
+		name="scripture",
+		status=CaptureStatus.EXTRACTING,
+		version=lambda ctx: SCRIPTURE_VERSION,
+		run=_scripture,
 		applies=lambda c: True,
 		optional=True,
 	),

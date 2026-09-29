@@ -4,7 +4,8 @@ Added after 2026-09-29, when Ask crashed on a note with a linked person: each fe
 had its own tests, but no test ever put a person *in front of an older route*. This one
 builds that corpus - linked and unresolved people, auto-accepted items, a note with no
 words, a voice note with word timings, a note from this day last year, a deleted note
-whose items and mention outlive it, a contact with no note - and
+whose items and mention outlive it, a contact with no note, and Faith turned on with a
+faith note, its passages, a prayer for someone who is later merged, and a reading - and
 then calls every GET route in the OpenAPI spec (so a route added later is swept too)
 and the people write routes. Nothing may answer 5xx, and no answer stream may crash.
 """
@@ -66,10 +67,16 @@ class Corpus:
 		*,
 		spoken: str | None = None,
 		admin: AsyncEngine | None = None,
+		space: str = "main",
 	) -> str:
 		if spoken is None:
 			created = await self.client.post(
-				"/v1/captures", json={"text": body, "client_token": f"t-{uuid.uuid4()}"}
+				"/v1/captures",
+				json={
+					"text": body,
+					"client_token": f"t-{uuid.uuid4()}",
+					"space": space,
+				},
 			)
 		else:
 			assert admin is not None
@@ -176,6 +183,13 @@ async def test_every_route_survives_every_kind_of_row(
 			),
 			{"id": last_year},
 		)
+	# Faith on (ADR 0042), with a faith note whose passages are found.
+	await client.patch("/v1/me", json={"faith_enabled": True})
+	await corpus.note(
+		"Romans 8:28 and Psalm 23 this morning",
+		Extraction(ideas=[IdeaPayload(title="Rest", summary="Sabbath.")]),
+		space="faith",
+	)
 	# The first note goes; its items and its mention stay (ADR 0022).
 	assert (await client.delete(f"/v1/captures/{doomed}")).status_code == 204
 
@@ -185,6 +199,19 @@ async def test_every_route_survives_every_kind_of_row(
 	assert set(people) == {"Tunde Bakare", "Tunde Ade", "Kemi"}
 	logged = await client.post(f"/v1/people/{people['Kemi']}/contact", json={})
 	assert logged.status_code == 201
+	prayer = await client.post(
+		"/v1/faith/prayers",
+		json={"title": "Tunde's mum's surgery", "person_id": people["Tunde Ade"]},
+	)
+	assert prayer.status_code == 201, prayer.text
+	answered = await client.post(
+		"/v1/faith/prayers", json={"title": "The new job", "notes": "interview Tue"}
+	)
+	await client.patch(
+		f"/v1/faith/prayers/{answered.json()['id']}",
+		json={"answered": True, "answer": "Offer came Friday"},
+	)
+	assert (await client.post("/v1/faith/readings")).status_code == 200
 
 	conversation = (await client.post("/v1/conversations")).json()["id"]
 	asked = (
@@ -216,6 +243,7 @@ async def test_every_route_survives_every_kind_of_row(
 		+ [f"?kind={k}" for k in KINDS]
 		+ [""],
 		"/v1/review/week": ["?weeks_ago=0", "?weeks_ago=1"],
+		"/v1/captures": ["", "?space=faith", "?space=main"],
 	}
 
 	swept = 0
@@ -258,6 +286,14 @@ async def test_every_route_survives_every_kind_of_row(
 		f"/v1/people/{people['Tunde Ade']}/merge", json={"into": people["Tunde Bakare"]}
 	)
 	assert merged.status_code == 200, merged.text
+	# The prayer went with them, and the generic item route won't touch it.
+	assert [p["title"] for p in merged.json()["prayers"]] == ["Tunde's mum's surgery"]
+	faith = (await client.get("/v1/faith")).json()
+	assert faith["open"][0]["person_name"] == "Tunde Bakare"
+	refused = await client.patch(
+		f"/v1/derivations/{prayer.json()['id']}", json={"status": "confirmed"}
+	)
+	assert refused.status_code == 422
 	for patch in (
 		{"name": "Tunde B.", "aliases": ["TB"], "note": "work"},
 		{"reach_out_every_days": None},

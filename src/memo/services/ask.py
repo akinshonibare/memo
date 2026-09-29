@@ -38,6 +38,7 @@ from memo.models import (
 from memo.prompts import answer_v2, rewrite_v1
 from memo.services.embeddings import Embedder
 from memo.services.extraction import RawCompletion
+from memo.services.faith import faith_hidden
 from memo.services.llm import LLMCall
 from memo.services.morning import tz_or_utc
 from memo.services.retrieval import Hit, search
@@ -428,6 +429,8 @@ async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event,
 			embedder=ctx.embedder,
 			k=ctx.top_k,
 			ef_search=ctx.ef_search,
+			# Home's Ask leaves faith notes out while Faith is on (ADR 0042).
+			include_faith=not faith_hidden(await session.get(User, user_id)),
 		)
 		for rank, hit in enumerate(result.hits, start=1):
 			session.add(

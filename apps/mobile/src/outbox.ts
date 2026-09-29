@@ -1,6 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { useEffect, useState } from "react";
-import { type Api, ApiError, type Once, newOnce } from "./api";
+import { type Api, ApiError, type Once, type Space, newOnce } from "./api";
 
 // Offline capture (ADR 0028). A capture that can't reach the server is written here -
 // with the time it was taken and the client token that makes a retry idempotent - and
@@ -14,6 +14,7 @@ export type OutboxItem = Once & {
   file?: string;
   mime?: string;
   durationMs?: number;
+  space?: Space; // a faith note (ADR 0042) stays one when it's sent later
   attempts: number;
   failed?: string; // set once the server refused it for good
 };
@@ -66,16 +67,17 @@ function retryable(error: unknown): boolean {
 
 async function send(api: Api, item: OutboxItem) {
   const once = { clientToken: item.clientToken, capturedAt: item.capturedAt };
-  if (item.kind === "text") return api.createTextCapture(item.text ?? "", once);
-  if (item.kind === "audio") return api.createAudioCapture(item.file!, item.mime, item.durationMs, once);
-  return api.createImageCapture(item.file!, once);
+  const space = item.space ?? "main";
+  if (item.kind === "text") return api.createTextCapture(item.text ?? "", once, space);
+  if (item.kind === "audio") return api.createAudioCapture(item.file!, item.mime, item.durationMs, once, space);
+  return api.createImageCapture(item.file!, once, space);
 }
 
 // Try to save now; if the network is the problem, keep it for later. Returns "sent"
 // or "queued"; throws only for a real refusal, which the caller should show.
 export async function captureOrQueue(
   api: Api,
-  capture: Pick<OutboxItem, "kind" | "text" | "file" | "mime" | "durationMs">,
+  capture: Pick<OutboxItem, "kind" | "text" | "file" | "mime" | "durationMs" | "space">,
 ): Promise<"sent" | "queued"> {
   const item: OutboxItem = { ...newOnce(), ...capture, attempts: 0 };
   try {

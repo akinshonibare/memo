@@ -7,7 +7,7 @@ import {
 } from "expo-audio";
 import { useEffect, useRef, useState } from "react";
 import { Modal, Text, View } from "react-native";
-import { Api, ApiError } from "../api";
+import { Api, ApiError, type Space } from "../api";
 import { confirmDiscard, IconCircle, Pill, SheetHandle } from "../components";
 import { formatClock } from "../format";
 import {
@@ -34,10 +34,12 @@ const DROP_MS = 480;
 // in the Dynamic Island.
 export function RecordSheet({
   api,
+  space = "main",
   onClose,
   onSaved,
 }: {
   api: Api;
+  space?: Space; // recorded from the Faith screen: a faith note (ADR 0042)
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -131,7 +133,7 @@ export function RecordSheet({
       activity.current = null;
       const uri = recorder.uri;
       if (!uri) throw new Error("No recording was produced.");
-      await captureOrQueue(api, { kind: "audio", file: uri, mime: "audio/m4a", durationMs });
+      await captureOrQueue(api, { kind: "audio", file: uri, mime: "audio/m4a", durationMs, space });
       haptic.done();
       // The thought becomes a dot: the orb falls toward the list, then the sheet goes.
       setDrop(true);
@@ -169,7 +171,7 @@ export function RecordSheet({
           <View style={{ flex: 1 }} />
           <IconCircle name="close" onPress={discard} accessibilityLabel="Discard recording" />
         </View>
-        <Text style={[ui.h2, styles.title]}>New voice note</Text>
+        <Text style={[ui.h2, styles.title]}>{space === "faith" ? "New reflection" : "New voice note"}</Text>
         <Text style={ui.bodyMuted}>
           {phase === "starting"
             ? "Starting the microphone…"

@@ -1,6 +1,6 @@
 # 0042 — Faith: a space of its own, prayers that get answered, a reading plan that never falls behind
 
-**Status:** provisional
+**Status:** active (built 2026-09-29; see "What changed when it was built")
 **Date:** 2026-09-29
 
 ## Problem
@@ -105,6 +105,8 @@ anywhere.**
 - **A broader extraction prompt puts todos and events at risk.** Adding two kinds to the
   reader can lower its precision on the existing ones. The extraction eval is a merge gate
   and must stay green, with new cases for prayers and passages.
+- **One more model call per prayer-ish note for someone with Faith on,** about a cent,
+  and none for anyone else. Notes written before Faith was turned on are not re-read.
 - **"Mark" and "John" are both people and books.** "Mark said…" versus "Mark 4" is exactly
   where people and passages collide. It needs its own eval cases, and a wrong guess costs
   either a bogus person or a lost passage.
@@ -121,6 +123,58 @@ anywhere.**
 3. **Which Bible app the links open.** Default: bible.com, which opens YouVersion if
    installed. The NIV's version id there is to be verified when built.
 
+## What changed when it was built (2026-09-29)
+
+Akin asked for it to be built, and for Faith to be **a feature turned on in Settings**.
+That, and building it, changed six things above. None of the original reasoning was wrong;
+these are the details that only building settles.
+
+1. **Faith is a switch, off by default, on the account** (`users.faith_enabled`). It has
+   to be on the server, not the phone: the server is what keeps faith notes out of Home,
+   search, Ask and On this day, and it does that **only while Faith is on**. Turned off,
+   nothing is deleted and faith notes are ordinary notes again, so no note is ever lost
+   behind a switch. The translation (`users.bible_translation`, NIV by default) lives
+   beside it.
+2. **The three open decisions took their defaults:** faith notes live only in Faith
+   (while it's on), the plan goes straight through Genesis to Revelation (370 readings,
+   none crossing a book), and links open bible.com, which hands over to YouVersion. The
+   bible.com version numbers were checked in a browser (NIV is 111).
+3. **Finding a passage is code alone, not model plus code.** `pythonbible` (MIT) parses
+   and validates references against real chapter and verse counts; memo adds two rules:
+   a reference must name a chapter ("Mark said" is a person, "Mark 4" is a book), and
+   spoken forms ("John chapter 3 verse 16", "Psalm chapter twenty three") are rewritten
+   first. That makes the Mark/John collision a unit test instead of an eval case, and
+   costs no model call. Passages are found in faith notes only.
+4. **Prayers said anywhere are filed into Faith, by a reader of their own** (`faith-v1`,
+   `prompts/faith_v1.py`), built the same day after Akin asked for the feature to be
+   complete. Like the people reader, not a fourth list on the extraction prompt: it runs
+   only for someone with Faith on, so extraction and its eval are untouched for everyone
+   else. Three deterministic guards around the model:
+   - **A prayer-word gate** (`might_pray`: pray, God, Lord, Jesus, amen, bless...): a
+     note without one is never read, so most notes cost nothing.
+   - **People are linked by exact name only**, against the people the same note names:
+     "Tunde's mum" never becomes Tunde. A wrong link is the expensive error here, as it
+     is for people.
+   - **The duplicate todo goes:** an untouched "Pray for..." todo from the same note is
+     removed when a prayer is found, so it isn't in the Planner and Reminders twice.
+   A prayer found in a note is shown at once (`accepted`); answering or editing it
+   confirms it, so a re-read of the note leaves it alone, and removing it is the
+   precision label. Its eval (`evals/faith`, 24 cases, recorded live and replayed in CI)
+   gates recall 0.85, precision 0.90 and person accuracy 0.85, and fails if the gate
+   would skip a case that has a prayer. Passages likewise come from **any** note while
+   Faith is on, not only notes written in Faith; the note stays where it was written.
+5. **Reflections don't make ideas.** The extractor still runs on a faith note, and its
+   todos and events are kept (they're commitments), but its ideas are dropped: a
+   reflection is full of thoughts, and Home's Ideas shouldn't fill with them.
+6. **Prayers and passages are never embedded,** so they answer nothing in Home's Ask, and
+   the generic derivation routes refuse them. Related notes stay within a space while
+   Faith is on.
+
+The schema landed as planned in migration 0016: `space` on captures and on chunks (copied,
+like `user_id`, so retrieval filters on the chunks table alone), two new kinds, the
+person check widened to prayers, and `faith_readings` with row-level security. Export
+includes the readings, and "delete all data" removes them.
+
 ## Revisit when
 
 - **Akin wants to read inside memo:** that's the licence question for NIV, or a
@@ -131,6 +185,10 @@ anywhere.**
   less.
 - **Habit tracking** (open question Q11) arrives: prayer and Bible reading are likely its
   first habits, and the two must not count the same thing twice.
+- **A prayer is missed because it names none of the prayer words** ("asking for
+  wisdom about the move"): widen the gate, and add the note to the golden set.
+- **The faith eval's precision drops on real notes:** tighten the prompt before
+  anything else; a phantom prayer also costs a todo.
 
 ## Interview angle
 

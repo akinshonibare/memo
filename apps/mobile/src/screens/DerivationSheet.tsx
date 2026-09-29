@@ -1,9 +1,8 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, ScrollView, Text, TextInput, View } from "react-native";
 import { Api, ApiError, type Derivation } from "../api";
-import { confirmDiscard, Pill, SheetHandle, SheetHeader } from "../components";
+import { confirmDiscard, Pill, SheetAction, SheetActions, SheetHandle, SheetHeader } from "../components";
 import { toIsoDate, toLocalIso } from "../format";
 import { useKeyboardHeight } from "../keyboard";
 import { useUi } from "../ui";
@@ -203,61 +202,26 @@ export function DerivationSheet({
             </>
           )}
 
-          {((noteId && onOpenNote) || existing) && (
-            <View style={styles.more}>
-              {noteId && onOpenNote && (
-                <SheetRow
-                  icon="document-text-outline"
-                  label="Open the note"
-                  onPress={() => {
-                    onClose();
-                    onOpenNote(noteId);
-                  }}
-                />
-              )}
-              {noteId && onOpenNote && existing && <View style={styles.moreRule} />}
-              {existing && (
-                <SheetRow icon="trash-outline" label={`Remove this ${kind}`} danger busy={busy} onPress={remove} />
-              )}
-            </View>
-          )}
+          <SheetActions>
+            {noteId && onOpenNote && (
+              <SheetAction
+                icon="document-text-outline"
+                label="Open the note"
+                onPress={() => {
+                  onClose();
+                  onOpenNote(noteId);
+                }}
+              />
+            )}
+            {existing && (
+              <SheetAction icon="trash-outline" label={`Remove this ${kind}`} danger busy={busy} onPress={remove} />
+            )}
+          </SheetActions>
         </ScrollView>
         {error && <Text style={[ui.danger, { marginTop: 12 }]}>{error}</Text>}
         <LockCover />
       </View>
     </Modal>
-  );
-}
-
-// A row at the end of the form for what isn't saving: opening the note it came from,
-// removing it. Part of the form rather than a button bar under it.
-function SheetRow({
-  icon,
-  label,
-  danger,
-  busy,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  danger?: boolean;
-  busy?: boolean;
-  onPress: () => void;
-}) {
-  const styles = useStyles();
-  const { colors } = useTheme();
-  const color = danger ? colors.danger : colors.text;
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={busy}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.moreRow, pressed && { opacity: 0.6 }]}
-    >
-      <Ionicons name={icon} size={19} color={danger ? colors.danger : colors.muted} />
-      <Text style={[styles.moreLabel, { color }]}>{label}</Text>
-      {busy && <ActivityIndicator color={colors.muted} />}
-    </Pressable>
   );
 }
 
@@ -315,14 +279,4 @@ const useStyles = makeStyles((colors) => ({
   },
   multiline: { minHeight: 110, textAlignVertical: "top" },
   row: { flexDirection: "row", alignItems: "center", marginBottom: 20 },
-  more: { backgroundColor: colors.surfaceAlt, borderRadius: 16, overflow: "hidden", marginTop: 8 },
-  moreRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 15,
-  },
-  moreRule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: 49 },
-  moreLabel: { flex: 1, fontSize: 16 },
 }));

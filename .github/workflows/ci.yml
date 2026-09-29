@@ -113,6 +113,10 @@ jobs:
           else
             echo "::warning::evals/people/recorded.json missing - people reading gate not armed"
           fi
+      - name: faith reading (recorded outputs)
+        # Recorded like people (needs ANTHROPIC_API_KEY; Railway's worker has it):
+        #   railway run -s worker -- uv run python -m evals.faith.run --record evals/faith/recorded.json
+        run: uv run python -m evals.faith.run --replay evals/faith/recorded.json
 
   app:
     # The Expo app: a clean `npm ci` (what EAS runs first - a broken peer dependency

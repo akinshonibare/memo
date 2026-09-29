@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal, Text, TextInput, View } from "react-native";
-import { Api, ApiError } from "../api";
+import { Api, ApiError, type Space } from "../api";
 import { confirmDiscard, Pill, SheetHandle, SheetHeader } from "../components";
 import { useKeyboardHeight } from "../keyboard";
 import { useUi } from "../ui";
@@ -12,11 +12,13 @@ import { LockCover } from "../lock";
 export function ComposeSheet({
   api,
   initialText,
+  space = "main",
   onClose,
   onSaved,
 }: {
   api: Api;
   initialText?: string; // from the share sheet: a link or text to annotate
+  space?: Space; // written from the Faith screen: a faith note (ADR 0042)
 
   onClose: () => void;
   onSaved: () => void;
@@ -42,7 +44,7 @@ export function ComposeSheet({
     if (!body || busy) return;
     setBusy(true);
     try {
-      await captureOrQueue(api, { kind: "text", text: body }); // offline: kept, synced later
+      await captureOrQueue(api, { kind: "text", text: body, space }); // offline: kept, synced later
       haptic.done();
       onSaved();
       onClose();
@@ -66,10 +68,14 @@ export function ComposeSheet({
           onClose={close}
           action={<Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!text.trim()} />}
         />
-        <Text style={[ui.h2, styles.title]}>New note</Text>
+        <Text style={[ui.h2, styles.title]}>{space === "faith" ? "New reflection" : "New note"}</Text>
         <TextInput
           style={styles.input}
-          placeholder="What's on your mind?"
+          placeholder={
+            space === "faith"
+              ? "What did you read? What stood out? Name the passage and memo will keep it."
+              : "What's on your mind?"
+          }
           placeholderTextColor={colors.muted}
           value={text}
           onChangeText={setText}

@@ -45,6 +45,7 @@ _VECTOR_SQL = text(
 	SELECT {_COLUMNS}
 	FROM chunks
 	WHERE user_id = :user_id AND superseded_at IS NULL
+		AND (:include_faith OR space = 'main')
 	ORDER BY embedding <=> CAST(:query_vector AS vector)
 	LIMIT :limit
 	"""
@@ -55,6 +56,7 @@ _KEYWORD_SQL = text(
 	SELECT {_COLUMNS}
 	FROM chunks, websearch_to_tsquery('english', :query) AS q
 	WHERE user_id = :user_id AND superseded_at IS NULL AND tsv @@ q
+		AND (:include_faith OR space = 'main')
 	ORDER BY ts_rank_cd(tsv, q) DESC, created_at DESC
 	LIMIT :limit
 	"""
@@ -94,11 +96,14 @@ async def search(
 	k: int = 8,
 	candidates: int = 40,
 	ef_search: int = 100,
+	include_faith: bool = True,
 ) -> RetrievalResult:
 	"""Top-k chunks for `query`, one per capture, fused across both branches.
 
 	`user_id` is bound by the caller from the authenticated principal; it is passed
 	here (not read from any request) and applied in both branches on top of RLS.
+	`include_faith=False` leaves faith notes out (ADR 0042), in both branches, on the
+	chunks table alone.
 	"""
 	query_vector = await embedder.embed_query(query)
 
@@ -113,13 +118,19 @@ async def search(
 				"user_id": user_id,
 				"query_vector": _to_pgvector(query_vector),
 				"limit": candidates,
+				"include_faith": include_faith,
 			},
 		)
 	).all()
 	keyword_rows = (
 		await session.execute(
 			_KEYWORD_SQL,
-			{"user_id": user_id, "query": lexical_query(query), "limit": candidates},
+			{
+				"user_id": user_id,
+				"query": lexical_query(query),
+				"limit": candidates,
+				"include_faith": include_faith,
+			},
 		)
 	).all()
 

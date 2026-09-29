@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import type { ComponentProps, ReactNode } from "react";
+import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -7,6 +7,7 @@ import {
   type GestureResponderEvent,
   Platform,
   Pressable,
+  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -187,6 +188,54 @@ export function SheetHeader({ onClose, action }: { onClose: () => void; action: 
   );
 }
 
+// Rows at the end of a sheet's form for what isn't saving: opening what it came from,
+// answering a prayer, removing it. Part of the form rather than a button bar under it;
+// a hairline between rows, none around a lone one.
+export function SheetActions({ children }: { children: ReactNode }) {
+  const styles = useStyles();
+  const rows = Children.toArray(children).filter(Boolean);
+  if (rows.length === 0) return null;
+  return (
+    <View style={styles.actions}>
+      {rows.map((row, i) => (
+        <Fragment key={i}>
+          {i > 0 && <View style={styles.actionsRule} />}
+          {row}
+        </Fragment>
+      ))}
+    </View>
+  );
+}
+
+export function SheetAction({
+  icon,
+  label,
+  danger,
+  busy,
+  onPress,
+}: {
+  icon: IconName;
+  label: string;
+  danger?: boolean;
+  busy?: boolean;
+  onPress: () => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={busy}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.actionRow, pressed && { opacity: 0.6 }]}
+    >
+      <Ionicons name={icon} size={19} color={danger ? colors.danger : colors.muted} />
+      <Text style={[styles.actionLabel, { color: danger ? colors.danger : colors.text }]}>{label}</Text>
+      {busy && <ActivityIndicator color={colors.muted} />}
+    </Pressable>
+  );
+}
+
 // The "Ask anything" bar that sits at the bottom of the home and detail screens.
 export function AskBar({ onPress }: { onPress: () => void }) {
   const styles = useStyles();
@@ -286,5 +335,9 @@ const useStyles = makeStyles((colors) => ({
   askText: { color: colors.muted, fontSize: 16 },
   handleWrap: { alignItems: "center", paddingTop: 8 },
   sheetHeader: { flexDirection: "row", alignItems: "center", marginTop: 8 },
+  actions: { backgroundColor: colors.surfaceAlt, borderRadius: 16, overflow: "hidden", marginTop: 8 },
+  actionsRule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.hairline, marginLeft: 49 },
+  actionRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 18, paddingVertical: 15 },
+  actionLabel: { flex: 1, fontSize: 16 },
   handle: { width: 40, height: 5, borderRadius: 3, backgroundColor: colors.faint },
 }));

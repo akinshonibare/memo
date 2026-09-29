@@ -13,7 +13,11 @@ export type Capture = {
   attempt_count: number;
   created_at: string;
   duration_ms: number | null;
+  space?: Space; // ADR 0042; absent from an older server
 };
+
+// Where a note lives (ADR 0042): with the rest, or in Faith.
+export type Space = "main" | "faith";
 
 export type Derivation = {
   id: string;
@@ -72,6 +76,7 @@ export type PersonDetail = Person & {
   mentions: Mention[];
   open_todos: Derivation[];
   upcoming_events: Derivation[];
+  prayers?: Prayer[]; // only while Faith is on (ADR 0042)
 };
 
 export type PeopleList = {
@@ -94,7 +99,72 @@ export type ReachOut = {
 // for following the transcript as it plays. Absent from an older server, null for a
 // note transcribed before words were kept.
 export type Word = [number, number, string];
-export type CaptureDetail = Capture & { derivations: Derivation[]; people?: Mention[]; words?: Word[] | null };
+export type CaptureDetail = Capture & {
+  derivations: Derivation[];
+  people?: Mention[];
+  words?: Word[] | null;
+  passages?: Passage[]; // the Bible passages a faith note is about (ADR 0042)
+};
+
+// --- Faith (ADR 0042) ---------------------------------------------------------------
+
+export type Passage = {
+  ref: string; // "Romans 8:28–30"
+  book: string; // USFM: ROM
+  chapter: number;
+  verse: number | null;
+  end_chapter: number;
+  end_verse: number | null;
+};
+
+export type Reading = { index: number; label: string; book: string; chapter: number; end_chapter: number };
+
+export type Plan = {
+  plan: string;
+  title: string; // "Genesis to Revelation"
+  cycle: number; // times through, from 1
+  position: number; // readings marked read this time through
+  total: number;
+  next: Reading | null;
+  last: Reading | null; // what Undo takes back
+  last_read_at: string | null;
+};
+
+export type Prayer = {
+  id: string;
+  title: string;
+  notes: string | null;
+  answer: string | null; // how it was answered
+  person_id: string | null;
+  person_name: string | null;
+  capture_id: string | null;
+  created_at: string;
+  answered_at: string | null;
+};
+
+export type FaithMoment = {
+  kind: "prayer" | "passage";
+  prayer: Prayer | null;
+  on: string; // the day it was prayed, or written about
+  passage: Passage | null;
+  capture_id: string | null;
+  excerpt: string | null;
+};
+
+export type Faith = {
+  enabled: boolean;
+  translation: string;
+  plan: Plan;
+  moment: FaithMoment | null;
+  open: Prayer[];
+  answered: Prayer[];
+};
+
+export type FaithWeek = {
+  read: Reading[];
+  answered: Prayer[];
+  passages: { passage: Passage; capture_id: string | null }[];
+};
 
 export type Citation = {
   chunk_id: string;
@@ -173,6 +243,8 @@ export type Me = {
   auto_accept?: boolean; // keep what extraction finds without asking (ADR 0030)
   created_at: string;
   note_count?: number; // for milestones; absent from an older server
+  faith_enabled?: boolean; // ADR 0042; off by default
+  bible_translation?: string; // what Bible links open in; NIV by default
 };
 
 export type Voice = { id: string; label: string };
@@ -190,6 +262,7 @@ export type Week = {
   still_open_total: number;
   coming_up: Derivation[];
   new_ideas: Derivation[];
+  faith?: FaithWeek | null; // only while Faith is on
 };
 
 export class Api {
@@ -250,7 +323,14 @@ export class Api {
     return this.updateProfile({ timezone });
   }
 
-  updateProfile(patch: { name?: string; voice?: string | null; timezone?: string; auto_accept?: boolean }) {
+  updateProfile(patch: {
+    name?: string;
+    voice?: string | null;
+    timezone?: string;
+    auto_accept?: boolean;
+    faith_enabled?: boolean;
+    bible_translation?: string;
+  }) {
     return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });
   }
 
@@ -295,23 +375,35 @@ export class Api {
 
   // `once` identifies a capture across retries (the server's idempotency key) and
   // carries the time it was actually taken, for one synced later from the outbox.
-  createTextCapture(text: string, once: Once = newOnce()) {
+  // `space` is sent only for a faith note: an ordinary note's request is unchanged.
+  createTextCapture(text: string, once: Once = newOnce(), space: Space = "main") {
     return this.request<Capture>("/v1/captures", {
       method: "POST",
-      body: JSON.stringify({ text, client_token: once.clientToken, captured_at: once.capturedAt }),
+      body: JSON.stringify({
+        text,
+        client_token: once.clientToken,
+        captured_at: once.capturedAt,
+        ...(space === "faith" ? { space } : {}),
+      }),
     });
   }
 
-  createAudioCapture(fileUri: string, mime = "audio/m4a", durationMs?: number, once: Once = newOnce()) {
-    return this.uploadCapture(fileUri, mime, once, durationMs);
+  createAudioCapture(
+    fileUri: string,
+    mime = "audio/m4a",
+    durationMs?: number,
+    once: Once = newOnce(),
+    space: Space = "main",
+  ) {
+    return this.uploadCapture(fileUri, mime, once, durationMs, space);
   }
 
   // A photo (ADR 0024): resized JPEG, uploaded like a recording, described on the server.
-  createImageCapture(fileUri: string, once: Once = newOnce()) {
-    return this.uploadCapture(fileUri, "image/jpeg", once);
+  createImageCapture(fileUri: string, once: Once = newOnce(), space: Space = "main") {
+    return this.uploadCapture(fileUri, "image/jpeg", once, undefined, space);
   }
 
-  private async uploadCapture(fileUri: string, mime: string, once: Once, durationMs?: number) {
+  private async uploadCapture(fileUri: string, mime: string, once: Once, durationMs?: number, space: Space = "main") {
     const presigned = await this.request<{ recording_id: string; upload_url: string }>("/v1/recordings", {
       method: "POST",
       body: JSON.stringify({ mime, duration_ms: durationMs }),
@@ -330,6 +422,7 @@ export class Api {
         recording_id: presigned.recording_id,
         client_token: once.clientToken,
         captured_at: once.capturedAt,
+        ...(space === "faith" ? { space } : {}),
       }),
     });
   }
@@ -351,10 +444,50 @@ export class Api {
     return this.request<Week>(`/v1/review/week?weeks_ago=${weeksAgo}`);
   }
 
-  listCaptures(limit = 50) {
+  listCaptures(limit = 50, space?: Space) {
     return this.request<{ items: Capture[]; next_cursor: string | null }>(
-      `/v1/captures?limit=${limit}`,
+      `/v1/captures?limit=${limit}${space ? `&space=${space}` : ""}`,
     );
+  }
+
+  // Into Faith, or back out (ADR 0042).
+  moveCapture(id: string, space: Space) {
+    return this.request<Capture>(`/v1/captures/${id}/move`, {
+      method: "POST",
+      body: JSON.stringify({ space }),
+    });
+  }
+
+  // --- Faith (ADR 0042) ---------------------------------------------------------
+
+  getFaith() {
+    return this.request<Faith>("/v1/faith");
+  }
+
+  createPrayer(body: { title: string; notes?: string | null; person_id?: string | null }) {
+    return this.request<Prayer>("/v1/faith/prayers", { method: "POST", body: JSON.stringify(body) });
+  }
+
+  updatePrayer(
+    id: string,
+    patch: {
+      title?: string;
+      notes?: string | null;
+      answer?: string | null;
+      person_id?: string | null;
+      answered?: boolean;
+      removed?: true;
+    },
+  ) {
+    return this.request<Prayer>(`/v1/faith/prayers/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  readNext() {
+    return this.request<Plan>("/v1/faith/readings", { method: "POST" });
+  }
+
+  undoReading() {
+    return this.request<Plan>("/v1/faith/readings/last", { method: "DELETE" });
   }
 
   getCapture(id: string) {

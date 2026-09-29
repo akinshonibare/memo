@@ -26,10 +26,17 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from memo.ids import uuid7
-from memo.schemas.derivations import ALL_KINDS, DERIVATION_STATUSES, MENTION
+from memo.schemas.derivations import ALL_KINDS, DERIVATION_STATUSES, PERSON_KINDS
 from memo.status import CaptureStatus
 
 CAPTURE_KINDS = ("text", "audio", "image")
+# Where a note lives (ADR 0042): with the rest, or in Faith. Faith notes are hidden
+# from Home, search, Ask and On this day only while the user has Faith turned on;
+# turning it off brings them back, so nothing is ever lost behind a switch.
+SPACES = ("main", "faith")
+# The translations a Bible link can open in (ADR 0042); the app maps each to a
+# bible.com version.
+BIBLE_TRANSLATIONS = ("NIV", "ESV", "KJV", "NKJV", "NLT", "CSB", "NASB", "MSG")
 JOB_RUN_STATUSES = ("running", "succeeded", "failed")
 
 
@@ -58,7 +65,21 @@ class User(Base):
 	voice: Mapped[str | None] = mapped_column(String(64))
 	# Keep what extraction finds without asking (ADR 0030); stored as 'accepted'.
 	auto_accept: Mapped[bool] = mapped_column(default=False, server_default=false())
+	# Faith (ADR 0042): a space for prayers, a reading plan and faith notes. Off by
+	# default; on the account, not the phone, because the server hides faith notes
+	# from Home only while it is on.
+	faith_enabled: Mapped[bool] = mapped_column(default=False, server_default=false())
+	bible_translation: Mapped[str] = mapped_column(
+		String(8), default="NIV", server_default="NIV"
+	)
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+	__table_args__ = (
+		CheckConstraint(
+			f"bible_translation IN ({_in_list(BIBLE_TRANSLATIONS)})",
+			name="ck_users_bible_translation",
+		),
+	)
 
 
 class Session(Base):
@@ -123,6 +144,7 @@ class Capture(Base):
 	extraction_raw: Mapped[str | None] = mapped_column(Text)
 	attempt_count: Mapped[int] = mapped_column(default=0, server_default="0")
 	client_token: Mapped[str] = mapped_column(String(128))
+	space: Mapped[str] = mapped_column(String(8), default="main", server_default="main")
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 	updated_at: Mapped[dt.datetime] = mapped_column(
 		server_default=func.now(), onupdate=func.now()
@@ -147,6 +169,7 @@ class Capture(Base):
 			f"status IN ({_in_list(tuple(s.value for s in CaptureStatus))})",
 			name="ck_captures_status",
 		),
+		CheckConstraint(f"space IN ({_in_list(SPACES)})", name="ck_captures_space"),
 	)
 
 
@@ -290,8 +313,8 @@ class Derivation(Base):
 			# Really ON DELETE SET NULL (person_id), set in migration 0012.
 		),
 		CheckConstraint(
-			f"person_id IS NULL OR kind = '{MENTION}'",
-			name="ck_derivations_person_only_on_mentions",
+			f"person_id IS NULL OR kind IN ({_in_list(PERSON_KINDS)})",
+			name="ck_derivations_person_kinds",
 		),
 	)
 
@@ -502,9 +525,14 @@ class Chunk(Base):
 	)
 	superseded_at: Mapped[dt.datetime | None]
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+	# The note's space, copied here like user_id (ADR 0042): retrieval filters on this
+	# table alone, so a faith note stays out of Home's search and Ask without a join.
+	# A derivation chunk is always 'main': items from a faith note are still items.
+	space: Mapped[str] = mapped_column(String(8), default="main", server_default="main")
 
 	__table_args__ = (
 		UniqueConstraint("id", "user_id", name="uq_chunks_id_user"),
+		CheckConstraint(f"space IN ({_in_list(SPACES)})", name="ck_chunks_space"),
 		ForeignKeyConstraint(
 			["capture_id", "user_id"],
 			["captures.id", "captures.user_id"],
@@ -531,3 +559,31 @@ Index(
 	Chunk.user_id,
 	postgresql_where=text("superseded_at IS NULL"),
 )
+
+
+class FaithReading(Base):
+	"""A reading from the plan, marked read (ADR 0042). The plan keeps time by position:
+	the next reading is the one after the last one marked read, so a week away is a
+	week paused, never "behind". `cycle` counts times through the plan."""
+
+	__tablename__ = "faith_readings"
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("users.id", ondelete="CASCADE")
+	)
+	plan: Mapped[str] = mapped_column(String(32))
+	cycle: Mapped[int] = mapped_column(default=1, server_default="1")
+	position: Mapped[int]
+	read_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+
+	__table_args__ = (
+		UniqueConstraint(
+			"user_id", "plan", "cycle", "position", name="uq_faith_readings_position"
+		),
+		CheckConstraint("position >= 0", name="ck_faith_readings_position"),
+		CheckConstraint("cycle >= 1", name="ck_faith_readings_cycle"),
+	)
+
+
+Index("ix_faith_readings_user_read", FaithReading.user_id, FaithReading.read_at)
