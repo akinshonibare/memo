@@ -11,6 +11,7 @@ import { Api, ApiError, type Capture } from "../api";
 import { IconCircle, Pill, SheetHandle } from "../components";
 import { formatClock } from "../format";
 import { colors, ui } from "../ui";
+import { haptic } from "../haptics";
 
 // Tap record → this sheet opens already recording. End uploads straight to the
 // bucket and attaches the recording to a capture; close discards.
@@ -74,6 +75,7 @@ export function RecordSheet({
       const uri = recorder.uri;
       if (!uri) throw new Error("No recording was produced.");
       const saved = await api.createAudioCapture(uri, "audio/m4a", durationMs);
+      haptic.done();
       onSaved(saved);
       onClose();
     } catch (e) {

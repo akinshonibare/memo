@@ -4,6 +4,7 @@ import { Api, ApiError, type Capture } from "../api";
 import { IconCircle, Pill, SheetHandle } from "../components";
 import { useKeyboardHeight } from "../keyboard";
 import { colors, ui } from "../ui";
+import { haptic } from "../haptics";
 
 export function ComposeSheet({
   api,
@@ -25,6 +26,7 @@ export function ComposeSheet({
     setBusy(true);
     try {
       const saved = await api.createTextCapture(body);
+      haptic.done();
       onSaved(saved);
       onClose();
     } catch (e) {

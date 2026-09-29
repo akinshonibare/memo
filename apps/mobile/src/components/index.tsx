@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
 import { ActionSheetIOS, ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { colors } from "../ui";
+import { haptic } from "../haptics";
 
 type IconName = ComponentProps<typeof Ionicons>["name"];
 
@@ -105,6 +106,7 @@ export function Avatar({ name, size = 40, onPress }: { name: string | null; size
 
 // Native "…" menu with one destructive action. iOS gets the action sheet.
 export function confirmDelete(title: string, onDelete: () => void) {
+  haptic.warn();
   if (Platform.OS === "ios") {
     ActionSheetIOS.showActionSheetWithOptions(
       { title, options: ["Delete", "Cancel"], destructiveButtonIndex: 0, cancelButtonIndex: 1 },

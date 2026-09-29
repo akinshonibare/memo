@@ -6,6 +6,7 @@ import { IconCircle, Pill, SheetHandle } from "../components";
 import { toIsoDate, toLocalIso } from "../format";
 import { useKeyboardHeight } from "../keyboard";
 import { colors, ui } from "../ui";
+import { haptic } from "../haptics";
 
 type Kind = Derivation["kind"];
 
@@ -67,6 +68,7 @@ export function DerivationSheet({
       if (existing) await api.reviewDerivation(existing.id, { payload: payload() });
       else if (captureId) await api.addDerivation(captureId, kind, payload());
       else await api.createDerivation(kind, payload());
+      haptic.done();
       onSaved();
       onClose();
     } catch (e) {

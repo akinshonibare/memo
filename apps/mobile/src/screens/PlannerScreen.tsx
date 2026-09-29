@@ -7,6 +7,7 @@ import { IconCircle } from "../components";
 import { formatTime, toIsoDate } from "../format";
 import { colors, ui } from "../ui";
 import { DerivationSheet } from "./DerivationSheet";
+import { haptic } from "../haptics";
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 
@@ -112,6 +113,8 @@ export function PlannerScreen({
 
   const toggle = async (d: Derivation) => {
     const completed = !d.completed_at;
+    if (completed) haptic.done();
+    else haptic.pick();
     // Optimistic: the tick lands instantly; a failure puts it back.
     setItems((prev) =>
       prev.map((x) => (x.id === d.id ? { ...x, completed_at: completed ? new Date().toISOString() : null } : x)),
