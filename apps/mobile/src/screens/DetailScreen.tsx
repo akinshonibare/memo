@@ -18,6 +18,7 @@ import { ACTIVE_STATUSES, formatClock, formatDue, formatStamp, formatWhen, headl
 import { playUrl, stopPlayback, usePlayingId } from "../playback";
 import { colors, ui } from "../ui";
 import { DerivationSheet } from "./DerivationSheet";
+import { MentionCard } from "./PeopleParts";
 import { haptic } from "../haptics";
 
 const KINDS: Derivation["kind"][] = ["todo", "event", "idea"];
@@ -52,6 +53,7 @@ export function DetailScreen({
   onAsk,
   onChanged,
   onOpen,
+  onOpenPerson,
 }: {
   api: Api;
   id: string;
@@ -59,6 +61,7 @@ export function DetailScreen({
   onAsk: () => void;
   onChanged: () => void;
   onOpen: (id: string) => void;
+  onOpenPerson: (id: string) => void;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -176,6 +179,11 @@ export function DetailScreen({
       }
     });
 
+  // Who the note is about (ADR 0029): linked people as chips, and "which one?" cards
+  // for a name memo could not settle on its own.
+  const people = capture?.people ?? [];
+  const linked = people.filter((m) => m.person);
+  const asking = people.filter((m) => !m.person);
   const pending = capture?.derivations.filter((d) => d.status === "pending_review") ?? [];
   const settled = capture?.derivations.filter((d) => d.status !== "pending_review") ?? [];
 
@@ -232,6 +240,37 @@ export function DetailScreen({
           </View>
         )}
 
+        {people.length > 0 && (
+          <View style={styles.section}>
+            <Text style={ui.label}>People</Text>
+            <View style={styles.chips}>
+              {linked.map((m) => (
+                <MentionCard
+                  key={m.id}
+                  api={api}
+                  mention={m}
+                  onChanged={() => {
+                    load();
+                    onChanged();
+                  }}
+                  onOpenPerson={onOpenPerson}
+                />
+              ))}
+            </View>
+            {asking.map((m) => (
+              <MentionCard
+                key={m.id}
+                api={api}
+                mention={m}
+                onChanged={() => {
+                  load();
+                  onChanged();
+                }}
+                onOpenPerson={onOpenPerson}
+              />
+            ))}
+          </View>
+        )}
         {pending.length > 0 && (
           <View style={styles.section}>
             <Text style={ui.label}>To review</Text>
@@ -335,10 +374,12 @@ function DerivationCard({
         : null
       : d.status === "user_created"
         ? "added by you"
-        : d.status;
+        : d.status === "accepted"
+          ? "kept automatically"
+          : d.status;
   // A settled card is tapped to edit it; a rejected one is left alone. A card awaiting
   // review gets Edit alongside Confirm and Reject (saving an edit also confirms it).
-  const editable = d.status === "confirmed" || d.status === "user_created";
+  const editable = d.status === "confirmed" || d.status === "user_created" || d.status === "accepted";
   return (
     <Pressable
       onPress={editable ? onEdit : undefined}
@@ -375,6 +416,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.dangerSurface,
   },
   section: { marginTop: 32 },
+  chips: { flexDirection: "row", flexWrap: "wrap", columnGap: 8 },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 20,

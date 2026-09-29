@@ -24,6 +24,7 @@ from tests.fakes import (
 	FakeEmbedder,
 	FakeExtractor,
 	FakeObjectStore,
+	FakePeopleReader,
 	FakeRewriteProvider,
 	FakeTranscriber,
 )
@@ -50,6 +51,7 @@ async def corpus(client: AsyncClient, session: AsyncSession) -> list[uuid.UUID]:
 		object_store=FakeObjectStore(),
 		extractor=FakeExtractor(),
 		embedder=FakeEmbedder(),
+		people=FakePeopleReader(),
 	)
 	ids = []
 	for i, t in enumerate(CAPTURES):
@@ -307,6 +309,7 @@ async def test_rejecting_a_derivation_retires_its_chunk(
 		object_store=FakeObjectStore(),
 		extractor=FakeExtractor(extraction),
 		embedder=FakeEmbedder(),
+		people=FakePeopleReader(),
 	)
 	created = await client.post(
 		"/v1/captures",

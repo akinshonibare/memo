@@ -15,6 +15,8 @@ from memo.routers.captures import get_queue
 from memo.schemas.derivations import (
 	DERIVATION_STATUSES,
 	KINDS,
+	MENTION,
+	UNREVIEWED,
 	DerivationCreate,
 	DerivationOut,
 	DerivationPage,
@@ -42,9 +44,11 @@ async def list_derivations(
 	if kind is not None and kind not in KINDS:
 		raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown kind")
 
+	# Items only. Mentions (ADR 0029) have their own routes, and an app built before
+	# them must not find a "mention" in its Planner.
 	stmt = (
 		select(Derivation)
-		.where(Derivation.user_id == user_id)
+		.where(Derivation.user_id == user_id, Derivation.kind.in_(KINDS))
 		.order_by(Derivation.created_at.desc(), Derivation.id.desc())
 		.limit(limit + 1)
 	)
@@ -119,6 +123,12 @@ async def review_derivation(
 	)
 	if derivation is None:
 		raise HTTPException(status.HTTP_404_NOT_FOUND)
+	if derivation.kind == MENTION:
+		# Who a mention is, and whether it is real, changes people too (pruning,
+		# aliases); that lives in one place.
+		raise HTTPException(
+			status.HTTP_422_UNPROCESSABLE_CONTENT, "review a mention at /v1/mentions"
+		)
 	if body.completed is not None:
 		if derivation.kind != "todo":
 			raise HTTPException(
@@ -133,11 +143,12 @@ async def review_derivation(
 			raise HTTPException(
 				status.HTTP_422_UNPROCESSABLE_CONTENT, validation_detail(exc)
 			) from exc
-	# An edit is a confirmation only of something awaiting review. One the user added
-	# stays `user_created` (the recall signal), one already confirmed stays confirmed.
+	# An edit is a confirmation only of something nobody had looked at (awaiting
+	# review, or auto-accepted: ADR 0030). One the user added stays `user_created`
+	# (the recall signal), one already confirmed stays confirmed.
 	if body.status is not None:
 		derivation.status = body.status
-	elif derivation.status == "pending_review":
+	elif derivation.status in UNREVIEWED:
 		derivation.status = "confirmed"
 	derivation.reviewed_at = dt.datetime.now(dt.UTC)
 	if derivation.status == "rejected":

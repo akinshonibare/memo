@@ -15,15 +15,29 @@ from pydantic import (
 	model_validator,
 )
 
+# The items: what the extractor produces, the Planner shows, and a user can add.
 Kind = Literal["todo", "event", "idea"]
 KINDS: tuple[str, ...] = ("todo", "event", "idea")
-DerivationStatus = Literal["pending_review", "confirmed", "rejected", "user_created"]
+# A person mentioned in a note (ADR 0029). A derivation like the others, but read by
+# the people stage and linked to a `people` row, so it is not an item: the generic
+# derivation routes leave it out, and it is resolved through /v1/mentions.
+MENTION = "mention"
+ALL_KINDS: tuple[str, ...] = (*KINDS, MENTION)
+# pending_review: extracted, waiting for a look. confirmed: a person checked it.
+# rejected: a person said no. user_created: a person added it. accepted: kept without
+# a look, because the user turned on auto-accept (ADR 0030) - never a label for evals.
+DerivationStatus = Literal[
+	"pending_review", "confirmed", "rejected", "user_created", "accepted"
+]
 DERIVATION_STATUSES: tuple[str, ...] = (
 	"pending_review",
 	"confirmed",
 	"rejected",
 	"user_created",
+	"accepted",
 )
+# Extracted and not yet looked at by a person, whether or not it was kept.
+UNREVIEWED: tuple[str, ...] = ("pending_review", "accepted")
 
 
 # A string value that ends in something like `','confidence':1.0` is the model
@@ -31,6 +45,12 @@ DERIVATION_STATUSES: tuple[str, ...] = (
 # check catches it; failing here sends the response through the one-repair loop
 # (ADR 0015) instead of storing the junk.
 _LEAKED_FIELD = re.compile(r"""['"]\s*,\s*['"]?\w+['"]?\s*:""")
+
+
+def no_leaked_field(value: Any) -> Any:
+	if isinstance(value, str) and _LEAKED_FIELD.search(value):
+		raise ValueError("text contains what looks like a leaked JSON field")
+	return value
 
 
 class _Item(BaseModel):
@@ -57,9 +77,7 @@ class _Item(BaseModel):
 	@field_validator("*", mode="after")
 	@classmethod
 	def _no_leaked_fields(cls, value: Any) -> Any:
-		if isinstance(value, str) and _LEAKED_FIELD.search(value):
-			raise ValueError("text contains what looks like a leaked JSON field")
-		return value
+		return no_leaked_field(value)
 
 
 class TodoPayload(_Item):
@@ -140,6 +158,7 @@ class DerivationOut(BaseModel):
 	reviewed_at: dt.datetime | None
 	completed_at: dt.datetime | None
 	created_at: dt.datetime
+	person_id: uuid.UUID | None = None  # mentions only (ADR 0029)
 
 
 class DerivationPage(BaseModel):

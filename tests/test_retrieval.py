@@ -14,7 +14,13 @@ from memo.config import SEED_USER_ID
 from memo.db import bind_user
 from memo.services.pipeline import PipelineContext, process_capture
 from memo.services.retrieval import lexical_query, rrf, search
-from tests.fakes import FakeEmbedder, FakeExtractor, FakeObjectStore, FakeTranscriber
+from tests.fakes import (
+	FakeEmbedder,
+	FakeExtractor,
+	FakeObjectStore,
+	FakePeopleReader,
+	FakeTranscriber,
+)
 
 CAPTURES = [
 	"need to call Tunde about the pricing thing before Thursday",
@@ -41,6 +47,7 @@ async def _ingest(
 		object_store=FakeObjectStore(),
 		extractor=FakeExtractor(),
 		embedder=FakeEmbedder(),
+		people=FakePeopleReader(),
 	)
 	for i, t in enumerate(texts):
 		created = await client.post(
@@ -104,6 +111,7 @@ async def test_rerunning_embed_supersedes_rather_than_deletes(
 		object_store=FakeObjectStore(),
 		extractor=FakeExtractor(),
 		embedder=FakeEmbedder(),
+		people=FakePeopleReader(),
 	)
 	await process_capture(ctx, capture_id, SEED_USER_ID)
 

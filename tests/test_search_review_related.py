@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from memo.config import SEED_USER_ID, Settings, get_settings
 from memo.db import bind_user
 from memo.services.pipeline import PipelineContext, process_capture
-from tests.fakes import FakeEmbedder, FakeExtractor, FakeObjectStore, FakeTranscriber
+from tests.fakes import (
+	FakeEmbedder,
+	FakeExtractor,
+	FakeObjectStore,
+	FakePeopleReader,
+	FakeTranscriber,
+)
 
 NOTES = [
 	"call Tunde about the pricing for the new plan",
@@ -35,6 +41,7 @@ async def _notes(client: AsyncClient, session: AsyncSession) -> list[str]:
 		object_store=FakeObjectStore(),
 		extractor=FakeExtractor(),
 		embedder=FakeEmbedder(),
+		people=FakePeopleReader(),
 	)
 	ids = []
 	for i, body in enumerate(NOTES):

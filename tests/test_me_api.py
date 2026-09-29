@@ -13,7 +13,13 @@ from memo.config import SEED_USER_ID
 from memo.db import bind_user
 from memo.services.pipeline import PipelineContext, process_capture
 from memo.services.retrieval import search
-from tests.fakes import FakeEmbedder, FakeExtractor, FakeObjectStore, FakeTranscriber
+from tests.fakes import (
+	FakeEmbedder,
+	FakeExtractor,
+	FakeObjectStore,
+	FakePeopleReader,
+	FakeTranscriber,
+)
 
 
 @pytest.fixture
@@ -42,6 +48,7 @@ async def _populate(
 		object_store=store,
 		extractor=FakeExtractor(),
 		embedder=FakeEmbedder(),
+		people=FakePeopleReader(),
 	)
 	text_capture = (
 		await client.post(

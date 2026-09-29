@@ -102,6 +102,17 @@ jobs:
           else
             echo "::warning::evals/extraction/recorded.json missing - extraction gate not armed"
           fi
+      - name: people resolution (deterministic; no wrong links)
+        run: uv run python -m evals.people.resolution
+      - name: people reading (recorded outputs)
+        # Recorded like extraction (needs ANTHROPIC_API_KEY):
+        #   uv run python -m evals.people.run --record evals/people/recorded.json
+        run: |
+          if [ -f evals/people/recorded.json ]; then
+            uv run python -m evals.people.run --replay evals/people/recorded.json
+          else
+            echo "::warning::evals/people/recorded.json missing - people reading gate not armed"
+          fi
 
   app:
     # The Expo app: a clean `npm ci` (what EAS runs first - a broken peer dependency

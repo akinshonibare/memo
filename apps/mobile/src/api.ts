@@ -21,14 +21,71 @@ export type Derivation = {
   capture_id: string | null;
   kind: "todo" | "event" | "idea";
   payload: Record<string, unknown> & { title?: string };
-  status: "pending_review" | "confirmed" | "rejected" | "user_created";
+  // accepted: kept without a look because auto-accept is on (ADR 0030).
+  status: "pending_review" | "confirmed" | "rejected" | "user_created" | "accepted";
   extractor_version: string;
   confidence: number | null;
   completed_at: string | null; // todos only: when it was ticked off
   created_at: string;
 };
 
-export type CaptureDetail = Capture & { derivations: Derivation[] };
+// --- people (ADR 0029) ----------------------------------------------------------
+
+export type Contact = "in_person" | "call" | "message" | "unspecified" | "none";
+
+export type PersonRef = { id: string; name: string; note: string | null; last_contact_on: string | null };
+
+// A person in a note. `person` is null while memo waits for you to say who it is;
+// `candidates` are who it could be.
+export type Mention = {
+  id: string;
+  capture_id: string | null;
+  status: Derivation["status"];
+  confidence: number | null;
+  name: string;
+  full_name: string | null;
+  hint: string | null;
+  contact: Contact;
+  occurred_on: string | null;
+  context: string | null;
+  person: PersonRef | null;
+  candidates: PersonRef[];
+  created_at: string;
+  written_at: string | null;
+  excerpt: string | null;
+};
+
+export type Person = {
+  id: string;
+  name: string;
+  aliases: string[];
+  note: string | null;
+  reach_out_every_days: number | null; // null: never remind
+  snoozed_until: string | null;
+  last_contact_on: string | null;
+  mention_count: number;
+  due: boolean;
+  created_at: string;
+};
+
+export type PersonDetail = Person & {
+  mentions: Mention[];
+  open_todos: Derivation[];
+  upcoming_events: Derivation[];
+};
+
+export type PeopleList = { people: Person[]; unresolved: number; unread_notes: number };
+
+export type ReachOut = {
+  person_id: string;
+  name: string;
+  last_contact_on: string;
+  every_days: number;
+  latest: string | null;
+  latest_on: string | null;
+};
+
+export type CaptureDetail = Capture & { derivations: Derivation[]; people?: Mention[] };
 
 export type Citation = {
   chunk_id: string;
@@ -69,6 +126,7 @@ export type MorningView = {
     captured_on: string;
   } | null;
   built_at: string;
+  reach_out?: ReachOut[]; // absent from a server older than ADR 0029
 };
 
 export type Once = { clientToken: string; capturedAt: string };
@@ -93,6 +151,7 @@ export type Me = {
   name: string | null; // what the assistant calls you; null means "you"
   email: string | null; // from Apple, possibly a private relay address
   voice: string | null; // Aura-2 voice for spoken answers; null = default
+  auto_accept?: boolean; // keep what extraction finds without asking (ADR 0030)
   created_at: string;
 };
 
@@ -171,7 +230,7 @@ export class Api {
     return this.updateProfile({ timezone });
   }
 
-  updateProfile(patch: { name?: string; voice?: string | null; timezone?: string }) {
+  updateProfile(patch: { name?: string; voice?: string | null; timezone?: string; auto_accept?: boolean }) {
     return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });
   }
 
@@ -341,6 +400,58 @@ export class Api {
       method: "POST",
       body: JSON.stringify({ kind, payload }),
     });
+  }
+
+  // --- people (ADR 0029) -------------------------------------------------------
+
+  listPeople() {
+    return this.request<PeopleList>("/v1/people");
+  }
+
+  // Who's who: every mention waiting for "which one?".
+  unresolvedMentions() {
+    return this.request<Mention[]>("/v1/people/unresolved");
+  }
+
+  getPerson(id: string) {
+    return this.request<PersonDetail>(`/v1/people/${id}`);
+  }
+
+  updatePerson(
+    id: string,
+    patch: {
+      name?: string;
+      aliases?: string[];
+      note?: string | null;
+      reach_out_every_days?: number | null;
+      snoozed_until?: string | null;
+    },
+  ) {
+    return this.request<Person>(`/v1/people/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  // "Spoke to them": today, unless another day is given.
+  logContact(id: string, occurredOn?: string) {
+    return this.request<Person>(`/v1/people/${id}/contact`, {
+      method: "POST",
+      body: JSON.stringify(occurredOn ? { occurred_on: occurredOn } : {}),
+    });
+  }
+
+  // `id` and `into` are one person: `id`'s notes move to `into`, and `id` is gone.
+  mergePerson(id: string, into: string) {
+    return this.request<PersonDetail>(`/v1/people/${id}/merge`, {
+      method: "POST",
+      body: JSON.stringify({ into }),
+    });
+  }
+
+  // Answer "who is this?": a person, someone new, or confirm / reject as it stands.
+  resolveMention(
+    id: string,
+    answer: { person_id: string } | { new_person: true } | { status: "confirmed" | "rejected" },
+  ) {
+    return this.request<Mention>(`/v1/mentions/${id}`, { method: "PATCH", body: JSON.stringify(answer) });
   }
 
   // --- voice (ADR 0025) ---------------------------------------------------------

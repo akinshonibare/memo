@@ -15,7 +15,15 @@ from sqlalchemy.engine import CursorResult
 from memo.auth import CurrentUser
 from memo.config import Settings, get_settings
 from memo.db import DbSession
-from memo.models import Capture, Conversation, Derivation, Message, Recording, User
+from memo.models import (
+	Capture,
+	Conversation,
+	Derivation,
+	Message,
+	Person,
+	Recording,
+	User,
+)
 from memo.routers.recordings import get_object_store
 from memo.schemas.ask import MessageOut
 from memo.schemas.captures import CaptureOut
@@ -35,6 +43,8 @@ class MeOut(BaseModel):
 	name: str | None = Field(validation_alias="display_name")
 	email: str | None  # from Apple; may be a private relay address
 	voice: str | None
+	# Keep what extraction finds without asking (ADR 0030). Off by default.
+	auto_accept: bool
 	created_at: dt.datetime
 
 
@@ -50,6 +60,7 @@ class MePatch(BaseModel):
 	timezone: str | None = Field(default=None, min_length=1, max_length=64)
 	name: str | None = Field(default=None, max_length=60)
 	voice: str | None = None
+	auto_accept: bool | None = None
 
 	@field_validator("timezone")
 	@classmethod
@@ -81,7 +92,7 @@ class MePatch(BaseModel):
 	@model_validator(mode="after")
 	def _something(self) -> "MePatch":
 		if not self.model_fields_set:
-			raise ValueError("provide timezone, name or voice")
+			raise ValueError("provide timezone, name, voice or auto_accept")
 		return self
 
 
@@ -107,6 +118,15 @@ async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> 
 		user.display_name = body.name or None
 	if "voice" in fields:
 		user.voice = body.voice
+	if "auto_accept" in fields:
+		if body.auto_accept is None:
+			raise HTTPException(
+				status.HTTP_422_UNPROCESSABLE_CONTENT,
+				"auto_accept must be true or false",
+			)
+		# From the next note on. What already waits for review keeps waiting:
+		# turning this on is a choice about the future, not a review of the past.
+		user.auto_accept = body.auto_accept
 	await session.flush()
 	return user
 
@@ -142,14 +162,29 @@ class CaptureExport(CaptureOut):
 	derivations: list[DerivationOut]
 
 
+class PersonExport(BaseModel):
+	model_config = ConfigDict(from_attributes=True)
+
+	id: uuid.UUID
+	name: str
+	aliases: list[str]
+	note: str | None
+	reach_out_every_days: int | None
+	snoozed_until: dt.date | None
+	created_at: dt.datetime
+
+
 class Export(BaseModel):
 	exported_at: dt.datetime
 	user_id: uuid.UUID
 	captures: list[CaptureExport]
-	# Derivations kept after their note was deleted (ADR 0022).
+	# Derivations kept after their note was deleted (ADR 0022), and people contact
+	# you logged by hand (ADR 0029), which never had a note.
 	derivations_without_note: list[DerivationOut]
 	recordings: list[RecordingExport]
 	conversations: list[ConversationExport]
+	# Who your notes are about; each mention (a derivation) carries its person_id.
+	people: list[PersonExport] = []
 
 
 @router.get("/export", response_model=Export)
@@ -228,6 +263,12 @@ async def export_everything(
 			)
 		)
 
+	people = (
+		await session.scalars(
+			select(Person).where(Person.user_id == user_id).order_by(Person.name)
+		)
+	).all()
+
 	return Export(
 		exported_at=dt.datetime.now(dt.UTC),
 		user_id=user_id,
@@ -241,6 +282,7 @@ async def export_everything(
 		derivations_without_note=unattached,
 		recordings=recordings,
 		conversations=conversations,
+		people=[PersonExport.model_validate(p) for p in people],
 	)
 
 
@@ -311,6 +353,7 @@ async def _purge(
 		"conversations",
 		"chunks",
 		"derivations",
+		"people",
 		"captures",
 		"recordings",
 		"morning_views",

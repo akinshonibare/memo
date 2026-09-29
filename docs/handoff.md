@@ -76,6 +76,22 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   WebSocket + Deepgram endpointing, half-duplex). Open: talk-over barge-in needs a native
   voice-processing module; keyterm prompting for names.
 
+- **People** ([ADR 0029](decisions/0029-people-last-contact-and-reach-out.md)): a people
+  stage after extraction reads who each note is about and whether you were in touch; a
+  deterministic resolver links a name when exactly one person fits and otherwise asks
+  "which one?" (note screen, and Who's who on the People screen). Last contact per person,
+  a monthly reach-out rhythm by default (editable, or off), at most three in Today with
+  *Spoke to them* / *Not now*. Migration 0012 (`people`, `derivations.person_id`); a cron
+  reads older notes 40 at a time. Ask is `answer-v2.3`. No new native modules, but the app
+  changes ship with the next EAS build. The reading gate is armed (a live `claude-opus-5`
+  recording, 1.00 on a starter set that is too easy: replace it with real notes).
+  **Open:** Deepgram keyterms from people's names; Ask answering "when did I last see X"
+  from the person rather than retrieval.
+
+- **Keep without asking** ([ADR 0030](decisions/0030-auto-accept-is-not-confirmation.md)):
+  Settings → Review, off by default. When on, new items are kept as `accepted` (not
+  `confirmed`): Ask trusts them, the eval harvester never labels them. Migration 0013.
+
 ## Filed for later
 
 - [#57](https://github.com/akinshonibare/memo/issues/57): the first PITR restore drill.

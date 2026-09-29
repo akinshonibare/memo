@@ -1,0 +1,22 @@
+{"id": "p01", "text": "had lunch with Tunde yesterday, he's just started at Flutterwave", "expected": [{"name": "Tunde", "contact": "in_person", "occurred_on": "2026-09-27"}], "note": "relative date resolves back"}
+{"id": "p02", "text": "called mum on the way home, she's fine, the knee is better", "expected": [{"name": "Mum", "contact": "call", "occurred_on": "2026-09-28"}], "note": "relational name; no date means the capture date"}
+{"id": "p03", "text": "texted Kemi happy birthday", "expected": [{"name": "Kemi", "contact": "message", "occurred_on": "2026-09-28"}]}
+{"id": "p04", "text": "spoke to Dayo about the flat", "expected": [{"name": "Dayo", "contact": "unspecified", "occurred_on": "2026-09-28"}], "note": "in touch, channel unclear"}
+{"id": "p05", "text": "seeing Ada on Friday for dinner", "expected": [{"name": "Ada", "contact": "none"}], "note": "a firm plan is still not contact"}
+{"id": "p06", "text": "need to call Tunde about the pricing thing before Thursday", "expected": [{"name": "Tunde", "contact": "none"}], "note": "an intention to call is not a call"}
+{"id": "p07", "text": "Bola told me Chidi got into Oxford!!", "expected": [{"name": "Bola", "contact": "unspecified", "occurred_on": "2026-09-28"}, {"name": "Chidi", "contact": "none"}], "note": "news about someone, from someone else"}
+{"id": "p08", "text": "reading Paul Graham's essay on taste again, the bit about time is so good", "expected": [], "note": "a public figure is not someone the author knows"}
+{"id": "p09", "text": "note to self, Akin, stop checking email before 9", "expected": [], "note": "the author is never a person in their own notes"}
+{"id": "p10", "text": "the plumber finally came and fixed the boiler", "expected": [], "note": "an unnamed role"}
+{"id": "p11", "text": "caught up with Tunde from work and his wife Funmi after church yesterday", "expected": [{"name": "Tunde", "contact": "in_person", "occurred_on": "2026-09-27"}, {"name": "Funmi", "contact": "in_person", "occurred_on": "2026-09-27"}], "note": "two people, one contact"}
+{"id": "p12", "text": "on Saturday I had a long call with my brother, he's thinking of moving back", "expected": [{"name": "my brother", "contact": "call", "occurred_on": "2026-09-26"}], "note": "named weekday in the past"}
+{"id": "p13", "text": "Emeka emailed me the contract on Thursday, still haven't replied", "expected": [{"name": "Emeka", "contact": "message", "occurred_on": "2026-09-24"}], "note": "they wrote to the author: in touch"}
+{"id": "p14", "text": "thinking about Grandma a lot today, miss her", "expected": [{"name": "Grandma", "contact": "none"}]}
+{"id": "p15", "text": "saw Dr Okafor this morning, results are fine, next check in March", "expected": [{"name": "Dr Okafor", "contact": "in_person", "occurred_on": "2026-09-28"}]}
+{"id": "p16", "text": "Tunde Tunde Tunde, why does he never reply. messaged him twice today", "expected": [{"name": "Tunde", "contact": "message", "occurred_on": "2026-09-28"}], "note": "once per entry however often named"}
+{"id": "p17", "text": "dinner with my parents tonight, need to bring wine", "expected": [], "note": "a group, and a plan"}
+{"id": "p18", "text": "FaceTimed Ada and Kemi yesterday, both doing well", "expected": [{"name": "Ada", "contact": "call", "occurred_on": "2026-09-27"}, {"name": "Kemi", "contact": "call", "occurred_on": "2026-09-27"}]}
+{"id": "p19", "text": "Tobi's wedding is in three weeks, need to sort a gift", "expected": [{"name": "Tobi", "contact": "none"}]}
+{"id": "p20", "text": "went for a run, 5k in 27 minutes, knees ok", "expected": []}
+{"id": "p21", "text": "bumped into Sola at the shops, she looks well", "expected": [{"name": "Sola", "contact": "in_person", "occurred_on": "2026-09-28"}]}
+{"id": "p22", "text": "Ngozi and I went hiking last Saturday, need to do that more", "expected": [{"name": "Ngozi", "contact": "in_person", "occurred_on": "2026-09-26"}]}

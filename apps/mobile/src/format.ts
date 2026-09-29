@@ -50,6 +50,52 @@ export function formatDay(isoDate: string, withYear = false): string {
   });
 }
 
+// How long ago a calendar date was, in words: "today", "yesterday", "5 days ago",
+// "3 weeks ago", "2 months ago", "over a year ago".
+export function formatAgo(isoDate: string): string {
+  const then = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(then.getTime())) return isoDate;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((today.getTime() - then.getTime()) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 14) return `${days} days ago`;
+  if (days < 60) return `${Math.round(days / 7)} weeks ago`;
+  if (days < 365) return `${Math.round(days / 30)} months ago`;
+  return "over a year ago";
+}
+
+// A reach-out rhythm in words: 30 -> "every month".
+export function formatRhythm(days: number | null): string {
+  if (days == null) return "never";
+  const named: Record<number, string> = {
+    7: "every week",
+    14: "every 2 weeks",
+    30: "every month",
+    60: "every 2 months",
+    90: "every 3 months",
+    180: "every 6 months",
+  };
+  return named[days] ?? `every ${days} days`;
+}
+
+// What kind of contact a mention records, as a short word for a timeline.
+export function contactWord(contact: string): string {
+  switch (contact) {
+    case "in_person":
+      return "Saw them";
+    case "call":
+      return "Called";
+    case "message":
+      return "Messaged";
+    case "unspecified":
+      return "In touch";
+    default:
+      return "Mentioned";
+  }
+}
+
 const pad = (n: number) => String(Math.abs(n)).padStart(2, "0");
 
 // A calendar date for the API, from the device's local day: "2026-10-06".

@@ -81,6 +81,13 @@ only way to find that out is to ask when Akin isn't braced for it.
 36. Why is your observability deliberately thin, and what is doing that job instead?
 37. What breaks first at 10× and what do you do about it?
 
+## Entity resolution (ADR 0029)
+
+38. Two notes say "Tunde". How does memo decide whether they're the same person, and
+    which mistake is it built to make instead of the other?
+39. "Last contacted" is computed on every request instead of stored on the person. Why?
+    And why does resolving a new name need a lock when nothing else in the pipeline does?
+
 ---
 
 ## Quiz log

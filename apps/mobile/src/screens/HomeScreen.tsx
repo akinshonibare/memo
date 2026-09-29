@@ -15,7 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type Capture } from "../api";
 import { AskBar, Avatar, IconCircle, confirmDelete } from "../components";
-import { ACTIVE_STATUSES, formatClock, formatStamp, headline, statusLabel } from "../format";
+import { ACTIVE_STATUSES, formatClock, formatStamp, headline, statusLabel, toIsoDate } from "../format";
 import { pickPhoto } from "../photo";
 import { playUrl, stopPlayback, usePlayingId } from "../playback";
 import { colors, ui } from "../ui";
@@ -25,6 +25,14 @@ import { haptic } from "../haptics";
 import { captureOrQueue } from "../outbox";
 
 const POLL_MS = 3000;
+// "Not now" on a reach-out suggestion hides it for a week (PATCH snoozed_until).
+const SNOOZE_DAYS = 7;
+
+function inDays(n: number): Date {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d;
+}
 
 export function HomeScreen({
   api,
@@ -37,12 +45,18 @@ export function HomeScreen({
   onCompose,
   onSettings,
   name,
+  onPeople,
+  onOpenPerson,
+  onChanged,
 }: {
   api: Api;
   refreshKey: number;
   onOpen: (id: string) => void;
   onPlanner: () => void;
   onReview: () => void;
+  onPeople: () => void;
+  onOpenPerson: (id: string) => void;
+  onChanged: () => void;
   onAsk: () => void;
   onRecord: () => void;
   onCompose: () => void;
@@ -172,6 +186,7 @@ export function HomeScreen({
       <View style={[styles.topBar, ui.pad]}>
         <Avatar name={name} size={44} onPress={onSettings} />
         <View style={{ flex: 1 }} />
+        <IconCircle name="people-outline" onPress={onPeople} />
         <IconCircle name="reader-outline" onPress={onReview} />
         <IconCircle name="calendar-outline" onPress={onPlanner} />
       </View>
@@ -216,7 +231,21 @@ export function HomeScreen({
           q ? null : (
             <>
               <OutboxSection />
-              {morning && <TodaySection view={morning} onOpen={onOpen} />}
+              {morning && (
+                <TodaySection
+                  view={morning}
+                  onOpen={onOpen}
+                  onOpenPerson={onOpenPerson}
+                  onSpoke={async (id) => {
+                    await api.logContact(id);
+                    onChanged();
+                  }}
+                  onNotNow={async (id) => {
+                    await api.updatePerson(id, { snoozed_until: toIsoDate(inDays(SNOOZE_DAYS)) });
+                    onChanged();
+                  }}
+                />
+              )}
             </>
           )
         }

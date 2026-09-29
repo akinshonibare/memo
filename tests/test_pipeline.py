@@ -18,6 +18,7 @@ from tests.fakes import (
 	FakeEmbedder,
 	FakeExtractor,
 	FakeObjectStore,
+	FakePeopleReader,
 	FakeTranscriber,
 	fake_llm_call,
 )
@@ -53,6 +54,7 @@ def _ctx(
 		object_store=store,
 		extractor=extractor or FakeExtractor(),
 		embedder=embedder or FakeEmbedder(),
+		people=FakePeopleReader(),
 		max_attempts=max_attempts,
 	)
 
@@ -157,6 +159,7 @@ async def test_audio_capture_becomes_text_and_ready(
 	assert await _runs(admin_engine, capture_id) == [
 		("transcribe", "succeeded", 1),
 		("extract", "succeeded", 1),
+		("people", "succeeded", 1),
 		("embed", "succeeded", 1),
 	]
 
@@ -176,7 +179,7 @@ async def test_running_twice_transcribes_and_extracts_once(
 
 	assert transcriber.calls == 1
 	assert extractor.calls == 1
-	assert len(await _runs(admin_engine, capture_id)) == 3
+	assert len(await _runs(admin_engine, capture_id)) == 4
 
 
 async def test_retryable_failure_schedules_a_retry_and_keeps_the_stage(
@@ -286,6 +289,7 @@ async def test_text_capture_never_calls_the_transcriber(
 	assert transcriber.calls == 0
 	assert [r[0] for r in await _runs(admin_engine, capture_id)] == [
 		"extract",
+		"people",
 		"embed",
 	]
 
@@ -341,13 +345,14 @@ async def test_extraction_writes_derivations_and_llm_calls(
 			await conn.execute(
 				text(
 					"SELECT stage, model, cost_usd FROM llm_calls "
-					"WHERE capture_id = :id"
+					"WHERE capture_id = :id ORDER BY created_at, id"
 				),
 				{"id": capture_id},
 			)
 		).all()
-	assert len(calls) == 1
-	assert calls[0][0] == "extract" and calls[0][1] == "claude-opus-5"
+	# One call each for extraction and people (ADR 0029): cost is per stage.
+	assert [c[0] for c in calls] == ["extract", "people"]
+	assert calls[0][1] == "claude-opus-5"
 	assert float(calls[0][2]) == pytest.approx(0.0035)
 	shown = (await client.get(f"/v1/captures/{capture_id}")).json()
 	assert [d["kind"] for d in shown["derivations"]] == ["todo", "idea"]

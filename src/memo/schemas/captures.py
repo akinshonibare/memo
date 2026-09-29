@@ -4,6 +4,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from memo.schemas.derivations import DerivationOut
+from memo.schemas.people import MentionOut
 
 
 class CaptureCreate(BaseModel):
@@ -65,7 +66,10 @@ class AudioOut(BaseModel):
 
 
 class CaptureDetail(CaptureOut):
-	derivations: list[DerivationOut]
+	derivations: list[DerivationOut]  # the items: todos, events, ideas
+	# Who the note is about (ADR 0029). A separate field so an app built before
+	# people never renders a mention as an item.
+	people: list[MentionOut] = []
 
 
 class CapturePage(BaseModel):

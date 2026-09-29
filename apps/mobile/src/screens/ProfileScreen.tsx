@@ -13,6 +13,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -23,7 +24,17 @@ import { type Config, saveBaseUrl } from "../config";
 import { colors, fonts, ui } from "../ui";
 import { SpeechQueue } from "../voice";
 
-type Busy = "name" | "voice" | "zone" | "export" | "wipe" | "signout" | "everywhere" | "account" | "server";
+type Busy =
+  | "name"
+  | "voice"
+  | "zone"
+  | "accept"
+  | "export"
+  | "wipe"
+  | "signout"
+  | "everywhere"
+  | "account"
+  | "server";
 
 // You first, then how the assistant treats you, then your data, then the account.
 // Plumbing (the API address) is not a setting a person has: it is folded into a
@@ -308,6 +319,20 @@ export function ProfileSheet({
                 footer="Start a voice note from the Action Button, or by asking Siri, without opening memo first."
               >
                 <Row icon="flash-outline" label="Siri & Action Button" onPress={showShortcutHelp} chevron />
+              </Group>
+
+              <Group
+                title="Review"
+                footer="On: new todos, events and ideas are kept as soon as memo finds them, and you can still edit or remove any of them. A name that could be two people is still asked about. Off: each one waits for a tap."
+              >
+                <Row icon="checkmark-done-outline" label="Keep without asking" busy={busy === "accept"}>
+                  <Switch
+                    value={!!me?.auto_accept}
+                    disabled={!me}
+                    onValueChange={(on) => void saveProfile("accept", { auto_accept: on })}
+                    trackColor={{ true: colors.forest }}
+                  />
+                </Row>
               </Group>
 
               <Group title="Preferences" footer="Your morning view is built at 04:00 in this timezone.">

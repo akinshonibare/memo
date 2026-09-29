@@ -20,6 +20,7 @@ from tests.fakes import (
 	FakeEmbedder,
 	FakeExtractor,
 	FakeObjectStore,
+	FakePeopleReader,
 	FakeTranscriber,
 )
 
@@ -48,6 +49,7 @@ async def _processed(
 		object_store=FakeObjectStore(),
 		extractor=FakeExtractor(extraction),
 		embedder=FakeEmbedder(),
+		people=FakePeopleReader(),
 	)
 	created = await client.post(
 		"/v1/captures", json={"text": body, "client_token": token}

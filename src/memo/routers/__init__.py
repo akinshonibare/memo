@@ -8,6 +8,7 @@ from memo.routers import (
 	me,
 	messages,
 	morning,
+	people,
 	recordings,
 	review,
 	search,
@@ -30,3 +31,5 @@ v1.include_router(me.router)
 v1.include_router(voice.router)
 v1.include_router(search.router)
 v1.include_router(review.router)
+v1.include_router(people.router)
+v1.include_router(people.mentions_router)

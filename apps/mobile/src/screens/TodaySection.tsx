@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
-import type { Api, MorningView } from "../api";
-import { formatDay, formatTime } from "../format";
+import type { Api, MorningView, ReachOut } from "../api";
+import { formatAgo, formatDay, formatTime } from "../format";
+import { haptic } from "../haptics";
 import { colors, ui } from "../ui";
 import { publishToday, type TodayProps } from "../widgets";
 
@@ -47,14 +48,42 @@ export function useMorning(api: Api, refreshKey: number): MorningView | null {
   return view;
 }
 
-// Today's events and todos, then one resurfaced idea. No overdue labels and no counts,
-// matching the server: a todo whose day has passed is simply still on the list.
-export function TodaySection({ view, onOpen }: { view: MorningView; onOpen: (captureId: string) => void }) {
+// Today's events and todos, one resurfaced idea, then at most three people it may be
+// time to get in touch with (ADR 0029). No overdue labels and no counts, matching the
+// server: a todo whose day has passed is simply still on the list, and a person is a
+// suggestion with a reason ("last time: he'd just started the new job"), not a debt.
+export function TodaySection({
+  view,
+  onOpen,
+  onOpenPerson,
+  onSpoke,
+  onNotNow,
+}: {
+  view: MorningView;
+  onOpen: (captureId: string) => void;
+  onOpenPerson: (personId: string) => void;
+  onSpoke: (personId: string) => Promise<void>;
+  onNotNow: (personId: string) => Promise<void>;
+}) {
+  // Gone at once when acted on; the refetch that follows agrees.
+  const [done, setDone] = useState<Set<string>>(new Set());
   // An item whose note was deleted (ADR 0022) has nothing to open.
   const open = (captureId: string | null) => (captureId ? () => onOpen(captureId) : undefined);
   const idea = view.resurfaced_idea;
-  const empty = view.events.length === 0 && view.todos.length === 0 && !idea;
+  const people = (view.reach_out ?? []).filter((r) => !done.has(r.person_id));
+  const empty = view.events.length === 0 && view.todos.length === 0 && !idea && people.length === 0;
   if (empty) return null;
+
+  const act = (r: ReachOut, action: (id: string) => Promise<void>) => {
+    setDone((prev) => new Set(prev).add(r.person_id));
+    action(r.person_id).catch(() =>
+      setDone((prev) => {
+        const next = new Set(prev);
+        next.delete(r.person_id);
+        return next;
+      }),
+    );
+  };
 
   return (
     <View style={styles.wrap}>
@@ -95,6 +124,45 @@ export function TodaySection({ view, onOpen }: { view: MorningView; onOpen: (cap
             </Text>
           ) : null}
         </Pressable>
+      )}
+      {people.length > 0 && (
+        <View style={[styles.card, styles.people]}>
+          <Text style={ui.meta}>Maybe get in touch</Text>
+          {people.map((r) => (
+            <View key={r.person_id} style={styles.person}>
+              <Pressable onPress={() => onOpenPerson(r.person_id)} style={({ pressed }) => pressed && styles.pressed}>
+                <Text style={ui.rowTitle}>{r.name}</Text>
+                <Text style={ui.meta}>In touch {formatAgo(r.last_contact_on)}</Text>
+                {r.latest ? (
+                  <Text style={ui.bodyMuted} numberOfLines={2}>
+                    Last time: {r.latest}
+                  </Text>
+                ) : null}
+              </Pressable>
+              <View style={styles.personActions}>
+                <Pressable
+                  onPress={() => {
+                    haptic.done();
+                    act(r, onSpoke);
+                  }}
+                  style={({ pressed }) => [styles.pill, styles.pillLight, pressed && styles.pressed]}
+                >
+                  <Ionicons name="checkmark" size={16} color={colors.bg} />
+                  <Text style={[styles.pillText, { color: colors.bg }]}>Spoke to them</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    haptic.tap();
+                    act(r, onNotNow);
+                  }}
+                  style={({ pressed }) => [styles.pill, pressed && styles.pressed]}
+                >
+                  <Text style={styles.pillText}>Not now</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </View>
       )}
     </View>
   );
@@ -140,4 +208,18 @@ const styles = StyleSheet.create({
   icon: { marginRight: 12, marginTop: 2 },
   itemTitle: { color: colors.text, fontSize: 16, fontWeight: "500" },
   pressed: { opacity: 0.6 },
+  people: { paddingVertical: 16, gap: 2 },
+  person: { paddingTop: 10, gap: 2 },
+  personActions: { flexDirection: "row", gap: 8, marginTop: 10 },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    height: 34,
+  },
+  pillLight: { backgroundColor: colors.text },
+  pillText: { color: colors.text, fontSize: 14, fontWeight: "600" },
 });

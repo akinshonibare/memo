@@ -113,3 +113,18 @@ when memo became multi-user: it didn't.
 - *Auth:* still out of V1 as a *product* feature, but the API now has a public URL, so V1
   ships behind a static bearer token per [ADR 0018](decisions/0018-static-bearer-token-for-v1.md).
   That is gating, not identity; real auth remains a V2 item.
+
+**2026-09-28 — the relationship layer starts early, and its reminders are cadence-based.**
+Per [ADR 0029](decisions/0029-people-last-contact-and-reach-out.md), people arrive ahead
+of V5: a `people` table (the exception ADR 0008 already names), `mention` derivations, a
+per-person last-contact date, and "who is this?" when a name could be more than one
+person. Two lines above are amended on purpose, not by drift:
+- *"state-based nudges (not cadence-based)"*: Akin chose a default monthly reach-out
+  rhythm, editable per person. It stays inside "no guilt mechanics" by construction: the
+  clock starts only at real contact (someone merely mentioned is never suggested), Today
+  shows at most three, each with the last thing a note said about them, nothing is
+  counted, and "not now" is one tap.
+- *Entity resolution (V4)* is started for people only, with the simplest policy that is
+  safe: link on exactly one fit, otherwise ask. Reconciliation of ideas stays V4.
+Push notifications remain out (ADR 0023).
+
