@@ -43,6 +43,8 @@ BAD_START = 4400
 UNAVAILABLE = 4503
 
 MAX_QUESTION_BYTES = 5 * 1024 * 1024  # about five minutes of AAC; a question is seconds
+# What a live stream is for, so the cost log can tell dictation (ADR 0051) from Ask.
+PURPOSES = frozenset({"ask", "note"})
 
 
 def get_transcriber(request: Request) -> Transcriber:
@@ -131,8 +133,10 @@ async def live(websocket: WebSocket) -> None:
 	"""Step 2 (ADR 0025): the phone streams PCM, Deepgram decides when a turn ends.
 
 	First message from the app: {"type": "start", "sample_rate": N} - the phone's real
-	rate is only known once its mic is running. Then binary PCM16 frames, and
-	{"type": "stop"} to end. Down come partial / final / speech_started events."""
+	rate is only known once its mic is running - and "purpose": "note" when it shows
+	the words of a voice note being recorded (ADR 0051) rather than asking. Then binary
+	PCM16 frames, and {"type": "stop"} to end. Down come partial / final /
+	speech_started events."""
 	# Accept before refusing: a socket closed before accept() fails its handshake with
 	# a bare HTTP 403, and the app could not tell "sign in again" from "try later".
 	await websocket.accept()
@@ -154,7 +158,12 @@ async def live(websocket: WebSocket) -> None:
 	try:
 		start = json.loads(await websocket.receive_text())
 		sample_rate = int(start.get("sample_rate", 0))
-		if start.get("type") != "start" or not 8000 <= sample_rate <= 48000:
+		purpose = start.get("purpose", "ask")
+		if (
+			start.get("type") != "start"
+			or not 8000 <= sample_rate <= 48000
+			or purpose not in PURPOSES
+		):
 			raise ValueError(start)
 	except (ValueError, TypeError, WebSocketDisconnect):
 		await websocket.close(code=BAD_START)
@@ -183,6 +192,7 @@ async def live(websocket: WebSocket) -> None:
 		log.info(
 			"voice.live_closed",
 			user_id=str(user_id),
+			purpose=purpose,
 			model=transcriber.model,
 			audio_seconds=round(seconds, 1),
 			cost_usd=str(minute_cost(seconds)),

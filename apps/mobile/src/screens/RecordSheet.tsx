@@ -6,7 +6,7 @@ import {
   useAudioRecorderState,
 } from "expo-audio";
 import { useEffect, useRef, useState } from "react";
-import { Modal, Text, View } from "react-native";
+import { AppState, Modal, ScrollView, Text, View } from "react-native";
 import { Api, ApiError, type Space } from "../api";
 import { confirmDiscard, IconCircle, Pill, SheetHandle } from "../components";
 import { formatClock } from "../format";
@@ -22,6 +22,7 @@ import { makeStyles } from "../theme";
 import { haptic } from "../haptics";
 import { captureOrQueue } from "../outbox";
 import { LockCover } from "../lock";
+import { type LiveWordsStatus, useLiveWords } from "../liveWords";
 
 // Metering on: the orb follows your voice (ADR 0032).
 const OPTIONS = { ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true };
@@ -31,7 +32,7 @@ const DROP_MS = 480;
 // Tap record → this sheet opens already recording. End uploads straight to the
 // bucket and attaches the recording to a capture; close discards. It keeps recording
 // with the phone locked or another app open (ADR 0038), shown on the Lock Screen and
-// in the Dynamic Island.
+// in the Dynamic Island. While it's open, your words appear as you say them (ADR 0051).
 export function RecordSheet({
   api,
   space = "main",
@@ -55,6 +56,19 @@ export function RecordSheet({
   // What the Live Activity's clock counts from: moved on by each pause, so it shows
   // recorded time rather than time since the sheet opened.
   const clock = useRef<RecordingProps>({ startedAtMs: 0, pausedAtMs: null });
+  // What you're saying, as you say it (ADR 0051): only while recording with the app
+  // open. Paused, in the background or saving, nothing is streamed.
+  const transcript = useLiveWords({ baseUrl: api.baseUrl, token: api.token });
+  const [foreground, setForeground] = useState(AppState.currentState === "active");
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (s) => setForeground(s === "active"));
+    return () => sub.remove();
+  }, []);
+  const { start: listen, stop: stopListening } = transcript;
+  useEffect(() => {
+    if (phase === "recording" && foreground) void listen();
+    else stopListening();
+  }, [phase, foreground, listen, stopListening]);
 
   useEffect(() => {
     if (started.current) return;
@@ -98,6 +112,7 @@ export function RecordSheet({
   const togglePause = () => {
     if (phase === "recording") {
       heard.current = false;
+      stopListening();
       recorder.pause();
       setPhase("paused");
       clock.current = { ...clock.current, pausedAtMs: Date.now() };
@@ -113,6 +128,7 @@ export function RecordSheet({
   };
 
   const discard = async () => {
+    stopListening();
     try {
       if (phase === "recording" || phase === "paused") await recorder.stop();
     } catch {
@@ -126,6 +142,7 @@ export function RecordSheet({
   const end = async () => {
     if (phase !== "recording" && phase !== "paused") return;
     setPhase("saving");
+    stopListening();
     try {
       const durationMs = state.durationMillis;
       await recorder.stop();
@@ -184,6 +201,7 @@ export function RecordSheet({
                 : "Paused."}
         </Text>
         {error && <Text style={[ui.danger, { marginTop: 16 }]}>{error}</Text>}
+        <LiveTranscript words={transcript.words} partial={transcript.partial} status={transcript.status} />
         <View style={styles.stage}>
           <VoiceOrb
             level={levelFromDb(state.metering)}
@@ -208,7 +226,33 @@ export function RecordSheet({
   );
 }
 
+// The words so far, newest at the bottom. One colour: in unbroken speech the server
+// holds everything as "being said" until a pause, so a lighter partial greys it all.
+function LiveTranscript({ words, partial, status }: { words: string; partial: string; status: LiveWordsStatus }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const scroll = useRef<ScrollView>(null);
+  if (!words && !partial) {
+    return status === "unavailable" ? (
+      <Text style={[ui.meta, styles.transcriptNote]}>{"Live words aren't available right now. The recording is fine."}</Text>
+    ) : null;
+  }
+  return (
+    <ScrollView
+      ref={scroll}
+      style={styles.transcript}
+      onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
+      accessibilityLabel="What you've said so far"
+    >
+      <Text style={styles.words}>{[words, partial].filter(Boolean).join(" ")}</Text>
+    </ScrollView>
+  );
+}
+
 const useStyles = makeStyles((colors) => ({
+  transcript: { maxHeight: 190, marginTop: 18, flexGrow: 0 },
+  transcriptNote: { marginTop: 18 },
+  words: { color: colors.text, fontSize: 18, lineHeight: 26 },
   sheet: { flex: 1, backgroundColor: colors.surface, paddingHorizontal: 24, paddingBottom: 40 },
   top: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   title: { marginTop: 12, marginBottom: 6 },

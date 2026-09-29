@@ -6,7 +6,8 @@ builds that corpus - linked and unresolved people, auto-accepted items, a note w
 words, a voice note with word timings, a note from this day last year, a deleted note
 whose items and mention outlive it, a contact with no note, Faith turned on with a
 faith note, its passages, a prayer for someone who is later merged, and a reading, and
-Habits turned on with activities, a tracked habit, a logged day and a removed one, a
+Habits turned on with activities, a tracked habit, a logged day and a removed one,
+squats with weights and runs from Apple Health reaching milestones, a
 morning push time with a phone and a sent (voted on), a skipped and a failed push - and
 then calls every GET route in the OpenAPI spec (so a route added later is swept too)
 and the people write routes. Nothing may answer 5xx, and no answer stream may crash.
@@ -34,7 +35,7 @@ from memo.schemas.derivations import (
 	IdeaPayload,
 	TodoPayload,
 )
-from memo.schemas.habits import ActivityFound, HabitsExtraction
+from memo.schemas.habits import ActivityFound, AmountFound, HabitsExtraction
 from memo.schemas.people import MentionPayload, PeopleExtraction
 from memo.services.pipeline import PipelineContext, process_capture
 from tests.fakes import (
@@ -227,6 +228,52 @@ async def test_every_route_survives_every_kind_of_row(
 		f"/v1/habits/{habits[0]}/days/{TODAY - dt.timedelta(days=2)}"
 	)
 	assert removed.status_code == 200, removed.text
+	# Milestones (ADR 0050): squats with weights in notes, and runs from Apple Health,
+	# one a type memo leaves alone, under a tracked running habit.
+	for back, kg in ((9, 80), (7, 85), (5, 90), (3, 100)):
+		await corpus.note(
+			f"squats {kg}kg",
+			activities=[
+				ActivityFound(
+					key="gym",
+					label="squats",
+					occurred_on=TODAY - dt.timedelta(days=back),
+					amounts=[
+						AmountFound(measure="weight", value=kg, unit="kg", lift="squat")
+					],
+				)
+			],
+		)
+	now = dt.datetime.now(dt.UTC)
+	workouts = [
+		{
+			"id": f"RUN-{km}",
+			"activity_type": kind,
+			"start": (now - dt.timedelta(days=back)).isoformat(),
+			"end": (now - dt.timedelta(days=back, minutes=-40)).isoformat(),
+			"duration_s": 2400,
+			"distance_m": km * 1000,
+		}
+		for back, km, kind in (
+			(12, 3, 37),
+			(8, 5, 37),
+			(4, 6, 37),
+			(1, 10, 37),
+			(2, 1, 21),
+		)
+	]
+	synced = await client.put(
+		"/v1/workouts",
+		json={
+			"since": (now - dt.timedelta(days=30)).isoformat(),
+			"until": now.isoformat(),
+			"workouts": workouts,
+		},
+	)
+	assert synced.status_code == 200, synced.text
+	running = await client.post("/v1/habits", json={"name": "Running"})
+	assert running.status_code == 201, running.text
+	habits.append(running.json()["id"])
 	# The first note goes; its items and its mention stay (ADR 0022).
 	assert (await client.delete(f"/v1/captures/{doomed}")).status_code == 204
 

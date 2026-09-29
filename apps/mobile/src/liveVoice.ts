@@ -14,6 +14,22 @@ import { haptic } from "./haptics";
 
 export type LiveState = "off" | "connecting" | "listening" | "answering";
 
+// The live transcription socket (ADR 0025), shared with the voice-note transcript
+// (ADR 0051). React Native's WebSocket takes headers as a third argument; the DOM
+// typings don't know that. The token stays in a header, never in the URL.
+export function openLiveSocket(baseUrl: string, token: string): WebSocket {
+  const Socket = WebSocket as unknown as new (
+    url: string,
+    protocols: string[] | undefined,
+    options: { headers: Record<string, string> },
+  ) => WebSocket;
+  const ws = new Socket(`${baseUrl.replace(/^http/, "ws")}/v1/voice/live`, undefined, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  ws.binaryType = "arraybuffer";
+  return ws;
+}
+
 const CLOSE_REASONS: Record<number, string> = {
   4401: "Your session expired. Sign in again.",
   4429: "Too many voice requests just now. Try again in a minute.",
@@ -88,16 +104,7 @@ export function useLiveVoice({
       setState("off");
       return;
     }
-    const url = `${baseUrl.replace(/^http/, "ws")}/v1/voice/live`;
-    // React Native's WebSocket takes headers as a third argument; the DOM typings
-    // don't know that. The token stays in a header, never in the URL.
-    const Socket = WebSocket as unknown as new (
-      url: string,
-      protocols: string[] | undefined,
-      options: { headers: Record<string, string> },
-    ) => WebSocket;
-    const ws = new Socket(url, undefined, { headers: { Authorization: `Bearer ${token}` } });
-    ws.binaryType = "arraybuffer";
+    const ws = openLiveSocket(baseUrl, token);
     socket.current = ws;
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: "start", sample_rate: stream.sampleRate || 16000 }));

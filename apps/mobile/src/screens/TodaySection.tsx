@@ -70,6 +70,7 @@ export function TodaySection({
   onDismissHabit,
   onLogHabit,
   onOpenHabits,
+  onOpenHabit,
 }: {
   view: MorningView;
   onOpen: (captureId: string) => void;
@@ -81,6 +82,7 @@ export function TodaySection({
   onDismissHabit: (key: string) => Promise<void>;
   onLogHabit: (habitId: string) => Promise<void>;
   onOpenHabits: () => void;
+  onOpenHabit?: (habitId: string) => void;
 }) {
   const ui = useUi();
   const styles = useStyles();
@@ -112,8 +114,15 @@ export function TodaySection({
   const lookedBack = view.on_this_day ?? null;
   const people = (view.reach_out ?? []).filter((r) => !done.has(r.person_id));
   const habit = view.habit && view.habit.key !== habitDone ? view.habit : null;
+  const milestone = view.milestone ?? null;
   const empty =
-    events.length === 0 && todos.length === 0 && !idea && !lookedBack && people.length === 0 && !habit;
+    events.length === 0 &&
+    todos.length === 0 &&
+    !idea &&
+    !lookedBack &&
+    people.length === 0 &&
+    !habit &&
+    !milestone;
   if (empty) return null;
 
   const act = (r: ReachOut, action: (id: string) => Promise<void>) => {
@@ -209,6 +218,26 @@ export function TodaySection({
         </Pressable>
       )}
       {lookedBack && <LookBack note={lookedBack} today={view.local_date} onOpen={onOpen} />}
+      {milestone && (
+        // Something a habit reached in the last couple of days (ADR 0050). Said once,
+        // plainly: a fact about what you did, not a badge.
+        <Pressable
+          onPress={() => (onOpenHabit ? onOpenHabit(milestone.habit_id) : onOpenHabits())}
+          style={({ pressed }) => [styles.card, styles.people, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel={`${milestone.name}: ${milestone.title}`}
+        >
+          <View style={styles.milestoneHead}>
+            <Ionicons name="flag-outline" size={14} color={colors.muted} />
+            <Text style={ui.meta}>{milestone.name}</Text>
+          </View>
+          <Text style={ui.rowTitle}>{milestone.title}</Text>
+          <Text style={ui.bodyMuted}>
+            {milestone.kind === "days" ? "" : `${milestone.detail}, `}
+            {formatAgo(milestone.date)}.
+          </Text>
+        </Pressable>
+      )}
       {habit && (
         <View style={[styles.card, styles.people]}>
           <Pressable onPress={onOpenHabits} style={({ pressed }) => pressed && styles.pressed}>
@@ -359,6 +388,7 @@ const useStyles = makeStyles((colors) => ({
   itemDone: { color: colors.faint, textDecorationLine: "line-through" },
   pressed: { opacity: 0.6 },
   people: { paddingVertical: 16, gap: 2 },
+  milestoneHead: { flexDirection: "row", alignItems: "center", gap: 6 },
   person: { paddingTop: 10, gap: 2 },
   personActions: { flexDirection: "row", gap: 8, marginTop: 10 },
   pill: {

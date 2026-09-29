@@ -364,6 +364,18 @@ Index(
 	postgresql_where=text("target_id IS NOT NULL"),
 )
 Index("ix_derivations_payload", Derivation.payload, postgresql_using="gin")
+# One activity per Apple Health workout (ADR 0050, migration 0021): two syncs at once
+# can't file the same workout twice.
+HEALTH_WORKOUT_WHERE = text(
+	"kind = 'activity' AND (payload ->> 'health_id') IS NOT NULL"
+)
+Index(
+	"uq_derivations_health_workout",
+	Derivation.user_id,
+	text("(payload ->> 'health_id')"),
+	unique=True,
+	postgresql_where=HEALTH_WORKOUT_WHERE,
+)
 
 
 class LLMCallRow(Base):

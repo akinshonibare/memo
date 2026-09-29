@@ -1,32 +1,44 @@
 {"id": "h01", "text": "leg day at the gym this morning, legs are dead", "expected": [{"key": "gym", "on": "2026-09-28"}], "note": "the classic; 'leg day' is gym"}
-{"id": "h02", "text": "5k before work, felt slow but done", "expected": [{"key": "running", "on": "2026-09-28"}], "note": "'5k' is a run with no 'run' in it"}
+{"id": "h02", "text": "5k before work, felt slow but done", "expected": [{"key": "running", "on": "2026-09-28", "amounts": [{"measure": "distance", "value": 5}]}], "note": "'5k' is a run with no 'run' in it"}
 {"id": "h03", "text": "gym tomorrow, no excuses", "expected": [], "note": "a plan: the false count this eval exists for"}
 {"id": "h04", "text": "skipped the gym again, too tired after work", "expected": [], "note": "a negation"}
 {"id": "h05", "text": "I really should read more. maybe start Atomic Habits this week", "expected": [], "note": "a wish"}
-{"id": "h06", "text": "read 30 pages of Atomic Habits last night before bed", "expected": [{"key": "reading", "on": "2026-09-27"}], "note": "'last night' is Sunday"}
+{"id": "h06", "text": "read 30 pages of Atomic Habits last night before bed", "expected": [{"key": "reading", "on": "2026-09-27"}], "note": "'last night' is Sunday; pages are not an amount"}
 {"id": "h07", "text": "read Romans 8 this morning and prayed for a while after", "expected": [{"key": "bible", "on": "2026-09-28"}, {"key": "prayer", "on": "2026-09-28"}], "note": "Bible reading is 'bible', not 'reading'; two activities"}
 {"id": "h08", "text": "called Mum for an hour yesterday, she's doing much better", "expected": [], "note": "time with people is People's, never an activity"}
 {"id": "h09", "text": "Sam goes running every morning, no idea how he does it", "expected": [], "note": "someone else's habit"}
-{"id": "h10", "text": "ran with Sam on Saturday, 10k along the river", "expected": [{"key": "running", "on": "2026-09-26"}], "note": "an activity done with someone still counts"}
+{"id": "h10", "text": "ran with Sam on Saturday, 10k along the river", "expected": [{"key": "running", "on": "2026-09-26", "amounts": [{"measure": "distance", "value": 10}]}], "note": "an activity done with someone still counts"}
 {"id": "h11", "text": "long walk in the park after lunch yesterday, cleared my head", "expected": [{"key": "walking", "on": "2026-09-27"}], "note": "a walk for its own sake"}
 {"id": "h12", "text": "walked to the station and the train was late again", "expected": [], "note": "a commute, not a walk"}
-{"id": "h13", "text": "journaled for ten minutes this morning about the job decision", "expected": [{"key": "journalling", "on": "2026-09-28"}]}
-{"id": "h14", "text": "meditated 15 min with Headspace then hit the gym", "expected": [{"key": "meditation", "on": "2026-09-28"}, {"key": "gym", "on": "2026-09-28"}]}
+{"id": "h13", "text": "journaled for ten minutes this morning about the job decision", "expected": [{"key": "journalling", "on": "2026-09-28", "amounts": [{"measure": "duration", "value": 10}]}]}
+{"id": "h14", "text": "meditated 15 min with Headspace then hit the gym", "expected": [{"key": "meditation", "on": "2026-09-28", "amounts": [{"measure": "duration", "value": 15}]}, {"key": "gym", "on": "2026-09-28"}]}
 {"id": "h15", "text": "cooked jollof from scratch for dinner last night, turned out great", "expected": [{"key": "cooking", "on": "2026-09-27"}]}
 {"id": "h16", "text": "ordered pizza, too lazy to cook", "expected": [], "note": "a negation of cooking"}
 {"id": "h17", "text": "five-a-side on Saturday evening, scored twice!", "expected": [{"key": "sport", "on": "2026-09-26", "or": ["football"]}]}
-{"id": "h18", "text": "half an hour on the piano, finally got the left hand of the Chopin", "expected": [{"key": "music", "on": "2026-09-28", "or": ["piano"]}]}
-{"id": "h19", "text": "did my Duolingo Spanish and an hour of the ML course", "expected": [{"key": "study", "on": "2026-09-28"}], "note": "two things, one key, one day"}
-{"id": "h20", "text": "yoga class at 7am then work all day", "expected": [{"key": "yoga", "on": "2026-09-28"}]}
-{"id": "h21", "text": "in bed by 10 last night on purpose and I feel so much better", "expected": [{"key": "early night", "on": "2026-09-27"}]}
+{"id": "h18", "text": "half an hour on the piano, finally got the left hand of the Chopin", "expected": [{"key": "music", "on": "2026-09-28", "or": ["piano"], "amounts": [{"measure": "duration", "value": 30}]}]}
+{"id": "h19", "text": "did my Duolingo Spanish and an hour of the ML course", "expected": [{"key": "study", "on": "2026-09-28", "amounts": null}], "note": "two things, one key, one day; the hour is the course's, not Duolingo's: amounts not scored"}
+{"id": "h20", "text": "yoga class at 7am then work all day", "expected": [{"key": "yoga", "on": "2026-09-28"}], "note": "a time of day is not a duration"}
+{"id": "h21", "text": "in bed by 10 last night on purpose and I feel so much better", "expected": [{"key": "early night", "on": "2026-09-27"}], "note": ""}
 {"id": "h22", "text": "big shop at Tesco, laundry, cleaned the kitchen", "expected": [], "note": "chores and errands"}
 {"id": "h23", "text": "planning to start swimming on Wednesdays", "expected": [], "note": "an intention"}
-{"id": "h24", "text": "swam 40 lengths this morning, shoulders aching", "expected": [{"key": "swimming", "on": "2026-09-28"}]}
+{"id": "h24", "text": "swam 40 lengths this morning, shoulders aching", "expected": [{"key": "swimming", "on": "2026-09-28"}], "note": "lengths are not a distance without the pool's length"}
 {"id": "h25", "text": "bible study with the small group on Wednesday night, we did John 15", "expected": [{"key": "bible", "on": "2026-09-23"}], "note": "last Wednesday, resolved from a Monday"}
-{"id": "h26", "text": "two hours in the garden on Sunday, planted the tulip bulbs", "expected": [{"key": "gardening", "on": "2026-09-27"}], "extra_keys": ["gardening"], "note": "a habit the author named, given to the reader"}
+{"id": "h26", "text": "two hours in the garden on Sunday, planted the tulip bulbs", "expected": [{"key": "gardening", "on": "2026-09-27", "amounts": [{"measure": "duration", "value": 120}]}], "extra_keys": ["gardening"], "note": "a habit the author named, given to the reader"}
 {"id": "h27", "text": "design review at 2, then drinks with Kemi after work", "expected": [], "note": "work and people"}
 {"id": "h28", "text": "didn't read last night, too tired. did get a workout in at lunch yesterday though", "expected": [{"key": "gym", "on": "2026-09-27"}], "note": "a negation and a real one in one note"}
 {"id": "h29", "text": "oh my god this traffic, going to be late for spin class", "expected": [], "note": "on the way: not done yet"}
-{"id": "h30", "text": "finished The Road! read the last 80 pages on the train yesterday", "expected": [{"key": "reading", "on": "2026-09-27"}]}
+{"id": "h30", "text": "finished The Road! read the last 80 pages on the train yesterday", "expected": [{"key": "reading", "on": "2026-09-27"}], "note": "pages are not an amount"}
 {"id": "h31", "text": "got to the gym Monday, Wednesday and Friday last week, proud of that", "expected": [{"key": "gym", "on": "2026-09-21"}, {"key": "gym", "on": "2026-09-23"}, {"key": "gym", "on": "2026-09-25"}], "note": "one entry per day"}
 {"id": "h32", "text": "need to renew the gym membership before Friday", "expected": [], "note": "an errand with the word in it"}
+{"id": "h33", "text": "10k along the canal this morning in 52 minutes, new best", "expected": [{"key": "running", "on": "2026-09-28", "amounts": [{"measure": "distance", "value": 10}, {"measure": "duration", "value": 52}]}], "note": "a distance and a duration on one run"}
+{"id": "h34", "text": "ran 3 miles before work", "expected": [{"key": "running", "on": "2026-09-28", "amounts": [{"measure": "distance", "value": 4.83}]}], "note": "miles copied as miles; code converts"}
+{"id": "h35", "text": "squatted 100kg for 5 reps today, PB! bench at 80", "expected": [{"key": "gym", "on": "2026-09-28", "amounts": [{"measure": "weight", "value": 100, "lift": "squat"}, {"measure": "weight", "value": 80, "lift": "bench press"}]}], "note": "two lifts, one per lift; reps are not an amount"}
+{"id": "h36", "text": "long run on Saturday, legs are gone", "expected": [{"key": "running", "on": "2026-09-26"}], "note": "no number: never estimate one"}
+{"id": "h37", "text": "did my first half marathon yesterday!! 2 hours 5 minutes", "expected": [{"key": "running", "on": "2026-09-27", "amounts": [{"measure": "distance", "value": 21.1}, {"measure": "duration", "value": 125}]}], "note": "a named distance"}
+{"id": "h38", "text": "weighed myself, 82kg, then a 30 minute walk round the park", "expected": [{"key": "walking", "on": "2026-09-28", "amounts": [{"measure": "duration", "value": 30}]}], "note": "body weight is not a lift"}
+{"id": "h39", "text": "cycled 25km to Richmond and back on Sunday", "expected": [{"key": "cycling", "on": "2026-09-27", "amounts": [{"measure": "distance", "value": 25}]}]}
+{"id": "h40", "text": "deadlifted 315 lbs yesterday, finally", "expected": [{"key": "gym", "on": "2026-09-27", "amounts": [{"measure": "weight", "value": 142.88, "lift": "deadlift"}]}], "note": "pounds copied as pounds"}
+{"id": "h41", "text": "gym tomorrow, going to try 120 on squat", "expected": [], "note": "a plan with a number in it"}
+{"id": "h42", "text": "an hour of yoga this evening, much needed", "expected": [{"key": "yoga", "on": "2026-09-28", "amounts": [{"measure": "duration", "value": 60}]}]}
+{"id": "h43", "text": "quick session at the gym at lunch, nothing crazy", "expected": [{"key": "gym", "on": "2026-09-28"}], "note": "'quick' is not a duration"}
+{"id": "h44", "text": "burned 600 calories on the bike at spin class this morning", "expected": [{"key": "cycling", "on": "2026-09-28", "or": ["gym"]}], "note": "calories are not an amount"}

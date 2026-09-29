@@ -128,6 +128,38 @@ registers, and the next morning with something on sends.
 Checking it worked, the morning after: `GET /v1/pushes` lists the push with `status:
 "sent"`; a failed one has the reason (`InvalidCredentials` means step 4 didn't take).
 
+## Apple Health and the patched expo-audio (ADRs 0050, 0051): the first build with them
+
+Two native changes ride in the build after 17:
+
+- **HealthKit.** The app now asks for the `com.apple.developer.healthkit` entitlement
+  (read-only, no background delivery). The App ID needs the HealthKit capability and
+  the provisioning profile must include it. EAS turns the capability on and regenerates
+  the profile by itself, **but only when it can talk to Apple**, which a
+  `--non-interactive` build with no Apple session can't. So the first build runs in
+  Akin's terminal, interactively, from `apps/mobile`:
+
+  ```bash
+  npm ci && npx eas-cli@latest build --platform ios --profile production --auto-submit
+  ```
+
+  Answer **`Y`** to "log in to your Apple account" this once (Apple ID, password, the
+  2FA code). The log should say it synced capabilities, enabling HealthKit. Later builds
+  can go back to `--non-interactive`. If signing still fails on a missing HealthKit
+  entitlement: developer.apple.com → Identifiers → `com.akinshonibare.memo` → tick
+  HealthKit → Save, then run the build again (EAS regenerates the profile).
+- **expo-audio is patched** (`apps/mobile/patches/expo-audio+57.0.5.patch`, applied by
+  `postinstall`). `npm ci` applies it, locally and on EAS alike, so fingerprints agree.
+  On an expo-audio upgrade, patch-package stops the install if the patch no longer
+  applies: re-make it (`npx patch-package expo-audio`) or drop it if expo-audio has
+  learned to share a recording's session.
+
+On the phone afterwards: Settings → Habits → **Workouts from Apple Health** → iOS asks
+which data memo may read: allow Workouts (and the distances). iOS never tells an app
+whether reading was allowed, so a refusal just looks like no workouts; it's changed in
+the Health app → Sharing → Apps → memo. An App Store release (not TestFlight) would
+also need a privacy policy that covers health data.
+
 ## Running a development build in the simulator
 
 For checking changes before any EAS build:

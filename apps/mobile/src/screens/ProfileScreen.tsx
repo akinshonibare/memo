@@ -26,6 +26,7 @@ import { makeStyles, useTheme } from "../theme";
 import { disableLock, enableLock, LockCover } from "../lock";
 import { DEFAULT_MORNING, forgetPushToken, setMorningPush } from "../push";
 import { enableReminders, LEAD_CHOICES, remindersPref } from "../reminders";
+import { healthAvailable, healthPref, setHealthSync } from "../health";
 import { setCalendarSync, setRemindersSync, syncPref } from "../sync";
 import { SpeechQueue } from "../voice";
 import { AppearanceGroup, Group, Row, useReveal } from "./SettingsParts";
@@ -48,6 +49,7 @@ type Busy =
   | "faith"
   | "translation"
   | "habits"
+  | "health"
   | "morning";
 
 // You first, then how memo looks, then how the assistant treats you, then what memo may
@@ -370,6 +372,7 @@ export function ProfileSheet({
   // when turned on; a refusal leaves it off and says where to change it.
   const sync = syncPref.use();
   const notify = remindersPref.use();
+  const health = healthPref.use();
   // A switch that can't turn on says why in an alert, next to where you were looking,
   // not in the note at the foot of the sheet.
   const explain = (message: string | null) => {
@@ -514,7 +517,12 @@ export function ProfileSheet({
 
               <Group
                 title="Habits"
-                footer="memo notices what you do from your notes - the gym, reading, time with family, reading the Bible - and suggests a habit once it's happened a few times. It counts days and shows your rhythm, never a streak. Your last 60 days of notes are read when you turn it on."
+                footer={
+                  "memo notices what you do from your notes - the gym, reading, time with family, reading the Bible - and suggests a habit once it's happened a few times. It counts days and shows your rhythm, never a streak, and notices milestones: a first 10k, your longest run, your heaviest squat. Your last 60 days of notes are read when you turn it on." +
+                  (me?.habits_enabled && healthAvailable()
+                    ? " With Apple Health on, your workouts count too; memo only reads them, and turning it off deletes what it read."
+                    : "")
+                }
               >
                 <Row icon="leaf-outline" label="Habits" busy={busy === "habits"}>
                   <Switch
@@ -524,6 +532,15 @@ export function ProfileSheet({
                     trackColor={{ true: colors.forest }}
                   />
                 </Row>
+                {me?.habits_enabled && healthAvailable() && (
+                  <Row icon="fitness-outline" label="Workouts from Apple Health" busy={busy === "health"}>
+                    <Switch
+                      value={health.on}
+                      onValueChange={(on) => void flip("health", () => setHealthSync(api(), on))}
+                      trackColor={{ true: colors.forest }}
+                    />
+                  </Row>
+                )}
               </Group>
 
               <Group

@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from memo.config import Settings
 from memo.ids import uuid7
 from memo.models import Capture, Derivation, Habit, Person, User
-from memo.prompts.habits_v1 import (
+from memo.prompts.habits_v2 import (
 	HABITS_VERSION,
 	KEYS,
 	SYSTEM_PROMPT,
@@ -36,6 +36,7 @@ from memo.prompts.habits_v1 import (
 )
 from memo.schemas.derivations import ACTIVITY, MENTION, PASSAGE, READING, UNREVIEWED
 from memo.schemas.habits import (
+	UNITS,
 	DayOut,
 	Evidence,
 	HabitDetail,
@@ -56,6 +57,7 @@ log = structlog.get_logger("memo.habits")
 
 FAMILY = "family"
 BIBLE = "bible"
+HEALTH = "health"  # an activity's payload source when it came from Apple Health
 SUGGEST_WINDOW_DAYS = 21
 SUGGEST_MIN_DAYS = 3
 HISTORY_WEEKS = 8
@@ -355,13 +357,25 @@ def is_family(person: Person) -> bool:
 # --- the days a habit counts ----------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class Effort:
+	"""One number an activity came with (ADR 0050), in km, minutes or kg."""
+
+	day: dt.date
+	measure: str
+	value: float
+	lift: str
+	capture_id: uuid.UUID | None
+
+
 @dataclass
 class Days:
-	"""Each day that counts, with the evidence for it."""
+	"""Each day that counts, with the evidence for it, and the numbers given."""
 
 	by_day: dict[dt.date, list[Evidence]] = field(
 		default_factory=lambda: defaultdict(list)
 	)
+	efforts: list[Effort] = field(default_factory=list)
 
 	def add(self, day: dt.date, evidence: Evidence) -> None:
 		self.by_day[day].append(evidence)
@@ -371,6 +385,7 @@ class Days:
 		for source in (self, other):
 			for day, items in source.by_day.items():
 				out.by_day[day].extend(items)
+			out.efforts.extend(source.efforts)
 		return out
 
 	@property
@@ -407,7 +422,11 @@ async def activity_days(
 		except ValueError:
 			continue
 		key = str(d.payload.get("key"))
-		if d.capture_id is None:
+		if d.payload.get("source") == HEALTH:
+			evidence = Evidence(
+				kind="health", text=health_text(d.payload), activity_id=d.id
+			)
+		elif d.capture_id is None:
 			evidence = Evidence(kind="logged", activity_id=d.id)
 		else:
 			excerpt = (body or "").strip()[:EXCERPT_CHARS] or None
@@ -418,7 +437,49 @@ async def activity_days(
 				activity_id=d.id,
 			)
 		out[key].add(day, evidence)
+		out[key].efforts.extend(_efforts(d.payload, day, d.capture_id))
 	return out
+
+
+def _efforts(
+	payload: dict[str, Any], day: dt.date, capture_id: uuid.UUID | None
+) -> list[Effort]:
+	out = []
+	for amount in payload.get("amounts") or []:
+		try:
+			value = float(amount["value"])
+			measure = str(amount["measure"])
+		except (KeyError, TypeError, ValueError):
+			continue
+		if value > 0 and measure in UNITS:
+			out.append(
+				Effort(day, measure, value, str(amount.get("lift") or ""), capture_id)
+			)
+	return out
+
+
+def _amount_text(measure: str, value: float) -> str:
+	if measure == "distance":
+		return f"{value:.1f} km" if value < 100 else f"{value:.0f} km"
+	if measure == "duration":
+		minutes = round(value)
+		return (
+			f"{minutes} min"
+			if minutes < 60
+			else f"{minutes // 60} h {minutes % 60} min"
+		)
+	return f"{value:g} kg"
+
+
+def health_text(payload: dict[str, Any]) -> str:
+	"""A workout from Apple Health as its day's evidence: "Run · 5.2 km · 28 min"."""
+	parts = [str(payload.get("label") or "Workout")]
+	for amount in payload.get("amounts") or []:
+		try:
+			parts.append(_amount_text(str(amount["measure"]), float(amount["value"])))
+		except (KeyError, TypeError, ValueError):
+			continue
+	return " · ".join(parts)
 
 
 _CONTACT_WORDS = {
@@ -646,27 +707,6 @@ def nudge(habits: list[Habit], sources: Sources, today: dt.date) -> HabitPrompt 
 		if best is None or ratio > best[0]:
 			best = (ratio, prompt)
 	return best[1] if best else None
-
-
-async def todays_prompt(
-	session: AsyncSession, user: User, *, now: dt.datetime | None = None
-) -> HabitPrompt | None:
-	"""Today's one habit line: a suggestion if there is one, otherwise a nudge."""
-	if not habits_on(user):
-		return None
-	today = today_for(user, now)
-	habits = await tracked(session, user.id)
-	sources = await load_sources(session, user)
-	found = suggestion(habits, sources, today)
-	if found is not None:
-		return HabitPrompt(
-			kind="suggest",
-			key=found.key,
-			name=found.name,
-			source=found.source,
-			days=found.days,
-		)
-	return nudge(habits, sources, today)
 
 
 async def week(

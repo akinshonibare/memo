@@ -122,7 +122,15 @@
           "faceIDPermission": "memo uses Face ID to lock your notes, if you turn that on."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "memo reads your workouts so they count towards your habits and it can notice milestones, like a first 10k. It never writes to Health.",
+          "NSHealthUpdateUsageDescription": false,
+          "background": false
+        }
+      ]
     ],
     "backgroundColor": "#0B1410",
     "extra": {

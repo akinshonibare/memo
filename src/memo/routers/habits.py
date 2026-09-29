@@ -33,6 +33,7 @@ from memo.services.habits import (
 	today_for,
 	tracked,
 )
+from memo.services.milestones import milestones
 
 router = APIRouter(prefix="/habits", tags=["habits"])
 
@@ -142,7 +143,11 @@ async def get_habit(
 	user = await _user(session, user_id)
 	habit = await _habit(session, user_id, habit_id)
 	sources = await load_sources(session, user)
-	return habit_detail(habit, sources.days_for(habit.key), today_for(user))
+	days = sources.days_for(habit.key)
+	today = today_for(user)
+	return habit_detail(habit, days, today).model_copy(
+		update={"milestones": milestones(habit.key, habit.name, days, today)}
+	)
 
 
 @router.patch("/{habit_id}", response_model=HabitOut)

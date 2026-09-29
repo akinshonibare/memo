@@ -23,9 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.ids import uuid7
 from memo.models import Capture, Derivation, MorningView, Resurfacing, User
-from memo.schemas.habits import HabitPrompt
+from memo.schemas.habits import HabitPrompt, TodayMilestone
 from memo.schemas.people import ReachOut
-from memo.services.habits import todays_prompt
+from memo.services.milestones import todays_habits
 from memo.services.people import reach_out
 
 log = structlog.get_logger("memo.morning")
@@ -87,6 +87,8 @@ class MorningViewOut(BaseModel):
 	# Today's one habit line (ADR 0043): a suggestion, or a nudge. Live, and only while
 	# Habits is on.
 	habit: HabitPrompt | None = None
+	# A milestone a tracked habit reached in the last couple of days (ADR 0050).
+	milestone: TodayMilestone | None = None
 
 
 LOOK_BACK_YEARS = 10
@@ -327,6 +329,9 @@ async def build_morning_view(
 				)
 			)
 
+	habit, milestone = (
+		await todays_habits(session, user, now=now) if user else (None, None)
+	)
 	view = MorningViewOut(
 		local_date=today,
 		timezone=timezone,
@@ -336,7 +341,8 @@ async def build_morning_view(
 		built_at=now,
 		reach_out=people,
 		on_this_day=looked_back,
-		habit=await todays_prompt(session, user, now=now) if user else None,
+		habit=habit,
+		milestone=milestone,
 	)
 	payload: dict[str, Any] = view.model_dump(mode="json")
 	await session.execute(
@@ -395,6 +401,9 @@ async def todays_view(
 		zone=zone,
 		include_faith=not (user is not None and user.faith_enabled),
 	)
+	habit, milestone = (
+		await todays_habits(session, user, now=now) if user else (None, None)
+	)
 	return pinned.model_copy(
 		update={
 			"timezone": timezone,
@@ -403,6 +412,7 @@ async def todays_view(
 			"resurfaced_idea": idea,
 			"reach_out": people,
 			"on_this_day": looked_back,
-			"habit": await todays_prompt(session, user, now=now) if user else None,
+			"habit": habit,
+			"milestone": milestone,
 		}
 	)
