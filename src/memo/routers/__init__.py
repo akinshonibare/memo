@@ -15,6 +15,7 @@ from memo.routers import (
 	recordings,
 	review,
 	search,
+	updates,
 	usage,
 	voice,
 )
@@ -39,3 +40,4 @@ v1.include_router(people.mentions_router)
 v1.include_router(faith.router)
 v1.include_router(habits.router)
 v1.include_router(push.router)
+v1.include_router(updates.router)

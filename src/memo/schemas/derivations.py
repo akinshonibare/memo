@@ -35,10 +35,14 @@ PERSON_KINDS: tuple[str, ...] = (MENTION, PRAYER)
 # Something the author did (ADR 0043): "gym this morning". Counted towards habits, and,
 # like mentions and faith rows, never an item or embedded.
 ACTIVITY = "activity"
+# A later note changing an earlier item (ADR 0048): it answers an open prayer, or
+# carries on an idea. Always a suggestion until the author says yes; `target_id` is the
+# item it would change.
+UPDATE = "update"
 # Rows that are not items: the generic item routes, the Planner and the phone never see
 # them, and they are not embedded for Ask.
-NOT_ITEMS: tuple[str, ...] = (MENTION, *FAITH_KINDS, ACTIVITY)
-ALL_KINDS: tuple[str, ...] = (*KINDS, MENTION, *FAITH_KINDS, ACTIVITY)
+NOT_ITEMS: tuple[str, ...] = (MENTION, *FAITH_KINDS, ACTIVITY, UPDATE)
+ALL_KINDS: tuple[str, ...] = (*KINDS, MENTION, *FAITH_KINDS, ACTIVITY, UPDATE)
 # pending_review: extracted, waiting for a look. confirmed: a person checked it.
 # rejected: a person said no. user_created: a person added it. accepted: kept without
 # a look, because the user turned on auto-accept (ADR 0030) - never a label for evals.

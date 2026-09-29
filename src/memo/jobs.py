@@ -48,6 +48,7 @@ async def process_capture_task(
 			describer=ctx["describer"],
 			faith=ctx["faith"],
 			habits=ctx["habits"],
+			reconciler=ctx["reconciler"],
 		)
 		outcome = await process_capture(
 			pipeline, uuid.UUID(capture_id), uuid.UUID(user_id)

@@ -2,7 +2,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { type Api, ApiError, type Capture, type Faith, type FaithMoment, type PassageRef, type Prayer, type ReadingState } from "../api";
+import {
+  type Api,
+  ApiError,
+  type Capture,
+  type Faith,
+  type FaithMoment,
+  type PassageRef,
+  type Prayer,
+  type ReadingState,
+  type Update,
+} from "../api";
 import { asTranslation, openInBible, type Translation } from "../bible";
 import { IconCircle, Pill } from "../components";
 import { useRefetchOnFocus } from "../focus";
@@ -13,11 +23,13 @@ import { usePullToRefresh } from "../refresh";
 import { makeStyles, useTheme } from "../theme";
 import { fonts, useUi } from "../ui";
 import { PrayerSheet } from "./PrayerSheet";
+import { UpdateCard } from "./UpdateCard";
 
 // Faith (ADR 0042): a space of its own, turned on in Settings. One thing a day to
 // remember, what you're reading (you set it; there is no fixed plan), the passages
 // your notes talk about, prayers, and the notes written here. No score anywhere: an
-// open prayer is never overdue, and nothing is behind.
+// open prayer is never overdue, and nothing is behind. A later note that sounds like an
+// answer is asked about at the top (ADR 0048): "Answered?", with the note's words.
 export function FaithScreen({
   api,
   refreshKey,
@@ -44,12 +56,19 @@ export function FaithScreen({
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<{ existing?: Prayer } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState<Update[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const [f, n] = await Promise.all([api.getFaith(), api.listCaptures(50, "faith")]);
+      const [f, n, waiting] = await Promise.all([
+        api.getFaith(),
+        api.listCaptures(50, "faith"),
+        // An older server has no /v1/updates: Faith still works without them.
+        api.listUpdates({ status: "pending", kind: "prayer" }).catch(() => []),
+      ]);
       setFaith(f);
       setNotes(n.items);
+      setAsking(waiting);
       setError(null);
     } catch (e) {
       setError(String(e));
@@ -120,6 +139,23 @@ export function FaithScreen({
         refreshControl={pull}
       >
         {error && <Text style={[ui.danger, { marginTop: 12 }]}>{error}</Text>}
+
+        {asking.length > 0 && (
+          <View style={{ marginTop: 12 }}>
+            {asking.map((u) => (
+              <UpdateCard
+                key={u.id}
+                update={u}
+                onOpenNote={onOpenNote}
+                onDecide={async (yes) => {
+                  await api.answerUpdate(u.id, yes ? "yes" : "no");
+                  await load();
+                  if (yes) onChanged();
+                }}
+              />
+            ))}
+          </View>
+        )}
 
         {faith?.moment && (
           <MomentCard

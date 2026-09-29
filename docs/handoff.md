@@ -16,7 +16,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   record and write, detail with review, delete, playback, Ask sheet, Settings.
 - **Quality gates**: 122 tests against real Postgres, ruff, mypy strict, migrations cycled,
   evals for extraction (recorded), retrieval and faithfulness. CI runs on every PR.
-- **Decisions**: ADRs 0001–0045 in [decisions/](decisions/). 0006 and 0018 are superseded.
+- **Decisions**: ADRs 0001–0048 in [decisions/](decisions/) (0046 is on the parked deploy-on-merge branch). 0006 and 0018 are superseded.
 
 ## Not done, in the order it should happen
 
@@ -202,7 +202,14 @@ picked these, one PR each, in this order:
    Event-driven nudges (V4) are the follow-up that reuses this.
 3. **A live transcript while recording a note** (V1.5): the Ask WebSocket path, applied
    to capture.
-4. **A new note updates an old idea** (V4 reconciliation), behind its own eval.
+4. **A new note answers a prayer or carries on an idea** ([ADR 0048](decisions/0048-a-later-note-can-answer-a-prayer-or-carry-on-an-idea.md),
+   migration 0020). _Built (done before 3, at Akin's ask):_ a `reconcile` stage after
+   embed compares a note with open prayers (Faith on, answer-ish words) and nearby
+   ideas; `reconcile-v1` decides, quoting the note; Faith asks "Answered?", Ideas asks
+   "Carries on an idea?", and a yes answers the prayer (the note's day, its words) or
+   adds to the idea's thread. `evals/reconcile` (26 cases, 1.00/1.00 on a starter set;
+   real cases come from Akin's yes/no). JavaScript-only on the app (fingerprint
+   `79d9bbf7`), so an OTA update.
 5. **Health**: light workout milestones noticed without logging ("first 5k", "heaviest
    squat yet"). **Akin said yes to reading Apple Health** (workouts, steps, sleep): the
    first exception to memo → phone only. Still a Settings switch.
@@ -213,6 +220,10 @@ Apple Health read needs a new build (a HealthKit module and entitlement). Batch 
 native change into that one build, when the quota resets or from a local build (which
 needs the Xcode 26.2 `expo-modules-jsi` patch committed with patch-package first, or the
 fingerprint won't match later updates).
+
+6. **A map of memo** (Akin, 2026-09-29, asked for next): a mind-map view over what
+   memo already links: people and the notes about them, prayers and who they're for,
+   ideas and their threads (ADR 0048), passages, related notes. To be designed.
 
 Not now: **Sentry** (Akin, 2026-09-29). Still Akin's to do: the PITR drill (#57), a
 payment method on Voyage/Atlas (3 requests a minute until then).

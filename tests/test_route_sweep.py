@@ -248,6 +248,31 @@ async def test_every_route_survives_every_kind_of_row(
 		f"/v1/faith/prayers/{answered.json()['id']}",
 		json={"answered": True, "answer": "Offer came Friday"},
 	)
+	# Suggestions (ADR 0048): a note answering the open prayer (waiting), and one
+	# carrying on an idea (said yes to), as the reconcile stage would leave them.
+	async with admin_engine.begin() as conn:
+		idea_id = await conn.scalar(
+			text("SELECT id FROM derivations WHERE kind = 'idea' LIMIT 1")
+		)
+		for target, relation, status_ in (
+			(prayer.json()["id"], "answers", "pending_review"),
+			(idea_id, "continues", "confirmed"),
+		):
+			await conn.execute(
+				text(
+					"INSERT INTO derivations (id, user_id, capture_id, kind, payload, "
+					"status, extractor_version, target_id) VALUES (:id, :u, :c, "
+					"'update', CAST(:p AS jsonb), :s, 'reconcile-v1/test', :t)"
+				),
+				{
+					"id": uuid.uuid4(),
+					"u": SEED_USER_ID,
+					"c": corpus.captures[-1],
+					"p": json.dumps({"relation": relation, "quote": "Tunde"}),
+					"s": status_,
+					"t": target,
+				},
+			)
 	assert (
 		await client.put("/v1/faith/reading", json={"ref": "John"})
 	).status_code == 200

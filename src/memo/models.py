@@ -298,6 +298,9 @@ class Derivation(Base):
 	# Mentions only (ADR 0029): who this is. NULL while the user is being asked
 	# "which one?", or once the person is deleted.
 	person_id: Mapped[uuid.UUID | None]
+	# Updates only (ADR 0048): the earlier item a note would change. A suggestion goes
+	# with its item: deleting the prayer or idea deletes what pointed at it.
+	target_id: Mapped[uuid.UUID | None]
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 	updated_at: Mapped[dt.datetime] = mapped_column(
 		server_default=func.now(), onupdate=func.now()
@@ -327,6 +330,16 @@ class Derivation(Base):
 			f"person_id IS NULL OR kind IN ({_in_list(PERSON_KINDS)})",
 			name="ck_derivations_person_kinds",
 		),
+		ForeignKeyConstraint(
+			["target_id", "user_id"],
+			["derivations.id", "derivations.user_id"],
+			name="fk_derivations_target_same_user",
+			ondelete="CASCADE",
+		),
+		CheckConstraint(
+			"(target_id IS NULL) = (kind <> 'update')",
+			name="ck_derivations_target_update",
+		),
 	)
 
 
@@ -344,6 +357,12 @@ Index(
 )
 Index("ix_derivations_user_created", Derivation.user_id, Derivation.created_at.desc())
 Index("ix_derivations_capture", Derivation.capture_id)
+Index(
+	"ix_derivations_target",
+	Derivation.user_id,
+	Derivation.target_id,
+	postgresql_where=text("target_id IS NOT NULL"),
+)
 Index("ix_derivations_payload", Derivation.payload, postgresql_using="gin")
 
 

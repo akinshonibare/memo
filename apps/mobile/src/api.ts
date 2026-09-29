@@ -311,6 +311,25 @@ export type Me = {
 
 export type Voice = { id: string; label: string };
 
+// A later note that may answer a prayer or carry on an idea (ADR 0048). A question
+// until you say yes or no; nothing changes before then.
+export type Update = {
+  id: string;
+  relation: "answers" | "continues";
+  quote: string; // the note's own words that suggest it
+  status: "pending_review" | "confirmed" | "rejected";
+  capture_id: string | null;
+  written_at: string;
+  target: {
+    id: string;
+    kind: "prayer" | "idea";
+    title: string;
+    summary: string | null;
+    person_name: string | null;
+    answered_at: string | null;
+  };
+};
+
 export type Usage = { window_days: number; total_cost_usd: string };
 
 export type SearchHit = { snippet: string; capture: Capture | null; derivation: Derivation | null };
@@ -397,6 +416,23 @@ export class Api {
     morning_push_at?: string | null;
   }) {
     return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  // --- updates (ADR 0048) --------------------------------------------------------
+
+  listUpdates(filter: { status?: "pending" | "confirmed"; kind?: "prayer" | "idea" } = {}) {
+    const params = new URLSearchParams();
+    if (filter.status) params.set("status", filter.status);
+    if (filter.kind) params.set("kind", filter.kind);
+    const query = params.toString();
+    return this.request<Update[]>(`/v1/updates${query ? `?${query}` : ""}`);
+  }
+
+  answerUpdate(id: string, decision: "yes" | "no") {
+    return this.request<Update>(`/v1/updates/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ decision }),
+    });
   }
 
   // --- push (ADR 0047) -----------------------------------------------------------

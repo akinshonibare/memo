@@ -95,6 +95,9 @@ only way to find that out is to ask when Akin isn't braced for it.
     which mistake is it built to make instead of the other?
 39. "Last contacted" is computed on every request instead of stored on the person. Why?
     And why does resolving a new name need a lock when nothing else in the pipeline does?
+43. A new note says "got the offer!" and an old prayer is about the job. Walk through how
+    memo connects them, why similarity alone isn't enough, and why it asks instead of
+    marking the prayer answered (ADR 0048).
 
 ---
 
