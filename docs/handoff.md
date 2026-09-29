@@ -200,8 +200,12 @@ picked these, one PR each, in this order:
    notifications"). Checked in the simulator: the Settings row, the timeout message,
    a push's tap and 👎 reaching the server. Not checkable there: a real token.
    Event-driven nudges (V4) are the follow-up that reuses this.
-3. **A live transcript while recording a note** (V1.5): the Ask WebSocket path, applied
-   to capture.
+3. **A live transcript while recording a note** ([ADR 0051](decisions/0051-live-words-while-recording.md)).
+   _Built:_ the record sheet shows your words as you say them, over Ask's live socket
+   (`purpose: "note"` in the cost log). expo-audio is patched (patch-package,
+   `apps/mobile/patches/`) so the mic stream shares the recorder's audio session instead
+   of taking it over. Display only: the recording is still the note. Native: in the
+   one build.
 4. **A new note answers a prayer or carries on an idea** ([ADR 0048](decisions/0048-a-later-note-can-answer-a-prayer-or-carry-on-an-idea.md),
    migration 0020). _Built (done before 3, at Akin's ask):_ a `reconcile` stage after
    embed compares a note with open prayers (Faith on, answer-ish words) and nearby
@@ -210,16 +214,22 @@ picked these, one PR each, in this order:
    adds to the idea's thread. `evals/reconcile` (26 cases, 1.00/1.00 on a starter set;
    real cases come from Akin's yes/no). JavaScript-only on the app (fingerprint
    `79d9bbf7`), so an OTA update.
-5. **Health**: light workout milestones noticed without logging ("first 5k", "heaviest
-   squat yet"). **Akin said yes to reading Apple Health** (workouts, steps, sleep): the
-   first exception to memo → phone only. Still a Settings switch.
+5. **Health** ([ADR 0050](decisions/0050-health-milestones-and-apple-health.md), migration
+   0021). _Built:_ `habits-v2` keeps the numbers a note gives (km, minutes, kg per lift;
+   the model copies, code converts); Settings → Habits → "Workouts from Apple Health"
+   reads workouts (read-only, a 30-day window replaced on each open, two years the first
+   time) into the same activities; each tracked habit shows milestones (10th day, first
+   5k/10k, longest run, heaviest squat), the newest on Today for two days.
+   `evals/habits` re-armed with 12 number cases, all 1.00. Workouts only: steps and sleep
+   were left out (not habit days; sleep would need a bedtime rule). Native: in the one
+   build.
 
-**Builds (2026-09-29):** the free EAS iOS build quota is used up for the month. Items
-2-4 and Health-from-notes are JavaScript and ship as OTA updates to build 17; only the
-Apple Health read needs a new build (a HealthKit module and entitlement). Batch every
-native change into that one build, when the quota resets or from a local build (which
-needs the Xcode 26.2 `expo-modules-jsi` patch committed with patch-package first, or the
-fingerprint won't match later updates).
+**Builds (2026-09-29):** the free EAS iOS build quota is used up for the month (it
+resets 2026-10-01 00:00 UTC). Items 2, 4 and 6 shipped as OTA updates to build 17. Items
+3 and 5 are native (a patched expo-audio, HealthKit and its entitlement) and go out
+together in the next build, which also carries everything before it. Its first build
+must be able to add the HealthKit capability to the App ID (runbook:
+mobile-release-eas.md, "Apple Health"). Build 17 gets no OTA from the new fingerprint.
 
 6. **A map of one thing** ([ADR 0049](decisions/0049-a-map-of-one-thing.md), asked for
    by Akin). _Built:_ `GET /v1/map` and a Map screen: a person, note, idea or prayer in

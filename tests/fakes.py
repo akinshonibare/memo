@@ -247,7 +247,7 @@ class FakeHabitsReader:
 	"""Scripted activities (ADR 0043): a fixed answer for every note it reads."""
 
 	model = "fake"
-	version = "habits-v1/fake"
+	version = "habits-v2/fake"
 
 	def __init__(
 		self,

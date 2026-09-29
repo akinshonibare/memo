@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Api, HabitDetail, HabitEvidence } from "../api";
+import type { Api, HabitDetail, HabitEvidence, Milestone } from "../api";
 import { confirmDelete, IconCircle, Pill, SheetAction, SheetActions } from "../components";
 import { useRefetchOnFocus } from "../focus";
 import { formatDay, toIsoDate } from "../format";
@@ -14,7 +14,8 @@ import { lastTime, rhythm, TargetPicker, todayIndex, WeekDots } from "./HabitsSc
 
 // Where a habit's days come from, said once, so a count is never a mystery.
 const SOURCE: Record<HabitDetail["source"], string> = {
-  activity: "Counted from your notes, and the days you log. Remove a day that shouldn't count.",
+  activity:
+    "Counted from your notes, the days you log, and workouts in Apple Health if it's on. Remove a day that shouldn't count.",
   family:
     "Counted from People: the days you saw, called or texted someone who's family. Mark who's family on their page.",
   bible: "Counted from Faith: what you mark as read, notes that name a passage, and notes that say you read your Bible.",
@@ -172,6 +173,15 @@ export function HabitScreen({
               </Text>
             </View>
 
+            {!!habit.milestones?.length && (
+              <View style={styles.section}>
+                <Text style={ui.label}>Milestones</Text>
+                {habit.milestones.map((m) => (
+                  <MilestoneRow key={`${m.kind}-${m.title}`} milestone={m} onOpenCapture={onOpenCapture} />
+                ))}
+              </View>
+            )}
+
             <View style={styles.section}>
               <Text style={ui.label}>Aim for, days a week</Text>
               <TargetPicker
@@ -232,6 +242,14 @@ const EVIDENCE_ICON: Record<HabitEvidence["kind"], keyof typeof Ionicons.glyphMa
   contact: "person-outline",
   reading: "book-outline",
   passage: "bookmark-outline",
+  health: "fitness-outline",
+};
+
+const MILESTONE_ICON: Record<Milestone["kind"], keyof typeof Ionicons.glyphMap> = {
+  days: "calendar-number-outline",
+  first: "flag-outline",
+  longest: "trending-up-outline",
+  heaviest: "barbell-outline",
 };
 
 function Evidence({ evidence, onOpenCapture }: { evidence: HabitEvidence; onOpenCapture: (id: string) => void }) {
@@ -255,6 +273,34 @@ function Evidence({ evidence, onOpenCapture }: { evidence: HabitEvidence; onOpen
       <Text style={[ui.bodyMuted, { flex: 1 }]} numberOfLines={2}>
         {text}
       </Text>
+    </Pressable>
+  );
+}
+
+// Something the habit reached (ADR 0050), noticed from the days and numbers memo has.
+// A fact with its date, never a badge to chase.
+function MilestoneRow({ milestone, onOpenCapture }: { milestone: Milestone; onOpenCapture: (id: string) => void }) {
+  const ui = useUi();
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const capture = milestone.capture_id;
+  return (
+    <Pressable
+      onPress={capture ? () => onOpenCapture(capture) : undefined}
+      disabled={!capture}
+      style={({ pressed }) => [styles.milestone, pressed && { opacity: 0.6 }]}
+      accessibilityLabel={`${milestone.title}, ${milestone.detail}, ${formatDay(milestone.date, true)}`}
+    >
+      <View style={styles.milestoneIcon}>
+        <Ionicons name={MILESTONE_ICON[milestone.kind]} size={18} color={colors.text} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.dayTitle}>{milestone.title}</Text>
+        <Text style={ui.meta}>
+          {milestone.kind === "days" ? "" : `${milestone.detail} · `}
+          {dayLabel(milestone.date)}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -289,6 +335,22 @@ const useStyles = makeStyles((colors) => ({
   dayHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   dayTitle: { color: colors.text, fontSize: 16, fontWeight: "600" },
   evidence: { flexDirection: "row", gap: 8 },
+  milestone: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.hairline,
+  },
+  milestoneIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   weeks: { flexDirection: "row", alignItems: "flex-end", gap: 8, marginTop: 12 },
   weekCol: { flex: 1, alignItems: "center", gap: 6 },
   bar: { width: "100%", borderRadius: 6, backgroundColor: colors.forest, opacity: 0.55 },

@@ -196,7 +196,7 @@ export type HabitSuggestion = {
 export type Habits = { enabled: boolean; habits: Habit[]; suggestion: HabitSuggestion | null };
 
 export type HabitEvidence = {
-  kind: "note" | "logged" | "contact" | "reading" | "passage";
+  kind: "note" | "logged" | "contact" | "reading" | "passage" | "health";
   text: string | null;
   capture_id: string | null;
   activity_id: string | null;
@@ -204,6 +204,29 @@ export type HabitEvidence = {
 
 export type HabitDetail = Habit & {
   days: { date: string; evidence: HabitEvidence[]; removable: boolean }[];
+  milestones?: Milestone[]; // newest first; missing from a server older than ADR 0050
+};
+
+// Something a habit reached, noticed rather than logged (ADR 0050).
+export type Milestone = {
+  kind: "days" | "first" | "longest" | "heaviest";
+  title: string; // "First 10k", "Heaviest squat yet", "10th day"
+  detail: string; // "10.2 km", "100 kg", "Gym"
+  date: string;
+  capture_id: string | null;
+};
+
+// Today's milestone line: one from the last couple of days, for a habit you track.
+export type TodayMilestone = Milestone & { habit_id: string; name: string };
+
+// A workout read from Apple Health, as PUT /v1/workouts takes it (ADR 0050).
+export type WorkoutIn = {
+  id: string;
+  activity_type: number;
+  start: string;
+  end: string;
+  duration_s: number;
+  distance_m: number | null;
 };
 
 // Today's one habit line: a suggestion, or a nudge for a habit gone quiet.
@@ -269,6 +292,7 @@ export type MorningView = {
   // older server; null on a day with nothing to look back on.
   on_this_day?: OnThisDay | null;
   habit?: HabitPrompt | null; // ADR 0043; only while Habits is on
+  milestone?: TodayMilestone | null; // ADR 0050; reached in the last couple of days
 };
 
 export type OnThisDay = {
@@ -464,6 +488,19 @@ export class Api {
 
   forgetPushToken(token: string) {
     return this.request<void>("/v1/push/token", { method: "DELETE", body: JSON.stringify({ token }) });
+  }
+
+  // --- Apple Health (ADR 0050) -----------------------------------------------------
+
+  syncWorkouts(since: string, until: string, workouts: WorkoutIn[]) {
+    return this.request<{ filed: number; skipped: number; removed: number }>("/v1/workouts", {
+      method: "PUT",
+      body: JSON.stringify({ since, until, workouts }),
+    });
+  }
+
+  forgetWorkouts() {
+    return this.request<void>("/v1/workouts", { method: "DELETE" });
   }
 
   pushOpened(pushId: string) {

@@ -1,6 +1,7 @@
 # 0043 — Habits: noticed in your notes, suggested when they repeat, counted by rhythm
 
-**Status:** active
+**Status:** active; amended by [0050](0050-health-milestones-and-apple-health.md): activities
+keep the numbers a note gives, milestones are shown, and workouts can come from Apple Health
 **Date:** 2026-09-29
 
 Resolves [open question Q11](../open-questions.md).
@@ -90,7 +91,8 @@ shows up on 3 days in 3 weeks; a tracked habit is counted by rhythm, never by st
   only if the note or name says so.
 - **Rhythm motivates less than a streak.** Chosen: calm over pressure.
 - **No Apple Health.** memo writes to the phone and never reads from it (ADR 0034); a
-  workout that was never written down is not counted.
+  workout that was never written down is not counted. *(Reversed by ADR 0050, at Akin's
+  choice, the same day.)*
 
 ## Revisit when
 

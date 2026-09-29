@@ -82,6 +82,7 @@ export function HomeScreen({
   onMomentSeen,
   onFaith,
   onHabits,
+  onOpenHabit,
 }: {
   api: Api;
   refreshKey: number;
@@ -90,6 +91,7 @@ export function HomeScreen({
   onFaith?: () => void;
   // Habits (ADR 0043): the same, while Habits is on.
   onHabits?: () => void;
+  onOpenHabit?: (habitId: string) => void;
   onPlanner: () => void;
   onReview: () => void;
   onPeople: () => void;
@@ -356,6 +358,7 @@ export function HomeScreen({
                     onChanged();
                   }}
                   onOpenHabits={() => onHabits?.()}
+                  onOpenHabit={onOpenHabit}
                 />
               )}
               {shown.length > 0 && (

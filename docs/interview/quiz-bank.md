@@ -100,6 +100,15 @@ only way to find that out is to ask when Akin isn't braced for it.
     marking the prayer answered (ADR 0048).
 44. Why is memo's map an ego-graph and not a graph of everything? What does it give
     up (ADR 0049)?
+45. The habits reader copies "3 miles" as value 3, unit "mi", and code converts it.
+    Why not ask the model for kilometres? And which error does the eval hold to the
+    highest bar for amounts, and why (ADR 0050)?
+46. memo syncs Apple Health by sending a whole 30-day window each time. How does that
+    handle a workout deleted in Health, two syncs at once, and a day the user removed
+    in memo? When would you switch to anchored queries (ADR 0050)?
+47. Two parts of an iOS app want the microphone at once: a recorder and a live
+    transcription stream. What goes wrong with the audio session, and what did memo's
+    patch change (ADR 0051)?
 
 ---
 
