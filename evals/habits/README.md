@@ -30,5 +30,8 @@ label.
     railway run -s worker -- uv run python -m evals.habits.run --record evals/habits/recorded.json
     uv run python -m evals.habits.run --replay evals/habits/recorded.json # CI
 
-Re-record after any change to the prompt, `HabitsExtraction` or the model, and read the
-outputs before committing.
+**Armed (2026-09-29, `habits-v1/claude-opus-5`):** every metric 1.00 on the starter set,
+about $0.30 for the run. Every trap came back empty. As with faith and people, that says
+the set is too easy, not that the reader is perfect: real notes will be messier. Re-record
+after any change to the prompt, `HabitsExtraction` or the model, and read the outputs
+before committing.

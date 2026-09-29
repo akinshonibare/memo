@@ -163,8 +163,8 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    "brother" and the like); reading the Bible comes from Faith. A gentle nudge on Today
    when a habit with an aim has gone quiet for twice its usual gap. A Habits section in
    the weekly review. The last 60 days of notes are read in the background when it's
-   turned on. The eval (`evals/habits`, 32 cases) still has to be recorded live: it was
-   blocked by an Anthropic incident on 2026-09-29.
+   turned on. Gated by its own eval (`evals/habits`, 32 cases, armed at 1.00, replayed
+   in CI).
 3. **Still open from build 17:** a gap Akin sees after deleting a note, not reproduced in
    the simulator. Waiting on his build number and how he deleted.
 
