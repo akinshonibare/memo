@@ -93,6 +93,14 @@ def downgrade() -> None:
 		"ALTER TABLE message_citations "
 		"DROP CONSTRAINT fk_message_citations_chunk_same_user"
 	)
+	# Citations of those chunks first: the cascading key was just dropped, and the
+	# plain one re-added below would refuse a citation left pointing at nothing.
+	# (Found 2026-09-29: an Ask answer that cited an item of a deleted note made
+	# every later downgrade past 0008 fail.)
+	op.execute(
+		"DELETE FROM message_citations WHERE chunk_id IN "
+		"(SELECT id FROM chunks WHERE capture_id IS NULL)"
+	)
 	op.execute("DELETE FROM chunks WHERE capture_id IS NULL")
 	op.execute("DELETE FROM derivations WHERE capture_id IS NULL")
 	op.execute(

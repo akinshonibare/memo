@@ -8,6 +8,7 @@ the system, so the model is never asked to produce one (design doc, Step 3).
 
 import asyncio
 import datetime as dt
+import re
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -24,7 +25,7 @@ from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.config import Settings
-from memo.db import commit_and_rebind
+from memo.db import bind_user, commit_and_rebind
 from memo.ids import uuid7
 from memo.models import (
 	Derivation,
@@ -312,6 +313,9 @@ async def _notes(
 	}
 	by_capture: dict[uuid.UUID, list[str]] = {}
 	by_id: dict[uuid.UUID, str] = {}
+	# Who wrote an item that has no note: the extractor (so its note was deleted), or
+	# the person, by hand (a Planner item, a "Spoke to them") - never from a note.
+	by_hand: set[uuid.UUID] = set()
 	if capture_ids or orphan_ids:
 		rows = await session.scalars(
 			select(Derivation)
@@ -331,15 +335,14 @@ async def _notes(
 		person_ids = {d.person_id for d in derivations if d.person_id is not None}
 		names: dict[uuid.UUID, str] = {}
 		if person_ids:
-			names = dict(
-				(
-					await session.execute(
-						select(Person.id, Person.name).where(
-							Person.user_id == user_id, Person.id.in_(person_ids)
-						)
-					)
-				).tuples()
+			# Not dict(result): a Result has keys(), so dict() treats it as a mapping
+			# and subscripts it - the crash that cut Ask's stream on 2026-09-29.
+			rows_p = await session.execute(
+				select(Person.id, Person.name).where(
+					Person.user_id == user_id, Person.id.in_(person_ids)
+				)
 			)
+			names = {pid: pname for pid, pname in rows_p.all()}
 		for d in derivations:
 			line = answer_v2.extracted_line(
 				d.kind,
@@ -350,6 +353,8 @@ async def _notes(
 				person=names.get(d.person_id) if d.person_id is not None else None,
 			)
 			by_id[d.id] = line
+			if d.status == "user_created":
+				by_hand.add(d.id)
 			if d.capture_id is not None:
 				by_capture.setdefault(d.capture_id, []).append(line)
 	notes = []
@@ -365,13 +370,31 @@ async def _notes(
 				answer_v2.Note(
 					i,
 					h.created_at,
-					"(the note this came from was deleted)",
+					"(added by hand, not from a note)"
+					if h.derivation_id in by_hand
+					else "(the note this came from was deleted)",
 					[by_id[h.derivation_id]],
 				)
 			)
 		else:
 			notes.append(answer_v2.Note(i, h.created_at, h.text))
 	return notes, dt.datetime.now(zone).date(), zone
+
+
+INTERNAL_ERROR = "Something went wrong on memo's side. It has been logged."
+RATE_LIMITED = "An AI provider is rate-limiting memo right now. Try again in a minute."
+
+
+def _for_the_user(exc: RetryableError | TerminalError) -> str:
+	"""What the app shows. A provider's own 429 text - quotas, billing pages - is for
+	the logs, not for the person asking; other reasons are kept, they say what to do."""
+	# Two spellings: "HTTP 429" from an HTTP provider (classify_status, e.g. the
+	# embedder), "anthropic 429" from the Claude SDK (_map_error).
+	if isinstance(exc, RetryableError) and re.match(
+		r"(HTTP|anthropic) 429\b", str(exc)
+	):
+		return RATE_LIMITED
+	return str(exc)
 
 
 async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event, None]:
@@ -482,16 +505,31 @@ async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event,
 	except (RetryableError, TerminalError) as exc:
 		assistant.text = "".join(partial) or None
 		assistant.status = "failed"
-		assistant.error = str(exc)
+		assistant.error = _for_the_user(exc)
 		await commit_and_rebind(session, user_id)
 		log.warning("ask.failed", message_id=str(assistant.id), error=str(exc))
 		yield Event(
 			"error",
 			{
 				"code": "provider_error",
-				"message": str(exc),
+				"message": assistant.error,
 				"retryable": isinstance(exc, RetryableError),
 			},
+		)
+	except Exception:
+		# A bug, not a provider. Without this the stream just stops: the app shows
+		# "connection lost" for what is really a crash, and the message stays
+		# `streaming` forever. Say it failed, keep what was written, log the trace.
+		log.exception("ask.crashed", message_id=str(assistant.id))
+		await session.rollback()
+		await bind_user(session, user_id)
+		assistant.text = "".join(partial) or None
+		assistant.status = "failed"
+		assistant.error = INTERNAL_ERROR
+		await commit_and_rebind(session, user_id)
+		yield Event(
+			"error",
+			{"code": "internal_error", "message": INTERNAL_ERROR, "retryable": False},
 		)
 	except (asyncio.CancelledError, GeneratorExit):
 		# The client went away mid-answer. The provider stream was closed by
