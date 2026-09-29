@@ -36,7 +36,10 @@ And for where "already shown" lives:
 Found by playing:
 
 1. **Tap the dot.** On Home, the amber full stop in `memo.` hops when tapped. Five taps
-   within two seconds let the season out in a swarm from the dot.
+   within three seconds let the season out: a burst from the dot at once, then a swarm
+   across the screen. (The first version allowed two seconds and started the swarm above
+   the screen, so its first second was hidden behind the status bar and nothing seemed
+   to happen where you tapped. Akin reported it as not working.)
 2. **Search for the season.** Typing "fireflies", "snow", "leaves" or "petals" (and a few
    synonyms) into search sends them across the screen, once per word typed.
 

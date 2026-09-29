@@ -159,7 +159,10 @@ export function LiveDot({
 }
 
 // "memo." with the living dot. The dot sits on the serif's baseline. With `playful`
-// (Home only), tapping the dot hops it; five quick taps let the season out (ADR 0041).
+// (Home only), tapping the dot hops it; five taps within three seconds let the season
+// out (ADR 0041): a burst from the dot at once, then a swarm across the screen.
+const SWARM_TAPS = 5;
+const SWARM_WINDOW_MS = 3000;
 export function Wordmark({
   live,
   size = 38,
@@ -182,11 +185,14 @@ export function Wordmark({
     haptic.tap();
     setHops((h) => h + 1);
     const now = Date.now();
-    taps.current = [...taps.current.filter((t) => now - t < 2000), now];
-    if (taps.current.length >= 5) {
+    taps.current = [...taps.current.filter((t) => now - t < SWARM_WINDOW_MS), now];
+    if (taps.current.length >= SWARM_TAPS) {
       taps.current = [];
       setTimeout(haptic.done, 120);
-      dotRef.current?.measureInWindow((x, y, w, h) => celebrate(x + w / 2, y + h / 2, true));
+      dotRef.current?.measureInWindow((x, y, w, h) => {
+        celebrate(x + w / 2, y + h / 2);
+        celebrate(x + w / 2, y + h / 2, true);
+      });
     }
   };
   const dot = (
@@ -294,6 +300,8 @@ type Fly = {
   dx: number;
   dy: number;
   hop: number; // an upward pop before a falling particle falls
+  lead: number; // how far down the screen a falling swarm's particle starts
+  glide: number; // 0..1: how much of a fall is steady rather than speeding up
   size: number;
   delay: number;
   duration: number;
@@ -319,7 +327,11 @@ function flies(kind: Particle, big: boolean, height: number): Fly[] {
         : 90 + Math.random() * 90
       : -(big ? 180 + Math.random() * 360 : 70 + Math.random() * 120),
     hop: falls && !big ? 30 + Math.random() * 30 : 0,
-    size: (kind === "leaves" || kind === "petals" ? 6 : 3) + Math.random() * (big ? 4 : 3),
+    // A falling swarm starts on the screen and moves from the first frame: starting
+    // above it and speeding up from rest hid the first second behind the status bar.
+    lead: big && falls ? Math.random() * height * 0.15 : 0,
+    glide: big && falls ? 0.45 : 0,
+    size: (kind === "leaves" || kind === "petals" ? (big ? 8 : 6) : 3) + Math.random() * (big ? 5 : 3),
     delay: i * (big ? (falls ? 60 : 28) : 35),
     duration: (falls ? 1800 : 1100) + Math.random() * (falls && big ? 1600 : 900),
     sway: (falls ? 14 : 6) + Math.random() * 12,
@@ -330,9 +342,9 @@ function flies(kind: Particle, big: boolean, height: number): Fly[] {
 
 export function celebrate(x: number, y: number, big = false, kind: Particle = seasonParticle()) {
   const { width, height } = Dimensions.get("window");
-  // A falling swarm comes from above the whole width of the screen.
+  // A falling swarm comes down across the whole width of the screen, from near the top.
   const fromTop = big && FALLS[kind];
-  const burst: Burst = { id: nextBurst++, x: fromTop ? 0 : x, y: fromTop ? -16 : y, kind, flies: flies(kind, big, height) };
+  const burst: Burst = { id: nextBurst++, x: fromTop ? 0 : x, y: fromTop ? 0 : y, kind, flies: flies(kind, big, height) };
   if (fromTop) burst.flies.forEach((f) => (f.dx = Math.random() * width));
   emit?.(burst);
 }
@@ -392,6 +404,8 @@ function Firefly({
   dx,
   dy,
   hop,
+  lead,
+  glide,
   size,
   delay,
   duration,
@@ -427,7 +441,7 @@ function Firefly({
       opacity,
       transform: [
         { translateX: dx + Math.sin(p * 7) * sway },
-        { translateY: -hop * Math.sin(Math.min(1, p * 3) * Math.PI) + dy * p * p },
+        { translateY: lead - hop * Math.sin(Math.min(1, p * 3) * Math.PI) + dy * (glide * p + (1 - glide) * p * p) },
         { rotate: `${spin * p}deg` },
       ],
     };
