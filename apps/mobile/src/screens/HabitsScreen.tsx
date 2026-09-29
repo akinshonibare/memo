@@ -8,6 +8,7 @@ import { useRefetchOnFocus } from "../focus";
 import { formatAgo } from "../format";
 import { haptic } from "../haptics";
 import { useKeyboardHeight } from "../keyboard";
+import { Dialogs } from "../dialogs";
 import { LockCover } from "../lock";
 import { celebrateAt } from "../motion";
 import { usePullToRefresh } from "../refresh";
@@ -345,6 +346,7 @@ function AddHabitSheet({
           </Text>
         </ScrollView>
         {error && <Text style={[ui.danger, { marginTop: 12 }]}>{error}</Text>}
+        <Dialogs />
         <LockCover />
       </View>
     </Modal>

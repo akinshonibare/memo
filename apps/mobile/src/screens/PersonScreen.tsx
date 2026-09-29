@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActionSheetIOS, Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type Api, ApiError, type Mention, type PersonDetail } from "../api";
 import { IconCircle, Pill } from "../components";
+import { ask, choose, confirm } from "../dialogs";
 import { contactWord, formatAgo, formatDay, formatDue, formatRhythm, formatWhen } from "../format";
 import { haptic } from "../haptics";
 import { fonts, useUi } from "../ui";
@@ -27,7 +28,6 @@ export function PersonScreen({
   onOpenCapture,
   onOpenPerson,
   onChanged,
-  onMap,
   habits = false,
 }: {
   api: Api;
@@ -37,8 +37,6 @@ export function PersonScreen({
   onOpenCapture: (id: string) => void;
   onOpenPerson: (id: string) => void;
   onChanged: () => void;
-  // The map of this person (ADR 0049).
-  onMap?: () => void;
   // Habits on (ADR 0043): the Family switch, for the "time with family" habit.
   habits?: boolean;
 }) {
@@ -105,94 +103,67 @@ export function PersonScreen({
     void run("spoke", () => api.logContact(id));
   };
 
-  const prompt = (title: string, initial: string, save: (value: string) => Promise<unknown>) => {
-    if (Platform.OS !== "ios") return; // Alert.prompt is iOS-only; memo ships on iOS
-    Alert.prompt(
-      title,
-      undefined,
-      (value) => {
-        const v = value?.trim();
-        if (v !== undefined) void run("edit", () => save(v));
-      },
-      "plain-text",
-      initial,
-    );
+  const prompt = async (
+    title: string,
+    initial: string,
+    save: (value: string) => Promise<unknown>,
+    allowEmpty = false,
+  ) => {
+    const v = await ask({ title, initial, allowEmpty });
+    if (v !== null) void run("edit", () => save(v));
   };
 
-  const menu = () => {
+  const menu = async () => {
     if (!person) return;
     haptic.tap();
-    const options = ["Rename", "Add another name", person.note ? "Edit note" : "Add a note", "Merge into…", "Cancel"];
-    const choose = (i: number) => {
-      if (i === 0) prompt("Name", person.name, (name) => api.updatePerson(id, { name }));
-      if (i === 1)
-        prompt("Another name for them", "", (alias) =>
-          alias ? api.updatePerson(id, { aliases: [...person.aliases, alias] }) : Promise.resolve(),
-        );
-      if (i === 2) prompt("A few words, like “from work”", person.note ?? "", (note) => api.updatePerson(id, { note: note || null }));
-      if (i === 3) setMerging(true);
-    };
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: 4 }, choose);
-      return;
-    }
-    Alert.alert(person.name, undefined, [
-      ...options.slice(0, 4).map((text, i) => ({ text, onPress: () => choose(i) })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+    const i = await choose({
+      options: [
+        { label: "Rename", icon: "create-outline" },
+        { label: "Add another name", icon: "person-add-outline" },
+        { label: person.note ? "Edit note" : "Add a note", icon: "document-text-outline" },
+        { label: "Merge into…", icon: "git-merge-outline" },
+      ],
+    });
+    if (i === 0) await prompt("Name", person.name, (name) => api.updatePerson(id, { name }));
+    if (i === 1)
+      await prompt("Another name for them", "", (alias) =>
+        alias ? api.updatePerson(id, { aliases: [...person.aliases, alias] }) : Promise.resolve(),
+      );
+    if (i === 2) await prompt("A few words, like “from work”", person.note ?? "", (note) => api.updatePerson(id, { note: note || null }), true);
+    if (i === 3) setMerging(true);
   };
 
-  const pickRhythm = () => {
+  const pickRhythm = async () => {
     if (!person) return;
     haptic.tap();
     const labels = RHYTHMS.map((d) => (d == null ? "Never" : formatRhythm(d).replace(/^every/, "Every")));
-    const choose = (i: number) => {
-      if (i >= RHYTHMS.length) return;
-      void run("rhythm", () => api.updatePerson(id, { reach_out_every_days: RHYTHMS[i] }));
-    };
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { title: "Suggest getting in touch", options: [...labels, "Cancel"], cancelButtonIndex: labels.length },
-        choose,
-      );
-      return;
-    }
-    Alert.alert("Suggest getting in touch", undefined, [
-      ...labels.map((text, i) => ({ text, onPress: () => choose(i) })),
-      { text: "Cancel", style: "cancel" as const },
-    ]);
+    const i = await choose({ title: "Suggest getting in touch", options: labels.map((label) => ({ label })) });
+    if (i === null) return;
+    void run("rhythm", () => api.updatePerson(id, { reach_out_every_days: RHYTHMS[i] }));
   };
 
   // A mis-tapped "Spoke to them" (here or on Today) is undone by rejecting the
   // contact it logged: last contact falls back to the one before.
-  const removeContact = (m: Mention) => {
+  const removeContact = async (m: Mention) => {
     if (!person) return;
-    haptic.warn();
-    Alert.alert(
-      "Remove this contact?",
-      `It will no longer count as being in touch with ${person.name}.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => void run("undo", () => api.resolveMention(m.id, { status: "rejected" })),
-        },
-      ],
-    );
+    const sure = await confirm({
+      title: "Remove this contact?",
+      message: `It will no longer count as being in touch with ${person.name}.`,
+      action: "Remove",
+      icon: "remove-circle-outline",
+    });
+    if (sure) void run("undo", () => api.resolveMention(m.id, { status: "rejected" }));
   };
 
-  const removeAlias = (alias: string) => {
+  const removeAlias = async (alias: string) => {
     if (!person) return;
-    haptic.warn();
-    Alert.alert(`Stop matching “${alias}”?`, `Notes that say “${alias}” won't link to ${person.name}.`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: () => void run("alias", () => api.updatePerson(id, { aliases: person.aliases.filter((a) => a !== alias) })),
-      },
-    ]);
+    const sure = await confirm({
+      title: `Stop matching “${alias}”?`,
+      message: `Notes that say “${alias}” won't link to ${person.name}.`,
+      action: "Remove",
+      icon: "close-circle-outline",
+    });
+    if (sure) void run("alias", () => api.updatePerson(id, { aliases: person.aliases.filter((a) => a !== alias) }));
   };
 
   return (
@@ -200,7 +171,6 @@ export function PersonScreen({
       <View style={[styles.topBar, ui.pad]}>
         <IconCircle name="chevron-back" onPress={onBack} />
         <View style={{ flex: 1 }} />
-        {person && onMap && <IconCircle name="git-network-outline" onPress={onMap} accessibilityLabel="Map" />}
         {person && <IconCircle name="ellipsis-horizontal" onPress={menu} />}
       </View>
       <ScrollView contentContainerStyle={[ui.pad, { paddingBottom: 60 + insets.bottom }]} refreshControl={pull}>
@@ -316,28 +286,23 @@ export function PersonScreen({
           title={`${person.name} is…`}
           exclude={person.id}
           onClose={() => setMerging(false)}
-          onPick={(into) => {
+          onPick={async (into) => {
             setMerging(false);
-            haptic.warn();
-            Alert.alert(
-              `Merge ${person.name} into ${into.name}?`,
-              `Every note about ${person.name} moves to ${into.name}, and “${person.name}” becomes one of their names.`,
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Merge",
-                  onPress: async () => {
-                    try {
-                      await api.mergePerson(person.id, into.id);
-                      onChanged();
-                      onOpenPerson(into.id);
-                    } catch (e) {
-                      setError(String(e));
-                    }
-                  },
-                },
-              ],
-            );
+            const sure = await confirm({
+              title: `Merge ${person.name} into ${into.name}?`,
+              message: `Every note about ${person.name} moves to ${into.name}, and “${person.name}” becomes one of their names.`,
+              action: "Merge",
+              icon: "git-merge-outline",
+              destructive: false,
+            });
+            if (!sure) return;
+            try {
+              await api.mergePerson(person.id, into.id);
+              onChanged();
+              onOpenPerson(into.id);
+            } catch (e) {
+              setError(String(e));
+            }
           }}
         />
       )}

@@ -266,6 +266,9 @@ export type Message = {
   citations: Citation[];
 };
 
+// GET /v1/news: the newest thing in each of memo's places; null where there's none.
+export type News = Record<"planner" | "review" | "people" | "faith" | "habits", string | null>;
+
 // GET /v1/morning (issue #38): built overnight at 04:00 local, on demand the first time.
 export type MorningView = {
   local_date: string;
@@ -334,21 +337,6 @@ export type Me = {
 };
 
 export type Voice = { id: string; label: string };
-
-// The map of one thing (ADR 0049): a person, note, idea or prayer in the middle, and
-// what memo has linked to it around it.
-export type MapKind = "person" | "note" | "idea" | "prayer";
-export type MapNode = {
-  kind: MapKind | "passage" | "todo" | "event";
-  id: string; // a uuid, or a passage's reference
-  label: string;
-  detail: string | null;
-  when: string | null;
-  capture_id: string | null;
-  passage: PassageRef["passage"] | null;
-  centrable: boolean;
-};
-export type MindMap = { center: MapNode; links: { node: MapNode; relation: string }[] };
 
 // A later note that may answer a prayer or carry on an idea (ADR 0048). A question
 // until you say yes or no; nothing changes before then.
@@ -457,10 +445,10 @@ export class Api {
     return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });
   }
 
-  // --- the map (ADR 0049) --------------------------------------------------------
+  // --- what's new in each place (Home's Places button) --------------------------
 
-  getMap(kind: MapKind, id: string) {
-    return this.request<MindMap>(`/v1/map?kind=${kind}&id=${encodeURIComponent(id)}`);
+  getNews() {
+    return this.request<News>("/v1/news");
   }
 
   // --- updates (ADR 0048) --------------------------------------------------------

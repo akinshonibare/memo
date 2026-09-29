@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
-import { Alert, Modal, Platform, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { type Api, ApiError, type Prayer } from "../api";
 import { confirmDelete, confirmDiscard, Pill, SheetAction, SheetActions, SheetHandle, SheetHeader } from "../components";
+import { ask, Dialogs } from "../dialogs";
 import { formatDay } from "../format";
 import { haptic } from "../haptics";
 import { useKeyboardHeight } from "../keyboard";
@@ -90,26 +91,22 @@ export function PrayerSheet({
 
   // How it was answered, in the user's words, then a quiet swarm: this is the moment
   // memo exists to remember.
-  const markAnswered = () => {
+  const markAnswered = async () => {
     if (!existing || busy) return;
-    const apply = (how: string | undefined) => {
-      if (how === undefined) return; // cancelled
-      void run(
-        () => api.updatePrayer(existing.id, { answered: true, answer: how.trim() || null }),
-        () => {
-          haptic.done();
-          celebrate(width / 2, height * 0.5, true);
-        },
-      );
-    };
-    if (Platform.OS === "ios") {
-      Alert.prompt("How was it answered?", "A line is enough. memo will remind you of it.", [
-        { text: "Cancel", style: "cancel", onPress: () => apply(undefined) },
-        { text: "Answered", onPress: (value?: string) => apply(value ?? "") },
-      ]);
-      return;
-    }
-    apply("");
+    const how = await ask({
+      title: "How was it answered?",
+      message: "A line is enough. memo will remind you of it.",
+      action: "Answered",
+      allowEmpty: true,
+    });
+    if (how === null) return; // cancelled
+    void run(
+      () => api.updatePrayer(existing.id, { answered: true, answer: how }),
+      () => {
+        haptic.done();
+        celebrate(width / 2, height * 0.5, true);
+      },
+    );
   };
 
   const stillPraying = () => {
@@ -228,6 +225,7 @@ export function PrayerSheet({
             }}
           />
         )}
+        <Dialogs />
         <LockCover />
       </View>
     </Modal>

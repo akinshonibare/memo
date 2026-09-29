@@ -21,6 +21,7 @@ import { useUi } from "../ui";
 import { makeStyles } from "../theme";
 import { haptic } from "../haptics";
 import { captureOrQueue } from "../outbox";
+import { Dialogs } from "../dialogs";
 import { LockCover } from "../lock";
 import { type LiveWordsStatus, useLiveWords } from "../liveWords";
 
@@ -54,7 +55,7 @@ export function RecordSheet({
   api: Api;
   space?: Space; // recorded from the Faith screen: a faith note (ADR 0042)
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (captureId: string | null) => void; // null: kept offline, sent later
   onType?: () => void; // the microphone is busy: write it down instead
 }) {
   const ui = useUi();
@@ -209,12 +210,12 @@ export function RecordSheet({
       activity.current = null;
       const uri = recorder.uri;
       if (!uri) throw new Error("No recording was produced.");
-      await captureOrQueue(api, { kind: "audio", file: uri, mime: "audio/m4a", durationMs, space });
+      const id = await captureOrQueue(api, { kind: "audio", file: uri, mime: "audio/m4a", durationMs, space });
       haptic.done();
       // The thought becomes a dot: the orb falls toward the list, then the sheet goes.
       setDrop(true);
       setTimeout(() => {
-        onSaved();
+        onSaved(id);
         onClose();
       }, DROP_MS);
     } catch (e) {
@@ -295,6 +296,7 @@ export function RecordSheet({
             <Pill label="End" tone="light" onPress={end} busy={phase === "saving" && !drop} disabled={phase === "starting"} />
           </View>
         )}
+        <Dialogs />
         <LockCover />
       </View>
     </Modal>

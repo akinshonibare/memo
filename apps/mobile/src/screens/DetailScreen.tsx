@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActionSheetIOS,
-  Alert,
   Image,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -20,6 +17,7 @@ import { InkText, LiveDot } from "../motion";
 import { playUrl, seekPlayback, stopPlayback, usePlaybackDerived, usePlayingId } from "../playback";
 import { useUi } from "../ui";
 import { makeStyles, useTheme } from "../theme";
+import { choose } from "../dialogs";
 import { DerivationSheet } from "./DerivationSheet";
 import { MentionCard } from "./PeopleParts";
 import { haptic } from "../haptics";
@@ -27,22 +25,17 @@ import { usePullToRefresh } from "../refresh";
 
 const KINDS: Derivation["kind"][] = ["todo", "event", "idea"];
 
-// Pick what to add. iOS gets the native action sheet.
-function chooseKind(onPick: (kind: Derivation["kind"]) => void) {
-  const labels = ["A todo", "An event", "An idea"];
-  if (Platform.OS === "ios") {
-    ActionSheetIOS.showActionSheetWithOptions(
-      { title: "What did it miss?", options: [...labels, "Cancel"], cancelButtonIndex: 3 },
-      (index) => {
-        if (index < 3) onPick(KINDS[index]);
-      },
-    );
-    return;
-  }
-  Alert.alert("What did it miss?", undefined, [
-    ...labels.map((text, i) => ({ text, onPress: () => onPick(KINDS[i]) })),
-    { text: "Cancel", style: "cancel" as const },
-  ]);
+// Pick what to add, in memo's own menu.
+async function chooseKind(onPick: (kind: Derivation["kind"]) => void) {
+  const picked = await choose({
+    title: "What did it miss?",
+    options: [
+      { label: "A todo", icon: "checkbox-outline" },
+      { label: "An event", icon: "calendar-outline" },
+      { label: "An idea", icon: "bulb-outline" },
+    ],
+  });
+  if (picked !== null) onPick(KINDS[picked]);
 }
 
 const POLL_MS = 3000;
@@ -59,7 +52,6 @@ export function DetailScreen({
   onChanged,
   onOpen,
   onOpenPerson,
-  onMap,
   faith = false,
   translation,
 }: {
@@ -71,8 +63,6 @@ export function DetailScreen({
   onChanged: () => void;
   onOpen: (id: string) => void;
   onOpenPerson: (id: string) => void;
-  // The map of this note (ADR 0049).
-  onMap?: () => void;
   // Faith (ADR 0042): whether it's on (a note can then move in or out), and the
   // translation a passage opens in.
   faith?: boolean;
@@ -243,7 +233,6 @@ export function DetailScreen({
         {capture?.status === "failed" && (
           <Pill label="Retry" tone="light" onPress={retry} busy={busy === "retry"} />
         )}
-        {capture && onMap && <IconCircle name="git-network-outline" onPress={onMap} accessibilityLabel="Map" />}
         {capture && <IconCircle name="trash-outline" onPress={remove} accessibilityLabel="Delete note" />}
       </View>
       <ScrollView
@@ -411,7 +400,7 @@ export function DetailScreen({
             <Pill
               label="Add what it missed"
               icon="add"
-              onPress={() => chooseKind((kind) => setEditing({ kind }))}
+              onPress={() => void chooseKind((kind) => setEditing({ kind }))}
             />
           </View>
         )}

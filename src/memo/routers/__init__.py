@@ -12,6 +12,7 @@ from memo.routers import (
 	messages,
 	mindmap,
 	morning,
+	news,
 	people,
 	push,
 	recordings,
@@ -45,3 +46,4 @@ v1.include_router(health.router)
 v1.include_router(push.router)
 v1.include_router(updates.router)
 v1.include_router(mindmap.router)
+v1.include_router(news.router)

@@ -73,17 +73,18 @@ async function send(api: Api, item: OutboxItem) {
   return api.createImageCapture(item.file!, once, space);
 }
 
-// Try to save now; if the network is the problem, keep it for later. Returns "sent"
-// or "queued"; throws only for a real refusal, which the caller should show.
+// Try to save now; if the network is the problem, keep it for later. Returns the new
+// note's id when it was sent (so the app can open it), or null when it was queued;
+// throws only for a real refusal, which the caller should show.
 export async function captureOrQueue(
   api: Api,
   capture: Pick<OutboxItem, "kind" | "text" | "file" | "mime" | "durationMs" | "space">,
-): Promise<"sent" | "queued"> {
+): Promise<string | null> {
   const item: OutboxItem = { ...newOnce(), ...capture, attempts: 0 };
   try {
-    await send(api, item);
+    const made = await send(api, item);
     saved();
-    return "sent";
+    return made.id;
   } catch (error) {
     if (!retryable(error)) throw error;
   }
@@ -94,7 +95,7 @@ export async function captureOrQueue(
     item.file = kept;
   }
   await save([...(await load()), item]);
-  return "queued";
+  return null;
 }
 
 // Send what's waiting, oldest first; stop at the first network failure (the rest

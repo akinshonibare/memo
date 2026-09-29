@@ -1,18 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import {
-  ActionSheetIOS,
   ActivityIndicator,
-  Alert,
   type GestureResponderEvent,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
-import { haptic } from "../haptics";
+import { confirm } from "../dialogs";
 import { PressableScale, usePop } from "../motion";
 import { makeStyles, useTheme } from "../theme";
 
@@ -137,41 +134,16 @@ export function Avatar({ name, size = 40, onPress }: { name: string | null; size
   );
 }
 
-// A confirm with one destructive action. iOS gets the action sheet. `onCancel` lets a
-// swiped-open row close itself again when the answer is no.
+// A confirm with one destructive action, in memo's own dialog (src/dialogs).
+// `onCancel` lets a swiped-open row close itself again when the answer is no.
 export function confirmDelete(title: string, onDelete: () => void, onCancel?: () => void) {
-  haptic.warn();
-  if (Platform.OS === "ios") {
-    ActionSheetIOS.showActionSheetWithOptions(
-      { title, options: ["Delete", "Cancel"], destructiveButtonIndex: 0, cancelButtonIndex: 1 },
-      (index) => {
-        if (index === 0) onDelete();
-        else onCancel?.();
-      },
-    );
-    return;
-  }
-  Alert.alert(title, undefined, [
-    { text: "Cancel", style: "cancel", onPress: onCancel },
-    { text: "Delete", style: "destructive", onPress: onDelete },
-  ]);
+  void confirm({ title, action: "Delete", icon: "trash-outline" }).then((yes) => (yes ? onDelete() : onCancel?.()));
 }
 
 // Closing a sheet with something unsaved in it - typed text, an edit, a recording -
 // asks first, whether it was the close button or a swipe down.
 export function confirmDiscard(title: string, discard: string, onDiscard: () => void, keep = "Keep editing") {
-  haptic.warn();
-  if (Platform.OS === "ios") {
-    ActionSheetIOS.showActionSheetWithOptions(
-      { title, options: [discard, keep], destructiveButtonIndex: 0, cancelButtonIndex: 1 },
-      (index) => index === 0 && onDiscard(),
-    );
-    return;
-  }
-  Alert.alert(title, undefined, [
-    { text: keep, style: "cancel" },
-    { text: discard, style: "destructive", onPress: onDiscard },
-  ]);
+  void confirm({ title, action: discard, icon: "trash-outline", cancel: keep }).then((yes) => yes && onDiscard());
 }
 
 // The top of a sheet that saves something: close on the left and the action on the

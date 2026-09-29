@@ -16,13 +16,15 @@ import { haptic } from "./src/haptics";
 import { preparePhoto } from "./src/photo";
 import { publishRecord } from "./src/widgets";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { Api, type MapKind, type Me, type Space } from "./src/api";
+import { Api, type Me, type Space } from "./src/api";
 import { type Config, clearSession, loadConfig, loadOnboarded, saveOnboarded } from "./src/config";
 import { LockCover, LockProvider, useLock } from "./src/lock";
 import { FirefliesHost } from "./src/motion";
 import { refreshPushToken, registerMorningCategory, useMorningPushTaps } from "./src/push";
 import { useReminderTaps } from "./src/reminders";
 import { forgetHealthOnThisPhone, useHealthSync } from "./src/health";
+import { Dialogs } from "./src/dialogs";
+import { markSeen, ROUTE_PLACE } from "./src/news";
 import { clearPhone, usePhoneSync } from "./src/sync";
 import { AskSheet } from "./src/screens/AskScreen";
 import { ComposeSheet } from "./src/screens/ComposeSheet";
@@ -32,7 +34,6 @@ import { HabitScreen } from "./src/screens/HabitScreen";
 import { HabitsScreen } from "./src/screens/HabitsScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { IdeasScreen } from "./src/screens/IdeasScreen";
-import { MapScreen } from "./src/screens/MapScreen";
 import { PlannerScreen } from "./src/screens/PlannerScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
@@ -76,7 +77,6 @@ export type Routes = {
   Faith: undefined;
   Habits: undefined;
   Habit: { id: string };
-  Map: { kind: MapKind; id: string };
 };
 const Stack = createNativeStackNavigator<Routes>();
 const nav = createNavigationContainerRef<Routes>();
@@ -161,6 +161,12 @@ function Root() {
   const openNote = useCallback((id: string) => {
     if (nav.isReady()) nav.dispatch(StackActions.push("Detail", { id }));
   }, []);
+  // A note just saved opens at once, so you watch what memo takes from it arrive (its
+  // page polls until extraction is done). One kept offline has no page yet: Home.
+  const savedNote = (captureId: string | null) => {
+    bump();
+    if (captureId) openNote(captureId);
+  };
   const openPerson = (id: string) => {
     if (nav.isReady()) nav.dispatch(StackActions.push("Person", { id }));
   };
@@ -353,6 +359,11 @@ function Root() {
           ref={nav}
           theme={navTheme}
           onReady={() => setNavReady(true)}
+          // Looking at a place (however you got there) is what clears its mark.
+          onStateChange={() => {
+            const place = ROUTE_PLACE[nav.getCurrentRoute()?.name ?? ""];
+            if (place) void markSeen(place);
+          }}
         >
           <Stack.Navigator
             screenOptions={{
@@ -388,7 +399,7 @@ function Root() {
                   moment={moment}
                   onMomentSeen={() => setMoment(null)}
                   onFaith={me?.faith_enabled ? () => navigation.navigate("Faith") : undefined}
-                  onHabits={me?.habits_enabled ? () => navigation.navigate("Habits") : undefined}
+                  onHabits={() => navigation.navigate("Habits")}
                   onOpenHabit={(id) => navigation.navigate("Habit", { id })}
                 />
               )}
@@ -425,19 +436,6 @@ function Root() {
                   onBack={() => navigation.goBack()}
                   onOpenCapture={openNote}
                   onChanged={bump}
-                  onMap={(id) => navigation.push("Map", { kind: "idea", id })}
-                />
-              )}
-            </Stack.Screen>
-            <Stack.Screen name="Map">
-              {({ navigation, route }) => (
-                <MapScreen
-                  api={api}
-                  start={route.params}
-                  translation={me?.bible_translation}
-                  onBack={() => navigation.goBack()}
-                  onOpenNote={openNote}
-                  onOpenPerson={openPerson}
                 />
               )}
             </Stack.Screen>
@@ -465,7 +463,6 @@ function Root() {
                   // which no longer exists.
                   onOpenPerson={(id) => navigation.replace("Person", { id })}
                   onChanged={bump}
-                  onMap={() => navigation.push("Map", { kind: "person", id: route.params.id })}
                   habits={!!me?.habits_enabled}
                 />
               )}
@@ -524,7 +521,6 @@ function Root() {
                   // A related note replaces this one: back still returns where you came from.
                   onOpen={(id) => navigation.replace("Detail", { id })}
                   onOpenPerson={openPerson}
-                  onMap={() => navigation.push("Map", { kind: "note", id: route.params.id })}
                   faith={!!me?.faith_enabled}
                   translation={me?.bible_translation}
                 />
@@ -550,7 +546,7 @@ function Root() {
           api={api}
           space={space}
           onClose={() => setRecord(false)}
-          onSaved={bump}
+          onSaved={savedNote}
           onType={() => {
             setRecord(false);
             setCompose(true);
@@ -566,7 +562,7 @@ function Root() {
             setCompose(false);
             setComposeText(undefined);
           }}
-          onSaved={bump}
+          onSaved={savedNote}
         />
       )}
       <ProfileSheet
@@ -588,6 +584,7 @@ function Root() {
         onSettingsChanged={bump}
       />
     </SafeAreaView>
+    {api && <Dialogs />}
     {api && <LockCover />}
     </View>
   );

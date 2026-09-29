@@ -1,15 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActionSheetIOS,
-  Alert,
   type GestureResponderEvent,
-  Platform,
   Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
+import { choose } from "../dialogs";
 import ReanimatedSwipeable, {
   SwipeDirection,
   type SwipeableMethods,
@@ -160,23 +158,15 @@ export function PlannerScreen({
     }
   };
 
-  const add = () => {
-    const pick = (kind: Derivation["kind"]) => setSheet({ kind });
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ["Todo", "Event", "Cancel"], cancelButtonIndex: 2 },
-        (i) => {
-          if (i === 0) pick("todo");
-          if (i === 1) pick("event");
-        },
-      );
-      return;
-    }
-    Alert.alert("Add", undefined, [
-      { text: "Todo", onPress: () => pick("todo") },
-      { text: "Event", onPress: () => pick("event") },
-      { text: "Cancel", style: "cancel" },
-    ]);
+  const add = async () => {
+    const picked = await choose({
+      options: [
+        { label: "Todo", icon: "checkbox-outline" },
+        { label: "Event", icon: "calendar-outline" },
+      ],
+    });
+    if (picked === 0) setSheet({ kind: "todo" });
+    if (picked === 1) setSheet({ kind: "event" });
   };
 
   const month = selected.toLocaleDateString(undefined, { month: "long", year: "numeric" });
@@ -190,7 +180,7 @@ export function PlannerScreen({
         <Text style={styles.title}>Planner</Text>
         <View style={{ flex: 1 }} />
         <IconCircle name="bulb-outline" size={38} onPress={onIdeas} />
-        <IconCircle name="add" size={38} tone="light" onPress={add} />
+        <IconCircle name="add" size={38} tone="light" onPress={() => void add()} />
       </View>
 
       <View style={[styles.monthRow, ui.pad]}>
