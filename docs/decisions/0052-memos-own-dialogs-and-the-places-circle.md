@@ -63,7 +63,9 @@ Three things Akin raised about how memo feels, after using it:
   stay for a better design.
 - **The custom palette is out of Appearance** (Akin asked for it gone): the two hue
   sliders and the "Custom" swatch. System/Light/Dark and the five themes stay (ADR
-  0031). A phone that had Custom falls back to Forest.
+  0031). A phone that had Custom falls back to Forest. Picking a theme or Light/Dark
+  applies at once: the circle that swept across the screen from your finger (ADR 0032)
+  is gone.
 
 ## What we're accepting
 

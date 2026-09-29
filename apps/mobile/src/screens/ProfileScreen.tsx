@@ -17,7 +17,7 @@ import { enableReminders, LEAD_CHOICES, remindersPref } from "../reminders";
 import { healthAvailable, healthPref, setHealthSync } from "../health";
 import { setCalendarSync, setRemindersSync, syncPref } from "../sync";
 import { SpeechQueue } from "../voice";
-import { AppearanceGroup, Group, Row, useReveal } from "./SettingsParts";
+import { AppearanceGroup, Group, Row } from "./SettingsParts";
 
 type Busy =
   | "name"
@@ -325,7 +325,6 @@ export function ProfileSheet({
       else explain(result);
       return null;
     });
-  const { layer, reveal, hostRef } = useReveal();
 
   const saveServer = () =>
     run("server", async () => {
@@ -342,7 +341,7 @@ export function ProfileSheet({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" allowSwipeDismissal onRequestClose={onClose}>
-      <View style={styles.sheet} ref={hostRef}>
+      <View style={styles.sheet}>
         <SheetHandle />
         <View style={styles.top}>
           <View style={{ flex: 1 }} />
@@ -369,7 +368,7 @@ export function ProfileSheet({
             </Pressable>
           )}
 
-          <AppearanceGroup reveal={reveal} />
+          <AppearanceGroup />
 
           {signedIn && (
             <>
@@ -569,7 +568,6 @@ export function ProfileSheet({
             <Text style={ui.meta}>Version {version}</Text>
           </Pressable>
         </ScrollView>
-        {layer}
         <Dialogs />
         <LockCover />
       </View>

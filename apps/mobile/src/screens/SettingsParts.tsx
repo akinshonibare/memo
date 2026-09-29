@@ -1,29 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, type GestureResponderEvent, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from "react-native-reanimated";
-import { scheduleOnRN } from "react-native-worklets";
+import { type ReactNode, useEffect, useState } from "react";
+import { ActivityIndicator, type GestureResponderEvent, Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { haptic } from "../haptics";
 import { springs } from "../motion";
-import {
-  type Mode,
-  makeStyles,
-  paletteFor,
-  PRESETS,
-  resolveScheme,
-  swatch,
-  THEME_ORDER,
-  type ThemeId,
-  type ThemePrefs,
-  useTheme,
-} from "../theme";
+import { type Mode, makeStyles, PRESETS, swatch, THEME_ORDER, type ThemeId, useTheme } from "../theme";
 import { useUi } from "../ui";
 
 // Pieces of the Settings sheet: the grouped rows it's built from, and the Appearance
@@ -120,81 +101,6 @@ export function Segmented<T extends string>({
   );
 }
 
-// --- the circular reveal ---------------------------------------------------------------
-
-// Changing the theme fills the sheet from your finger with the new background, switches
-// underneath, then lifts away (ADR 0032). With Reduce Motion, it just switches.
-export function useReveal(): {
-  layer: ReactNode;
-  reveal: (patch: Partial<ThemePrefs>, e?: GestureResponderEvent) => void;
-  hostRef: React.RefObject<View | null>;
-} {
-  const { prefs, systemScheme, setPrefs } = useTheme();
-  const reduced = useReducedMotion();
-  const { width, height } = useWindowDimensions();
-  const hostRef = useRef<View>(null);
-  const [circle, setCircle] = useState<{ x: number; y: number; color: string } | null>(null);
-  const grow = useSharedValue(0);
-  const fade = useSharedValue(1);
-  const pending = useRef<Partial<ThemePrefs> | null>(null);
-  const diameter = 2.2 * Math.hypot(width, height);
-
-  const apply = useCallback(() => {
-    if (pending.current) setPrefs(pending.current);
-    pending.current = null;
-    // Let the new theme paint underneath, then lift the circle off it.
-    setTimeout(() => {
-      fade.set(withTiming(0, { duration: 260 }, (done) => done && scheduleOnRN(setCircle, null)));
-    }, 60);
-  }, [setPrefs, fade]);
-
-  const reveal = (patch: Partial<ThemePrefs>, e?: GestureResponderEvent) => {
-    // A change made while a circle is still growing joins the change it's revealing, so
-    // neither is lost when that one lands.
-    const merged = { ...pending.current, ...patch };
-    if (reduced || !e) {
-      if (pending.current) pending.current = merged;
-      setPrefs(patch);
-      return;
-    }
-    const next = { ...prefs, ...merged };
-    const color = paletteFor(next, resolveScheme(next.mode, systemScheme)).bg;
-    const { pageX, pageY } = e.nativeEvent;
-    pending.current = merged;
-    hostRef.current?.measureInWindow((hx, hy) => {
-      setCircle({ x: pageX - hx, y: pageY - hy, color });
-      grow.set(0);
-      fade.set(1);
-      grow.set(
-        withTiming(1, { duration: 440, easing: Easing.out(Easing.cubic) }, (done) => done && scheduleOnRN(apply)),
-      );
-    });
-  };
-
-  const style = useAnimatedStyle(() => ({
-    opacity: fade.value,
-    transform: [{ scale: grow.value }],
-  }));
-  const layer = circle ? (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        {
-          position: "absolute",
-          left: circle.x - diameter / 2,
-          top: circle.y - diameter / 2,
-          width: diameter,
-          height: diameter,
-          borderRadius: diameter / 2,
-          backgroundColor: circle.color,
-        },
-        style,
-      ]}
-    />
-  ) : null;
-  return { layer, reveal, hostRef };
-}
-
 // --- appearance ------------------------------------------------------------------------
 
 const MODES: { value: Mode; label: string }[] = [
@@ -203,22 +109,23 @@ const MODES: { value: Mode; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
-export function AppearanceGroup({ reveal }: { reveal: (patch: Partial<ThemePrefs>, e?: GestureResponderEvent) => void }) {
+// A theme or mode applies at once: no sweep across the screen (Akin, 2026-09-29).
+export function AppearanceGroup() {
   const ui = useUi();
   const styles = useStyles();
-  const { prefs, scheme } = useTheme();
+  const { prefs, scheme, setPrefs } = useTheme();
 
-  const pickTheme = (theme: ThemeId, e: GestureResponderEvent) => {
+  const pickTheme = (theme: ThemeId) => {
     if (theme === prefs.theme) return;
     haptic.pick();
-    reveal({ theme }, e);
+    setPrefs({ theme });
   };
 
   return (
     <View style={styles.group}>
       <Text style={ui.label}>Appearance</Text>
       <View style={[styles.groupCard, styles.appearance]}>
-        <Segmented options={MODES} value={prefs.mode} onChange={(mode, e) => reveal({ mode }, e)} />
+        <Segmented options={MODES} value={prefs.mode} onChange={(mode) => setPrefs({ mode })} />
         <View style={styles.themes}>
           {THEME_ORDER.map((id) => {
             const sw = swatch(id, prefs, scheme);
@@ -226,7 +133,7 @@ export function AppearanceGroup({ reveal }: { reveal: (patch: Partial<ThemePrefs
             return (
               <Pressable
                 key={id}
-                onPress={(e) => pickTheme(id, e)}
+                onPress={() => pickTheme(id)}
                 style={styles.theme}
                 accessibilityRole="radio"
                 accessibilityState={{ selected: on }}
