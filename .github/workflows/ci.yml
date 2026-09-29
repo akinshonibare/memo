@@ -121,3 +121,11 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npx tsc --noEmit
       - run: npx expo lint
+      - name: App Intent text must not say "Siri"
+        # App Store rejects any intent title, description or dialog containing the
+        # word (ITMS-90626 - it failed build 9). Comments are fine; string literals not.
+        run: |
+          if grep -nE '"[^"]*[Ss][Ii][Rr][Ii][^"]*"' native/*.swift; then
+            echo "::error::App Intent strings must not contain 'Siri' (ITMS-90626)"
+            exit 1
+          fi
