@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useState } from "react";
-import { Modal, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type Api, ApiError, type Habit, type Habits, type HabitSuggestion } from "../api";
 import { IconCircle, Pill, SheetHandle, SheetHeader } from "../components";
@@ -10,6 +10,7 @@ import { haptic } from "../haptics";
 import { useKeyboardHeight } from "../keyboard";
 import { LockCover } from "../lock";
 import { celebrateAt } from "../motion";
+import { usePullToRefresh } from "../refresh";
 import { makeStyles, useTheme } from "../theme";
 import { fonts, useUi } from "../ui";
 
@@ -51,7 +52,6 @@ export function HabitsScreen({
   const insets = useSafeAreaInsets();
   const [habits, setHabits] = useState<Habits | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -70,11 +70,7 @@ export function HabitsScreen({
   }, [load, refreshKey]);
   useRefetchOnFocus(load);
 
-  const refresh = async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  };
+  const pull = usePullToRefresh(load);
 
   const run = async (key: string, work: () => Promise<unknown>) => {
     setBusy(key);
@@ -116,7 +112,7 @@ export function HabitsScreen({
 
       <ScrollView
         contentContainerStyle={[ui.pad, { paddingBottom: 60 + insets.bottom }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.muted} />}
+        refreshControl={pull}
       >
         {error && <Text style={[ui.danger, { marginTop: 12 }]}>{error}</Text>}
 

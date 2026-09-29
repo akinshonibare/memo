@@ -84,7 +84,7 @@ class WorkerSettings:
 		cron(read_people_backlog_task, minute={1, 11, 21, 31, 41, 51}),
 		# Recent notes, once Habits is on, for the history a habit brings (ADR 0043).
 		cron(read_habits_backlog_task, minute={6, 16, 26, 36, 46, 56}),
-		# Item chunks whose text has gone stale, one embedding call an hour (ADR 0044).
+		# Item chunks whose text has gone stale, one embedding call an hour (ADR 0045).
 		cron(refresh_derivation_chunks_task, minute=29),
 	]
 	on_startup = startup

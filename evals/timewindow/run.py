@@ -1,4 +1,4 @@
-"""The time-window eval (ADR 0044): how many time questions get the right days.
+"""The time-window eval (ADR 0045): how many time questions get the right days.
 
 	uv run python -m evals.timewindow.run
 
@@ -8,12 +8,12 @@ gives none when none is labelled. Two ways to be wrong, and they cost different
 amounts:
 
 - **miss**: a time the parser didn't read. Ask falls back to plain retrieval, which is
-  how it behaved before ADR 0044: not worse, just not better.
+  how it behaved before ADR 0045: not worse, just not better.
 - **wrong days**: a window that isn't what was meant. Ask lists the wrong items first
   and searches the wrong days. This is the one that hurts, and the gate allows none.
 
 Real questions belong here: `ask.time_unparsed` in the logs names the word each missed
-question used. The gate is the trigger in ADR 0044 for replacing this parser with a
+question used. The gate is the trigger in ADR 0045 for replacing this parser with a
 model-parsed filter.
 """
 

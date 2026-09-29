@@ -1,4 +1,4 @@
-"""The time a question is about (ADR 0044): "what's on this week?" names no thing a
+"""The time a question is about (ADR 0045): "what's on this week?" names no thing a
 retriever can match, only a range of days. This reads that range from a closed set of
 phrases, deterministically, with no model call on the time-to-first-token budget.
 

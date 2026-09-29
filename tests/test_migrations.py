@@ -110,3 +110,47 @@ async def test_0008_downgrades_with_a_cited_item_whose_note_was_deleted(
 		await asyncio.to_thread(command.downgrade, config, "0007")
 	finally:
 		await asyncio.to_thread(command.upgrade, config, "head")
+
+
+async def test_0018_turns_plan_readings_into_the_passages_they_stood_for(
+	client: AsyncClient, admin_engine: AsyncEngine
+) -> None:
+	config = Config("alembic.ini")
+	await asyncio.to_thread(command.downgrade, config, "0017")
+	try:
+		async with admin_engine.begin() as conn:
+			await conn.execute(
+				text("UPDATE users SET timezone = 'America/Toronto' WHERE id = :u"),
+				{"u": SEED_USER_ID},
+			)
+			# Position 0 was Genesis 1-4; read late on the 28th in Toronto, which is
+			# already the 29th in UTC.
+			await conn.execute(
+				text(
+					"INSERT INTO faith_readings (id, user_id, plan, cycle, position, "
+					"read_at) VALUES (gen_random_uuid(), :u, 'canonical', 1, 0, "
+					"'2026-09-29T02:30:00+00:00')"
+				),
+				{"u": SEED_USER_ID},
+			)
+	finally:
+		await asyncio.to_thread(command.upgrade, config, "head")
+	async with admin_engine.connect() as conn:
+		rows = (
+			await conn.execute(
+				text("SELECT payload FROM derivations WHERE kind = 'reading'")
+			)
+		).all()
+		table = await conn.scalar(text("SELECT to_regclass('faith_readings')"))
+	assert [r[0] for r in rows] == [
+		{
+			"ref": "Genesis 1–4",
+			"book": "GEN",
+			"chapter": 1,
+			"verse": None,
+			"end_chapter": 4,
+			"end_verse": None,
+			"read_on": "2026-09-28",
+		}
+	]
+	assert table is None, "the old table is gone"

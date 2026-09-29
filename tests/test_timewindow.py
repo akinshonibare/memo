@@ -1,4 +1,4 @@
-"""The days a question is about (ADR 0044): pure, so every phrase is a table row."""
+"""The days a question is about (ADR 0045): pure, so every phrase is a table row."""
 
 import datetime as dt
 from zoneinfo import ZoneInfo

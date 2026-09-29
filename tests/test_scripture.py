@@ -3,7 +3,13 @@ no database, no model."""
 
 import pytest
 
-from memo.services.scripture import find_passages, label, plan
+from memo.services.scripture import (
+	find_passages,
+	label,
+	next_reading,
+	parse_reading,
+	passage_from_payload,
+)
 
 
 def refs(text: str) -> list[str]:
@@ -73,27 +79,44 @@ def test_passage_payload_carries_the_usfm_code_for_links() -> None:
 	assert q.usfm == "SNG"
 
 
-def test_the_plan_reads_the_whole_bible_in_about_a_year() -> None:
-	readings = plan()
-	assert 350 <= len(readings) <= 380
-	# Every chapter once, in order, and no reading crosses a book (one link opens it).
-	chapters = [
-		(r.book.value, c) for r in readings for c in range(r.chapter, r.end_chapter + 1)
-	]
-	assert len(chapters) == 1189
-	assert chapters == sorted(chapters)
-	assert len(set(chapters)) == 1189
-	assert all(1 <= r.end_chapter - r.chapter + 1 <= 4 for r in readings)
-	assert [r.index for r in readings] == list(range(len(readings)))
-	assert readings[0].label == "Genesis 1–4"
-	assert readings[-1].label.startswith("Revelation")
-
-
 def test_labels_read_naturally() -> None:
 	(single_psalm,) = find_passages("Psalm 23")
 	assert label(single_psalm) == "Psalm 23"
-	readings = plan()
-	psalms = [r for r in readings if r.usfm == "PSA"]
-	assert psalms[0].label.startswith("Psalms 1–")
-	one_chapter = [r for r in readings if r.usfm == "OBA"]
-	assert [r.label for r in one_chapter] == ["Obadiah"]
+	(psalms,) = find_passages("Psalm 1-3")
+	assert label(psalms) == "Psalms 1–3"
+	(obadiah,) = find_passages("Obadiah 1:3")
+	assert label(obadiah) == "Obadiah 3"
+
+
+def test_what_you_are_reading_can_be_a_whole_book() -> None:
+	john = parse_reading("John")
+	assert john is not None and label(john) == "John"
+	assert (john.chapter, john.end_chapter) == (1, 21)
+	psalms = parse_reading("psalms")
+	assert psalms is not None and label(psalms) == "Psalms"
+	romans = parse_reading("Romans 8")
+	assert romans is not None and label(romans) == "Romans 8"
+	assert parse_reading("hello there") is None
+	assert parse_reading("   ") is None
+
+
+def test_the_next_chapter_follows_what_you_last_read_in_it() -> None:
+	john = parse_reading("John")
+	assert label(next_reading(john, None)) == "John 1"  # type: ignore[arg-type]
+	assert label(next_reading(john, parse_reading("John 3"))) == "John 4"  # type: ignore[arg-type]
+	assert label(next_reading(john, parse_reading("John 3-5"))) == "John 6"  # type: ignore[arg-type]
+	assert next_reading(john, parse_reading("John 21")) is None, "read to its end"
+	# A chapter set is read once; a few verses set are read as they are.
+	romans = parse_reading("Romans 8")
+	assert label(next_reading(romans, None)) == "Romans 8"  # type: ignore[arg-type]
+	assert next_reading(romans, parse_reading("Romans 8")) is None
+	verses = parse_reading("Romans 8:28-39")
+	assert next_reading(verses, parse_reading("Romans 8:28-39")) == verses
+	assert next_reading(None, None) is None
+
+
+def test_a_stored_passage_comes_back_the_same() -> None:
+	for text in ("Romans 8:28-30", "John", "Jude 3", "Psalm 23"):
+		p = parse_reading(text)
+		assert p is not None and passage_from_payload(p.payload()) == p
+	assert passage_from_payload({"book": "XYZ", "chapter": 1}) is None

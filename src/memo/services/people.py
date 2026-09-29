@@ -274,7 +274,7 @@ def _contains(haystack: list[str], needle: list[str]) -> bool:
 
 
 def named_in(question: str, people: Sequence[Person], limit: int = 3) -> list[Person]:
-	"""The people a question names (ADR 0044), for Ask to read their last contact
+	"""The people a question names (ADR 0045), for Ask to read their last contact
 	from the record instead of hoping retrieval finds the right note.
 
 	A full name or alias anywhere in the question is a match; so is a given name

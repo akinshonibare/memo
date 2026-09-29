@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 # v2.3: the people a note is about, and whether they were in touch (ADR 0029);
 #       "accepted automatically" items, from the auto-accept setting (ADR 0030).
 # v2.4: the days the question is about, and the people it names with their last
-#       contact, both read from the records rather than retrieved (ADR 0044).
+#       contact, both read from the records rather than retrieved (ADR 0045).
 ANSWER_VERSION = "answer-v2.4"
 
 SYSTEM_PROMPT = """\

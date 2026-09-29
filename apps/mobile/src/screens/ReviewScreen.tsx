@@ -12,6 +12,7 @@ import { haptic } from "../haptics";
 import { celebrate, celebrateAt, listLayout, rowExit } from "../motion";
 import { fonts, useUi } from "../ui";
 import { makeStyles, useTheme } from "../theme";
+import { usePullToRefresh } from "../refresh";
 
 // The weekly review (ADR 0028; the brief's V3): Monday to Sunday, facts not a pep talk.
 // Still-open todos are listed and can be ticked off here; they are never counted
@@ -47,6 +48,7 @@ export function ReviewScreen({
       setError(String(e));
     }
   }, [api, weeksAgo]);
+  const pull = usePullToRefresh(load);
 
   useEffect(() => {
     const first = setTimeout(load, 0);
@@ -108,7 +110,7 @@ export function ReviewScreen({
           <Ionicons name="chevron-forward" size={18} color={weeksAgo === 0 ? colors.hairline : colors.muted} />
         </Pressable>
       </View>
-      <ScrollView contentContainerStyle={[ui.pad, { paddingBottom: 48 + insets.bottom }]}>
+      <ScrollView contentContainerStyle={[ui.pad, { paddingBottom: 48 + insets.bottom }]} refreshControl={pull}>
         <Text style={styles.title}>{weeksAgo === 0 ? "This week" : weeksAgo === 1 ? "Last week" : `${weeksAgo} weeks ago`}</Text>
         <Text style={ui.meta}>{range}</Text>
         {error && <Text style={[ui.danger, { marginTop: 12 }]}>{error}</Text>}
@@ -176,15 +178,17 @@ function FaithSection({
   const ui = useUi();
   const styles = useStyles();
   const { colors } = useTheme();
-  const nothing = faith.read.length === 0 && faith.answered.length === 0 && faith.passages.length === 0;
+  // Readings are absent from a server older than what-you-read (ADR 0042, revised).
+  const read = faith.read ?? [];
+  const nothing = read.length === 0 && faith.answered.length === 0 && faith.passages.length === 0;
   return (
     <View style={styles.section}>
       <Text style={ui.label}>Faith</Text>
       {nothing && <Text style={ui.bodyMuted}>A quiet week here.</Text>}
-      {faith.read.length > 0 && (
+      {read.length > 0 && (
         <View style={styles.line}>
           <Ionicons name="book-outline" size={18} color={colors.muted} style={{ marginTop: 2 }} />
-          <Text style={[styles.lineTitle, { flex: 1 }]}>Read {faith.read.map((r) => r.label).join(", ")}</Text>
+          <Text style={[styles.lineTitle, { flex: 1 }]}>Read {read.map((r) => r.passage.ref).join(", ")}</Text>
         </View>
       )}
       {faith.answered.map((p) => (

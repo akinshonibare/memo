@@ -1,4 +1,4 @@
-"""What Ask reads from records before it searches (ADR 0044): the days a question is
+"""What Ask reads from records before it searches (ADR 0045): the days a question is
 about, the items dated in them, and the last contact with anyone it names."""
 
 import datetime as dt

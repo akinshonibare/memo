@@ -299,7 +299,7 @@ async def rewrite_query(
 	return rewritten
 
 
-# --- what Ask can know exactly (ADR 0044) --------------------------------------------
+# --- what Ask can know exactly (ADR 0045) --------------------------------------------
 
 # Items dated in the question's window, listed ahead of what retrieval finds. A cap,
 # because "this month" can hold more than an answer should read out.

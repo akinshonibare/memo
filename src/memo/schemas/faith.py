@@ -1,5 +1,5 @@
-"""Faith (ADR 0042): prayers, passages, the reading plan, and the one thing a day the
-Faith screen remembers."""
+"""Faith (ADR 0042): prayers, passages, what you're reading, and the one thing a day
+the Faith screen remembers."""
 
 import datetime as dt
 import uuid
@@ -99,25 +99,54 @@ class PassageOut(BaseModel):
 	end_verse: int | None
 
 
-class ReadingOut(BaseModel):
-	index: int
-	label: str  # "Exodus 12–14"
-	book: str  # USFM, for the link
-	chapter: int  # the chapter the link opens at
-	end_chapter: int
+class ReadingLogOut(BaseModel):
+	"""A passage you read, on a day."""
+
+	id: uuid.UUID
+	passage: PassageOut
+	on: dt.date
 
 
-class PlanOut(BaseModel):
-	plan: str
-	title: str  # "Genesis to Revelation"
-	cycle: int  # times through, starting at 1
-	position: int  # readings marked read this time through
-	total: int
-	# The next reading; None when this time through is finished.
-	next: ReadingOut | None
-	# The one last marked read, which "Undo" takes back.
-	last: ReadingOut | None
-	last_read_at: dt.datetime | None
+class ReadingState(BaseModel):
+	"""What you're reading, as you set it, and what memo offers to read next in it:
+	the chapter after the last one you read there. No plan, and nothing behind."""
+
+	current: PassageOut | None  # what you set; None until you set something
+	next: PassageOut | None  # None when nothing is set, or you've read to its end
+	last: ReadingLogOut | None  # the latest reading, which Undo takes back
+	recent: list[ReadingLogOut]  # newest first, a few
+
+
+class SetReading(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	ref: str | None = Field(max_length=120)  # "John", "Psalms", "Romans 8"; null clears
+
+
+class LogReading(BaseModel):
+	model_config = ConfigDict(extra="forbid")
+
+	# What you read; omitted, the next chapter of what you're reading.
+	ref: str | None = Field(default=None, max_length=120)
+	on: dt.date | None = None  # today, in your timezone
+
+
+class PassageMention(BaseModel):
+	"""A note that names a passage: where it was said, and what was said around it."""
+
+	capture_id: uuid.UUID
+	on: dt.date  # the day the note was written, in the user's timezone
+	excerpt: str | None
+
+
+class PassageRef(BaseModel):
+	"""One passage your notes talk about, and the notes that do (ADR 0042, revised):
+	Faith as a reference to what you've written about, not a plan to keep up with."""
+
+	passage: PassageOut
+	count: int  # notes that name it
+	last_on: dt.date
+	notes: list[PassageMention]  # newest first, a few
 
 
 class MomentOut(BaseModel):
@@ -137,8 +166,10 @@ class MomentOut(BaseModel):
 class FaithOut(BaseModel):
 	enabled: bool
 	translation: str
-	plan: PlanOut
 	moment: MomentOut | None
+	reading: ReadingState
+	# Every passage the notes name, most recently written about first.
+	passages: list[PassageRef]
 	open: list[PrayerOut]
 	answered: list[PrayerOut]  # most recent first
 
@@ -151,7 +182,7 @@ class PassageWritten(BaseModel):
 class FaithWeek(BaseModel):
 	"""The weekly review's Faith section: facts, nothing to beat."""
 
-	read: list[ReadingOut]
+	read: list[ReadingLogOut]
 	answered: list[PrayerOut]
 	passages: list[PassageWritten]
 

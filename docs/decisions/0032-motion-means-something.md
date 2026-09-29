@@ -69,6 +69,24 @@ listening and moving bars while speaking.
 - **More to keep honest.** An animation that fires on the wrong event is worse than none.
   Each one is keyed to a state transition, not to a render.
 
+## What changed (2026-09-29): no layout animations in Home's list
+
+On the phone, Home showed a note-sized gap under "Notes" after a note was deleted,
+until something else moved the list. Home is a virtualized `FlatList`, and "rows spring
+into place when others come or go" was Reanimated's `itemLayoutAnimation`: each row is
+moved to its new place by a transform. A transition that starts while Home is covered
+(a note deleted from its own page) or is interrupted can leave those transforms where
+they started - every row below still drawn in its old place. It didn't reproduce in a
+debug build in the simulator, which is the point: it depends on timing.
+
+The original reasoning wasn't wrong so much as incomplete: layout animations are fine
+in a plain view (Today, the Planner, the review still use them) and fragile in a
+virtualized list, where cells are laid out and recycled by the list, not by us. So Home
+no longer animates positions at all. A deleted row fades where it is, then leaves, and
+the list closes up by ordinary layout; new rows still fade in. Nothing can be stranded,
+because nothing is moved by a transform. What we gave up: the list closing up is
+instant rather than a spring.
+
 ## Revisit when
 
 - An effect needs real GPU work (shaders, a real metaball): Skia, for that component only.

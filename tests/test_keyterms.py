@@ -1,4 +1,4 @@
-"""People's names sent to Deepgram as keyterms (ADR 0013, ADR 0044): which names,
+"""People's names sent to Deepgram as keyterms (ADR 0013, ADR 0045): which names,
 in what order, and that every way audio reaches Deepgram carries them."""
 
 import uuid

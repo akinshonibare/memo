@@ -16,7 +16,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   record and write, detail with review, delete, playback, Ask sheet, Settings.
 - **Quality gates**: 122 tests against real Postgres, ruff, mypy strict, migrations cycled,
   evals for extraction (recorded), retrieval and faithfulness. CI runs on every PR.
-- **Decisions**: ADRs 0001–0044 in [decisions/](decisions/). 0006 and 0018 are superseded.
+- **Decisions**: ADRs 0001–0045 in [decisions/](decisions/). 0006 and 0018 are superseded.
 
 ## Not done, in the order it should happen
 
@@ -56,7 +56,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    `answer-v2` attaches each retrieved note's live derivations (date, review status) and
    states today's date; derivation chunks now carry their dates; rejecting retires a chunk.
    Re-embedding on add/edit is done too (ADR 0021 update). Date-range questions and the
-   backfill of dates into older item chunks: done in [ADR 0044](decisions/0044-ask-reads-dates-and-people-before-it-searches.md).
+   backfill of dates into older item chunks: done in [ADR 0045](decisions/0045-ask-reads-dates-and-people-before-it-searches.md).
 7. **Housekeeping.** _Done:_ `API_TOKEN` removed from both Railway services (2026-09-28).
    Settings has Export (JSON through the share sheet, via `expo-sharing`) and Delete
    everything. Delete-everything was failing for anyone who had used Ask (citation FK,
@@ -86,7 +86,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   changes ship with the next EAS build. The reading gate is armed (a live `claude-opus-5`
   recording, 1.00 on a starter set that is too easy: replace it with real notes).
   Deepgram keyterms from people's names and "when did I last see X" from the person:
-  done in [ADR 0044](decisions/0044-ask-reads-dates-and-people-before-it-searches.md).
+  done in [ADR 0045](decisions/0045-ask-reads-dates-and-people-before-it-searches.md).
 
 - **Keep without asking** ([ADR 0030](decisions/0030-auto-accept-is-not-confirmation.md)):
   Settings → Review, off by default. When on, new items are kept as `accepted` (not
@@ -147,12 +147,14 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
 
 ## Next up (Akin, 2026-09-29)
 
-1. **Faith**: built ([ADR 0042](decisions/0042-faith-a-space-of-its-own.md), migration 0016).
+1. **Faith**: built and shipped ([ADR 0042](decisions/0042-faith-a-space-of-its-own.md)).
    Off until turned on in Settings → Faith. Prayers (answered, not done, linked to people),
-   one thing a day to remember, a reading plan by position, passages found in faith notes
-   and opened in YouVersion (NIV by default), a Faith section in the weekly review.
-   Prayers said in any note are filed into Faith by the `faith-v1` reader, gated by its
-   own eval (`evals/faith`, armed, replayed in CI).
+   one thing a day to remember, passages found in notes and opened in YouVersion (NIV by
+   default), a Faith section in the weekly review, and a `faith-v1` reader that files
+   prayers from any note (its own eval). **Revised the same day**
+   ([ADR 0044](decisions/0044-readings-you-choose.md), migration 0018): no fixed plan. You
+   set what you're reading ("John"), memo offers the next chapter, "Read" logs it, and
+   any passage can be logged; the passages your notes name are listed as a reference.
 2. **Habits**: built ([ADR 0043](decisions/0043-habits-noticed-not-logged.md), migration 0017).
    Off until turned on in Settings → Habits. The `habits-v1` reader picks out what each
    note says you did (gym, running, reading, the Bible, prayer, and so on, or a habit you
@@ -165,9 +167,12 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
    the weekly review. The last 60 days of notes are read in the background when it's
    turned on. Gated by its own eval (`evals/habits`, 32 cases, armed at 1.00, replayed
    in CI).
-3. **Still open from build 17:** a gap Akin sees after deleting a note, not reproduced in
-   the simulator. Waiting on his build number and how he deleted.
-4. **The five-tap dot "doesn't work"** (2026-09-29): not a bug. Akin's phone had Reduce
+3. **The gap after deleting a note** (Akin's screenshot, build 17): Home's rows were
+   moved by Reanimated layout animations, which can be left stranded in a virtualized
+   list. Home no longer animates positions ([ADR 0032](decisions/0032-motion-means-something.md),
+   "What changed"). Not reproducible in a debug build, so confirm on the phone.
+4. **Pull to refresh** on every list screen (`src/refresh.tsx`).
+5. **The five-tap dot "doesn't work"** (2026-09-29): not a bug. Akin's phone had Reduce
    Motion on, which hides every particle and the dot's hop by design (ADR 0032). The
    whole path was checked in the simulator: five taps, the burst, autumn's leaves.
 
@@ -176,7 +181,7 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
 Asked "what are we missing?", the gaps against the brief's roadmap were listed and Akin
 picked these, one PR each, in this order:
 
-1. **The gaps in Ask and People** ([ADR 0044](decisions/0044-ask-reads-dates-and-people-before-it-searches.md)).
+1. **The gaps in Ask and People** ([ADR 0045](decisions/0045-ask-reads-dates-and-people-before-it-searches.md)).
    _Built:_ Ask reads the days a question names ("this week", "last Friday", "in
    March") and pins the items dated in them; "when did I last see X" comes from the
    person's recorded contact; retrieval searches inside those days first; people's names

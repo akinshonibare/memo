@@ -109,7 +109,6 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 			"people",
 			"captures",
 			"recordings",
-			"faith_readings",
 			"habits",
 		):
 			await conn.execute(text(f"DELETE FROM {table}"))
@@ -121,7 +120,7 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 				"UPDATE users SET timezone = 'UTC', apple_sub = NULL, email = NULL, "
 				"display_name = NULL, voice = NULL, auto_accept = false, "
 				"faith_enabled = false, bible_translation = 'NIV', "
-				"habits_enabled = false "
+				"bible_reading = NULL, habits_enabled = false "
 				"WHERE id = :seed"
 			),
 			{"seed": str(SEED_USER_ID)},

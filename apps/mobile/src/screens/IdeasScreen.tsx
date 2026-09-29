@@ -5,6 +5,7 @@ import type { Api, Derivation } from "../api";
 import { IconCircle } from "../components";
 import { useUi } from "../ui";
 import { makeStyles } from "../theme";
+import { usePullToRefresh } from "../refresh";
 import { DerivationSheet } from "./DerivationSheet";
 
 // Ideas have no date, so they don't belong on the Planner's week. Newest first; the
@@ -38,6 +39,7 @@ export function IdeasScreen({
       setError(String(e));
     }
   }, [api]);
+  const pull = usePullToRefresh(load);
 
   useEffect(() => {
     const first = setTimeout(load, 0);
@@ -56,6 +58,7 @@ export function IdeasScreen({
       <FlatList
         data={ideas ?? []}
         keyExtractor={(d) => d.id}
+        refreshControl={pull}
         contentContainerStyle={{ padding: 20, paddingBottom: 40 + insets.bottom }}
         renderItem={({ item }) => (
           <Pressable

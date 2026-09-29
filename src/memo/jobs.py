@@ -210,7 +210,7 @@ async def read_people_backlog_task(ctx: dict[str, Any]) -> int:
 
 
 async def refresh_derivation_chunks_task(ctx: dict[str, Any]) -> int:
-	"""Bring stale item chunks up to date, a batch per hour (ADR 0044): the items
+	"""Bring stale item chunks up to date, a batch per hour (ADR 0045): the items
 	embedded before their dates were part of their text, and any future change to
 	that text. A sweep, like the people backlog; a provider hiccup waits for the next
 	hour rather than retrying, since nothing the user sees depends on it."""

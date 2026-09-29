@@ -25,6 +25,7 @@ import { makeStyles, useTheme } from "../theme";
 import { fonts, useUi } from "../ui";
 import { DerivationSheet } from "./DerivationSheet";
 import { haptic } from "../haptics";
+import { usePullToRefresh } from "../refresh";
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 const CELL = 40;
@@ -98,6 +99,7 @@ export function PlannerScreen({
       setError(String(e));
     }
   }, [api]);
+  const pull = usePullToRefresh(load);
 
   useEffect(() => {
     const first = setTimeout(load, 0);
@@ -229,7 +231,7 @@ export function PlannerScreen({
       />
       <View style={[ui.hairline, { marginHorizontal: 20 }]} />
 
-      <ScrollView contentContainerStyle={[ui.pad, { paddingBottom: 40 + insets.bottom }]}>
+      <ScrollView contentContainerStyle={[ui.pad, { paddingBottom: 40 + insets.bottom }]} refreshControl={pull}>
         {error && <Text style={[ui.danger, { marginTop: 12 }]}>{error}</Text>}
         <Text style={[ui.label, styles.section]}>{dayTitle}</Text>
         {nothing && <Text style={[ui.bodyMuted, styles.empty]}>Nothing on this day.</Text>}

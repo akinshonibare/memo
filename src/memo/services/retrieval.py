@@ -63,7 +63,7 @@ _KEYWORD_SQL = text(
 )
 
 
-# Inside a time window (ADR 0044) the candidates are the chunks of notes written in
+# Inside a time window (ADR 0045) the candidates are the chunks of notes written in
 # those days: a few dozen, not the whole corpus. HNSW post-filters, so a narrow window
 # would come back nearly empty from an index walk; a MATERIALIZED CTE fences the index
 # off and the distance is computed exactly over the window, which at this size is
@@ -145,7 +145,7 @@ async def search(
 	here (not read from any request) and applied in both branches on top of RLS.
 	`include_faith=False` leaves faith notes out (ADR 0042), in both branches, on the
 	chunks table alone. `window`, [since, until), keeps only notes written in it
-	(ADR 0044); a derivation chunk whose note was deleted has no note time and is left
+	(ADR 0045); a derivation chunk whose note was deleted has no note time and is left
 	out, since Ask pins dated items by their own dates instead. `query_vector` skips
 	the embedding call when the caller searches twice for one question.
 	"""
