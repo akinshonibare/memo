@@ -48,7 +48,6 @@ export function PersonScreen({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [merging, setMerging] = useState(false);
-  const [behind, setBehind] = useState(false); // Lately's notes, shown on a tap
 
   // onBack is a new function on every App render; a ref keeps `load` (and so the
   // fetch) tied to the person, not to App re-rendering.
@@ -216,42 +215,10 @@ export function PersonScreen({
             )}
 
             {person.lately ? (
-              <Pressable
-                onPress={() => {
-                  haptic.tap();
-                  setBehind((b) => !b);
-                }}
-                style={({ pressed }) => [styles.card, styles.lately, pressed && styles.pressed]}
-                accessibilityRole="button"
-                accessibilityState={{ expanded: behind }}
-                accessibilityHint="Shows the notes it came from"
-              >
+              <View style={[styles.card, styles.lately]}>
                 <Text style={ui.meta}>Lately</Text>
                 <Text style={styles.latelyText}>{person.lately}</Text>
-                {behind ? (
-                  <View style={styles.behind}>
-                    {person.mentions.slice(0, 6).map((m) => (
-                      <Pressable
-                        key={m.id}
-                        onPress={() => m.capture_id && onOpenCapture(m.capture_id)}
-                        disabled={!m.capture_id}
-                        style={({ pressed }) => [styles.behindRow, pressed && styles.pressed]}
-                        accessibilityRole="button"
-                      >
-                        <Text style={ui.meta}>{formatDay((m.occurred_on ?? m.written_at ?? m.created_at).slice(0, 10))}</Text>
-                        <Text style={ui.bodyMuted} numberOfLines={2}>
-                          {m.context ?? m.excerpt ?? "A note"}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : (
-                  <Text style={[ui.meta, { marginTop: 6 }]}>
-                    {person.lately_at ? `Written ${formatAgo(person.lately_at.slice(0, 10))} · ` : ""}
-                    Tap for the notes it came from
-                  </Text>
-                )}
-              </Pressable>
+              </View>
             ) : null}
 
             <View style={styles.card}>
@@ -459,8 +426,6 @@ const useStyles = makeStyles((colors) => ({
   big: { fontFamily: fonts.serif, fontSize: 30, lineHeight: 36, color: colors.text },
   lately: { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.hairline },
   latelyText: { fontFamily: fonts.serif, fontSize: 19, lineHeight: 26, color: colors.text, marginTop: 4 },
-  behind: { marginTop: 12, gap: 10 },
-  behindRow: { gap: 2 },
   actions: { flexDirection: "row", marginTop: 14 },
   rhythm: {
     flexDirection: "row",
