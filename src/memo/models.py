@@ -350,6 +350,12 @@ class Derivation(Base):
 			"(target_id IS NULL) = (kind <> 'update')",
 			name="ck_derivations_target_update",
 		),
+		# Mood (ADR 0058): a read is always of a note; your word for a day never is.
+		CheckConstraint(
+			"(kind <> 'mood' OR capture_id IS NOT NULL)"
+			" AND (kind <> 'mood_day' OR capture_id IS NULL)",
+			name="ck_derivations_mood_capture",
+		),
 	)
 
 
@@ -385,6 +391,15 @@ Index(
 	text("(payload ->> 'health_id')"),
 	unique=True,
 	postgresql_where=HEALTH_WORKOUT_WHERE,
+)
+# One word of your own per day (ADR 0058, migration 0025): saying again replaces it.
+MOOD_DAY_WHERE = text("kind = 'mood_day'")
+Index(
+	"uq_derivations_mood_day",
+	Derivation.user_id,
+	text("(payload ->> 'day')"),
+	unique=True,
+	postgresql_where=MOOD_DAY_WHERE,
 )
 
 

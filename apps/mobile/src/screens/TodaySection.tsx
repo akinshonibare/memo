@@ -9,7 +9,7 @@ import { haptic } from "../haptics";
 import { celebrate, celebrateAt, listLayout, rowExit } from "../motion";
 import { makeStyles, useTheme } from "../theme";
 import { useUi } from "../ui";
-import { publishToday, type TodayProps } from "../widgets";
+import { type OnThisDayProps, publishOnThisDay, publishToday, type TodayProps } from "../widgets";
 
 // What the Today widget shows: events by time, then todos, in the same order as here.
 function widgetProps(view: MorningView): TodayProps {
@@ -18,6 +18,36 @@ function widgetProps(view: MorningView): TodayProps {
     ...view.todos.map((t) => ({ time: null, title: t.title, kind: "todo" as const })),
   ];
   return { heading: formatDay(view.local_date), lines, more: Math.max(0, lines.length - 4) };
+}
+
+// What the On this day widget shows (ADR 0057): the same look-back Today shows, else
+// the idea it resurfaced, else a word that there's nothing yet.
+function onThisDayProps(view: MorningView): OnThisDayProps {
+  const back = view.on_this_day;
+  if (back) {
+    const { title, rest } = headline(back);
+    return {
+      label: lookBack(back.captured_on, view.local_date),
+      text: rest ? `${title} ${rest}` : title,
+      date: formatDay(back.captured_on, true),
+      link: `memo://note/${back.capture_id}`,
+    };
+  }
+  const idea = view.resurfaced_idea;
+  if (idea) {
+    return {
+      label: "An idea worth another look",
+      text: idea.summary ? `${idea.title}. ${idea.summary}` : idea.title,
+      date: formatDay(idea.captured_on, true),
+      link: idea.capture_id ? `memo://note/${idea.capture_id}` : "memo://ideas",
+    };
+  }
+  return {
+    label: "On this day",
+    text: "Nothing from this day yet. It fills in as memo gets older.",
+    date: null,
+    link: "memo://ideas",
+  };
 }
 
 // The morning view (issue #38), fetched when Home mounts, when something changes, and
@@ -31,6 +61,7 @@ export function useMorning(api: Api, refreshKey: number): { view: MorningView | 
       const morning = await api.getMorning();
       setView(morning);
       publishToday(widgetProps(morning));
+      publishOnThisDay(onThisDayProps(morning));
     } catch {
       // Secondary to the capture list: on failure the section keeps its last state
       // (or stays hidden) rather than pushing a second error banner onto Home.

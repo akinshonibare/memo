@@ -13,6 +13,7 @@ from memo.prompts.reconcile_v1 import Listed
 from memo.schemas.derivations import Extraction
 from memo.schemas.faith import FaithExtraction
 from memo.schemas.habits import HabitsExtraction
+from memo.schemas.mood import MoodRead
 from memo.schemas.people import PeopleExtraction
 from memo.schemas.reconcile import Change, Reconciliation
 from memo.services.apple import AppleIdentity, InvalidIdentityToken
@@ -21,6 +22,7 @@ from memo.services.extraction import ExtractResult, RawCompletion
 from memo.services.faith import FaithResult
 from memo.services.habits import HabitsResult
 from memo.services.llm import LLMCall
+from memo.services.mood import MoodResult
 from memo.services.people import PeopleResult
 from memo.services.push import Message, Outgoing, Ticket
 from memo.services.reconcile import ReconcileResult
@@ -209,6 +211,36 @@ class FakePeopleReader:
 			extraction=extraction,
 			raw=extraction.model_dump_json(),
 			calls=[fake_llm_call("people")],
+		)
+
+
+class FakeMoodReader:
+	"""Scripted moods (ADR 0058): a fixed read for every note, or one per note text."""
+
+	model = "fake"
+	version = "mood-v1/fake"
+
+	def __init__(
+		self,
+		read: MoodRead | None = None,
+		*,
+		by_text: dict[str, MoodRead] | None = None,
+		fail_with: Exception | None = None,
+	) -> None:
+		self.default = read or MoodRead()
+		self.by_text = by_text or {}
+		self.fail_with = fail_with
+		self.calls = 0
+
+	async def read(
+		self, text: str, *, captured_at: dt.datetime, timezone: str
+	) -> MoodResult:
+		self.calls += 1
+		if self.fail_with is not None:
+			raise self.fail_with
+		read = self.by_text.get(text, self.default)
+		return MoodResult(
+			read=read, raw=read.model_dump_json(), calls=[fake_llm_call("mood")]
 		)
 
 

@@ -7,7 +7,8 @@ words, a voice note with word timings, a note from this day last year, a deleted
 whose items and mention outlive it, a contact with no note, Faith turned on with a
 faith note, its passages, a prayer for someone who is later merged, and a reading, and
 Habits turned on with activities, a tracked habit, a logged day and a removed one,
-squats with weights and runs from Apple Health reaching milestones, a
+squats with weights and runs from Apple Health reaching milestones, a note's mood and
+your own word for a day, a
 morning push time with a phone and a sent (voted on), a skipped and a failed push - and
 then calls every GET route in the OpenAPI spec (so a route added later is swept too)
 and the people write routes. Nothing may answer 5xx, and no answer stream may crash.
@@ -327,6 +328,25 @@ async def test_every_route_survives_every_kind_of_row(
 	).status_code == 200
 	assert (await client.post("/v1/faith/readings", json={})).status_code == 201
 
+	# Mood (ADR 0058): a read of the last note, as the mood stage leaves it, and your
+	# own word for today.
+	async with admin_engine.begin() as conn:
+		await conn.execute(
+			text(
+				"INSERT INTO derivations (id, user_id, capture_id, kind, payload, "
+				"status, extractor_version, confidence) VALUES (:id, :u, :c, 'mood', "
+				"CAST(:p AS jsonb), 'accepted', 'mood-v1/test', 0.8)"
+			),
+			{
+				"id": uuid.uuid4(),
+				"u": SEED_USER_ID,
+				"c": corpus.captures[-1],
+				"p": json.dumps({"valence": -1, "words": ["tired"], "evidence": None}),
+			},
+		)
+	said = await client.put(f"/v1/faith/mood/{TODAY.isoformat()}", json={"valence": 1})
+	assert said.status_code == 200, said.text
+
 	# The morning push (ADR 0047): a time, a phone, and one push of each outcome.
 	assert (
 		await client.patch("/v1/me", json={"morning_push_at": "07:30"})
@@ -379,6 +399,13 @@ async def test_every_route_survives_every_kind_of_row(
 		"message_id": [asked["message_id"]],
 		"derivation_id": derivation_ids,
 		"habit_id": habits,
+		"day": [
+			TODAY.isoformat(),
+			(TODAY - dt.timedelta(days=1)).isoformat(),
+			(TODAY + dt.timedelta(days=2)).isoformat(),
+			"2001-01-01",
+			"not-a-day",
+		],
 	}
 	queries: dict[str, list[str]] = {
 		"/v1/derivations": [f"?status={s}" for s in DERIVATION_STATUSES]

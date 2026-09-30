@@ -1,5 +1,13 @@
 import { HStack, Image, Spacer, Text, VStack } from "@expo/ui/swift-ui";
-import { containerBackground, font, foregroundStyle, frame, padding, widgetURL } from "@expo/ui/swift-ui/modifiers";
+import {
+  containerBackground,
+  font,
+  foregroundStyle,
+  frame,
+  lineLimit,
+  padding,
+  widgetURL,
+} from "@expo/ui/swift-ui/modifiers";
 import { createWidget, type WidgetEnvironment } from "expo-widgets";
 import { Platform } from "react-native";
 
@@ -82,7 +90,52 @@ const Record = (_props: object, env: WidgetEnvironment) => {
   );
 };
 
+// What the On this day widget shows: a note from this day in another year, else the
+// idea Today resurfaced, else a word that there's nothing yet (ADR 0057).
+export type OnThisDayProps = {
+  label: string; // "A year ago today", "An idea worth another look"
+  text: string;
+  date: string | null; // the note's own date, so an old snapshot still reads true
+  link: string; // memo://note/<id>, or memo://ideas
+};
+
+const OnThisDay = (props: OnThisDayProps, env: WidgetEnvironment) => {
+  "widget";
+  const cream = "#F1ECDF";
+  const muted = "#9FAEA4";
+  const amber = "#E2A04A";
+  const bg = "#0B241A";
+  const small = env.widgetFamily === "systemSmall";
+  return (
+    <VStack
+      alignment="leading"
+      spacing={6}
+      modifiers={[
+        frame({ maxWidth: 9999, maxHeight: 9999, alignment: "topLeading" }),
+        padding({ all: 2 }),
+        containerBackground(bg, "widget"),
+        widgetURL(props.link),
+      ]}
+    >
+      <HStack spacing={5}>
+        <Image systemName="clock.arrow.circlepath" size={11} color={amber} />
+        <Text modifiers={[font({ size: 11, weight: "semibold" }), foregroundStyle(muted), lineLimit(1)]}>
+          {props.label}
+        </Text>
+      </HStack>
+      <Text modifiers={[font({ size: small ? 14 : 16, design: "serif" }), foregroundStyle(cream), lineLimit(small ? 5 : 4)]}>
+        {props.text}
+      </Text>
+      <Spacer />
+      {props.date ? (
+        <Text modifiers={[font({ size: 11 }), foregroundStyle(muted), lineLimit(1)]}>{props.date}</Text>
+      ) : null}
+    </VStack>
+  );
+};
+
 export const TodayWidget = createWidget<TodayProps>("TodayWidget", Today);
+export const OnThisDayWidget = createWidget<OnThisDayProps>("OnThisDayWidget", OnThisDay);
 export const RecordWidget = createWidget("RecordWidget", Record);
 
 // The widget shows what the app last saw: pushed whenever the morning view loads.
@@ -93,6 +146,15 @@ export function publishToday(props: TodayProps) {
     TodayWidget.updateSnapshot(props);
   } catch {
     // no widget extension in this build (Expo Go, simulator without the target)
+  }
+}
+
+export function publishOnThisDay(props: OnThisDayProps) {
+  if (Platform.OS !== "ios") return;
+  try {
+    OnThisDayWidget.updateSnapshot(props);
+  } catch {
+    // as above
   }
 }
 

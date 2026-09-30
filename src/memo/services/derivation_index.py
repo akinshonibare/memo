@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from memo.ids import uuid7
 from memo.models import Chunk, Derivation
-from memo.schemas.derivations import FAITH_KINDS, NOT_ITEMS
+from memo.schemas.derivations import FAITH_KINDS, MOOD_KINDS, NOT_ITEMS
 from memo.services.embeddings import Embedder
 from memo.services.queue import Queue
 
@@ -134,8 +134,8 @@ async def reembed_derivation(
 	"""Make the derivation's live chunk match its current text. Idempotent: a job
 	that runs twice, or late, finds the chunk already current and does nothing.
 
-	Returns what happened, for the job log: gone | rejected | faith | unchanged |
-	embedded. The caller commits."""
+	Returns what happened, for the job log: gone | rejected | faith | activity | mood
+	| unchanged | embedded. The caller commits."""
 	derivation = await session.scalar(
 		select(Derivation).where(
 			Derivation.id == derivation_id, Derivation.user_id == user_id
@@ -146,8 +146,11 @@ async def reembed_derivation(
 	if derivation.status == "rejected":
 		return "rejected"  # the reject path already superseded its chunk
 	if derivation.kind in NOT_ITEMS and derivation.kind not in ("mention",):
-		# Prayers, passages (ADR 0042) and activities (ADR 0043) are never embedded.
-		return "faith" if derivation.kind in FAITH_KINDS else "activity"
+		# Prayers, passages (ADR 0042), activities (ADR 0043) and moods (ADR 0058) are
+		# never embedded.
+		if derivation.kind in FAITH_KINDS:
+			return "faith"
+		return "mood" if derivation.kind in MOOD_KINDS else "activity"
 
 	body = derivation_text(derivation)
 	live = (

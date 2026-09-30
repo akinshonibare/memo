@@ -183,7 +183,7 @@ function FaithSection({
   const nothing = read.length === 0 && faith.answered.length === 0 && faith.passages.length === 0;
   return (
     <View style={styles.section}>
-      <Text style={ui.label}>Faith</Text>
+      <Text style={ui.label}>Within</Text>
       {nothing && <Text style={ui.bodyMuted}>A quiet week here.</Text>}
       {read.length > 0 && (
         <View style={styles.line}>

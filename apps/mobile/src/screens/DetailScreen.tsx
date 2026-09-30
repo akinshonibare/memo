@@ -412,7 +412,7 @@ export function DetailScreen({
             accessibilityRole="button"
           >
             <Text style={ui.meta}>
-              {capture.space === "faith" ? "Move to your notes" : "Move to Faith"}
+              {capture.space === "faith" ? "Move to your notes" : "Move to Within"}
             </Text>
           </Pressable>
         )}

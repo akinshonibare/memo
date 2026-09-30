@@ -402,7 +402,7 @@ export function HomeScreen({
           { key: "people", icon: "people-outline", label: "People", onPress: onPeople, fresh: fresh.has("people") },
           { key: "habits", icon: "leaf-outline", label: "Habits", onPress: onHabits, fresh: fresh.has("habits") },
           ...(onFaith
-            ? [{ key: "faith", icon: "book-outline" as const, label: "Faith", onPress: onFaith, fresh: fresh.has("faith") }]
+            ? [{ key: "faith", icon: "book-outline" as const, label: "Within", onPress: onFaith, fresh: fresh.has("faith") }]
             : []),
         ]}
       />
