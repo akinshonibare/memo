@@ -812,6 +812,11 @@ export class Api {
     });
   }
 
+  // Forget someone: the person and every mention of them go; the notes stay (ADR 0055).
+  deletePerson(id: string) {
+    return this.request<void>(`/v1/people/${id}`, { method: "DELETE" });
+  }
+
   // `id` and `into` are one person: `id`'s notes move to `into`, and `id` is gone.
   mergePerson(id: string, into: string) {
     return this.request<PersonDetail>(`/v1/people/${id}/merge`, {

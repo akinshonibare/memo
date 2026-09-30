@@ -787,3 +787,55 @@ async def test_export_and_delete_everything_cover_people(
 	assert deleted.json()["deleted"]["people"] == 1
 	async with admin_engine.connect() as conn:
 		assert await conn.scalar(text("SELECT count(*) FROM people")) == 0
+
+
+async def test_deleting_a_person_forgets_them_and_keeps_the_notes(
+	client: AsyncClient, session: AsyncSession, admin_engine: AsyncEngine
+) -> None:
+	reader = FakePeopleReader(_read(_mention("Tunde", contact="in_person")))
+	note = await _note(client, session, "coffee with Tunde", reader)
+	(tunde,) = (await client.get("/v1/people")).json()["people"]
+	await client.post(f"/v1/people/{tunde['id']}/contact", json={})
+	await client.patch("/v1/me", json={"faith_enabled": True})
+	prayer = await client.post(
+		"/v1/faith/prayers", json={"title": "Tunde's move", "person_id": tunde["id"]}
+	)
+	assert prayer.status_code == 201, prayer.text
+
+	assert (await client.delete(f"/v1/people/{tunde['id']}")).status_code == 204
+
+	assert (await client.get(f"/v1/people/{tunde['id']}")).status_code == 404
+	assert (await client.get("/v1/people")).json()["people"] == []
+	assert (await client.get(f"/v1/captures/{note}")).json()["people"] == []
+	assert (await client.get("/v1/people/unresolved")).json() == []
+	async with admin_engine.connect() as conn:
+		mentions = await conn.scalar(
+			text("SELECT count(*) FROM derivations WHERE kind = 'mention'")
+		)
+		kept = (
+			await conn.execute(
+				text("SELECT person_id FROM derivations WHERE id = :p"),
+				{"p": prayer.json()["id"]},
+			)
+		).one()
+	assert mentions == 0, "the note's mention and the logged contact both go"
+	assert kept == (None,), "the prayer stays, no longer linked to anyone"
+
+	again = await _note(client, session, "Tunde called", reader)
+	(new,) = (await client.get("/v1/people")).json()["people"]
+	assert new["id"] != tunde["id"], "a later note meets them as someone new"
+	assert (await client.get(f"/v1/captures/{again}")).json()["people"]
+
+
+async def test_a_person_can_only_be_deleted_by_their_owner(
+	client: AsyncClient,
+	session: AsyncSession,
+	as_user: Callable[[uuid.UUID], None],
+	second_user: uuid.UUID,
+) -> None:
+	await _note(client, session, "Tunde", FakePeopleReader(_read(_mention("Tunde"))))
+	(mine,) = (await client.get("/v1/people")).json()["people"]
+	as_user(second_user)
+	assert (await client.delete(f"/v1/people/{mine['id']}")).status_code == 404
+	as_user(SEED_USER_ID)
+	assert (await client.get(f"/v1/people/{mine['id']}")).status_code == 200

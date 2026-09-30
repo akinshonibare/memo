@@ -122,6 +122,7 @@ export function PersonScreen({
         { label: "Add another name", icon: "person-add-outline" },
         { label: person.note ? "Edit note" : "Add a note", icon: "document-text-outline" },
         { label: "Merge into…", icon: "git-merge-outline" },
+        { label: "Delete person", icon: "trash-outline", destructive: true },
       ],
     });
     if (i === 0) await prompt("Name", person.name, (name) => api.updatePerson(id, { name }));
@@ -131,6 +132,28 @@ export function PersonScreen({
       );
     if (i === 2) await prompt("A few words, like “from work”", person.note ?? "", (note) => api.updatePerson(id, { note: note || null }), true);
     if (i === 3) setMerging(true);
+    if (i === 4) await remove();
+  };
+
+  // Forget them: the notes stay, and a later note that names them meets them anew.
+  const remove = async () => {
+    if (!person) return;
+    const yes = await confirm({
+      title: `Delete ${person.name}?`,
+      message: "Your notes stay. memo forgets who they were about, and any contact you logged.",
+      action: "Delete",
+      icon: "trash-outline",
+    });
+    if (!yes) return;
+    setBusy("delete");
+    try {
+      await api.deletePerson(id);
+      onChanged();
+      back.current();
+    } catch (e) {
+      setError(String(e));
+      setBusy(null);
+    }
   };
 
   const pickRhythm = async () => {
