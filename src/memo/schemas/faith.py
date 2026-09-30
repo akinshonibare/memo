@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from memo.schemas.derivations import no_leaked_field
+from memo.schemas.mood import MoodWeekOut
 
 Space = Literal["main", "faith"]
 
@@ -172,6 +173,8 @@ class FaithOut(BaseModel):
 	passages: list[PassageRef]
 	open: list[PrayerOut]
 	answered: list[PrayerOut]  # most recent first
+	# How you've sounded this week (ADR 0058). Null while Within (Faith) is off.
+	mood: MoodWeekOut | None = None
 
 
 class PassageWritten(BaseModel):

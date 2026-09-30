@@ -127,6 +127,10 @@ jobs:
         # Recorded like the others (needs ANTHROPIC_API_KEY):
         #   railway run -s worker -- uv run python -m evals.reconcile.run --record evals/reconcile/recorded.json
         run: uv run python -m evals.reconcile.run --replay evals/reconcile/recorded.json
+      - name: mood reading (recorded outputs)
+        # Recorded like faith (needs ANTHROPIC_API_KEY; Railway's worker has it):
+        #   railway run -s worker -- uv run python -m evals.mood.run --record evals/mood/recorded.json
+        run: uv run python -m evals.mood.run --replay evals/mood/recorded.json
 
   app:
     # The Expo app: a clean `npm ci` (what EAS runs first - a broken peer dependency
