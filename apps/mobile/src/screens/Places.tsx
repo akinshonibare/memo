@@ -22,7 +22,9 @@ export type Place = { key: string; icon: IconName; label: string; onPress: () =>
 // The same as the + button beside the record button: a 56 circle, a 28 icon.
 const SIZE = 56;
 const ICON = SIZE / 2;
-const GAP = 4;
+// Open, each place gets a taller row than the circle: a longer column, easier to hit.
+const ROW = 80;
+const GAP = 6;
 
 // Where memo's other screens are (Planner, People, Review, Faith, Habits): one circle
 // above the record button that opens upward into a column of icons. Home's header
@@ -42,7 +44,7 @@ export function Places({ places, bottom, right }: { places: Place[]; bottom: num
 
   useEffect(() => {
     // Quick and without a bounce: an overshoot kept the top icon moving under the thumb.
-    height.value = withTiming(open ? SIZE + places.length * (SIZE + GAP) : SIZE, {
+    height.value = withTiming(open ? SIZE + places.length * (ROW + GAP) : SIZE, {
       duration: 170,
       easing: Easing.out(Easing.cubic),
     });
@@ -113,12 +115,12 @@ export function Places({ places, bottom, right }: { places: Place[]; bottom: num
                 onPress={() => go(place)}
                 accessibilityRole="button"
                 accessibilityLabel={place.fresh ? `${place.label}, something new` : place.label}
-                style={({ pressed }) => [styles.slot, { marginBottom: GAP }, pressed && styles.pressed]}
+                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
               >
                 <Pulse on={!!place.fresh && !reduced}>
                   <Ionicons name={place.icon} size={ICON} color={place.fresh ? colors.record : colors.text} />
                 </Pulse>
-                {place.fresh && <View style={[styles.dot, { backgroundColor: colors.record }]} />}
+                {place.fresh && <View style={[styles.dot, styles.rowDot, { backgroundColor: colors.record }]} />}
               </Pressable>
             </Animated.View>
           ))}
@@ -154,8 +156,10 @@ const useStyles = makeStyles((colors) => ({
     flexDirection: "column-reverse",
   },
   slot: { width: SIZE, height: SIZE, alignItems: "center", justifyContent: "center" },
+  row: { width: SIZE, height: ROW, marginBottom: GAP, alignItems: "center", justifyContent: "center" },
   ring: { position: "absolute", width: SIZE, height: SIZE, borderRadius: SIZE / 2, borderWidth: 2 },
   dot: { position: "absolute", top: 11, right: 11, width: 9, height: 9, borderRadius: 4.5 },
+  rowDot: { top: 11 + (ROW - SIZE) / 2 },
   pressed: { opacity: 0.55 },
 }));
 
