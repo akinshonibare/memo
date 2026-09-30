@@ -370,8 +370,10 @@ function Root() {
               headerShown: false,
               contentStyle: { backgroundColor: colors.bg },
               gestureEnabled: true,
-              // Edge swipe only: rows swipe sideways for their own actions.
-              fullScreenGestureEnabled: false,
+              // Swipe left to right anywhere to go back, not just from the edge (Akin,
+              // 2026-09-30). The Planner keeps the edge swipe: its rows swipe that way
+              // to tick a todo off.
+              fullScreenGestureEnabled: true,
             }}
           >
             <Stack.Screen name="Home">
@@ -404,7 +406,7 @@ function Root() {
                 />
               )}
             </Stack.Screen>
-            <Stack.Screen name="Planner">
+            <Stack.Screen name="Planner" options={{ fullScreenGestureEnabled: false }}>
               {({ navigation }) => (
                 <PlannerScreen
                   api={api}
