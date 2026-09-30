@@ -26,6 +26,7 @@ from memo.models import (
 	Recording,
 	User,
 )
+from memo.prompts.voice import Tone
 from memo.routers.push import PushOut
 from memo.routers.recordings import get_object_store
 from memo.schemas.ask import MessageOut
@@ -58,6 +59,8 @@ class MeOut(BaseModel):
 	habits_enabled: bool = True  # ADR 0054: always on
 	# The morning push's local time, or None for none (ADR 0047).
 	morning_push_at: dt.time | None = None
+	# How memo writes for you (ADR 0061).
+	tone: Tone = "plain"
 
 
 class MePatch(BaseModel):
@@ -82,6 +85,8 @@ class MePatch(BaseModel):
 	habits_enabled: Literal[True] | None = None
 	# "07:30", or null to turn the morning push off (ADR 0047).
 	morning_push_at: dt.time | None = None
+	# How memo writes for you (ADR 0061): answers, summaries, photo descriptions.
+	tone: Tone | None = None
 
 	@field_validator("morning_push_at")
 	@classmethod
@@ -121,7 +126,7 @@ class MePatch(BaseModel):
 		if not self.model_fields_set:
 			raise ValueError(
 				"provide timezone, name, voice, auto_accept, faith_enabled, "
-				"bible_translation, habits_enabled or morning_push_at"
+				"bible_translation, habits_enabled, morning_push_at or tone"
 			)
 		return self
 
@@ -186,6 +191,9 @@ async def update_me(body: MePatch, session: DbSession, user_id: CurrentUser) -> 
 	if "morning_push_at" in fields:
 		# null turns it off; a phone's token stays, for when it comes back on.
 		user.morning_push_at = body.morning_push_at
+	if "tone" in fields and body.tone is not None:
+		# From the next answer and the next note on; what memo already wrote stays.
+		user.tone = body.tone
 	await session.flush()
 	return await _me_out(session, user)
 

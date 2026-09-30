@@ -46,6 +46,7 @@ from memo.services.faith import faith_hidden
 from memo.services.llm import LLMCall
 from memo.services.morning import tz_or_utc
 from memo.services.people import load_people, named_in
+from memo.services.prose import DashFilter
 from memo.services.retrieval import Hit, search
 from memo.services.retry import RetryableError, TerminalError
 
@@ -725,17 +726,27 @@ async def run_turn(ctx: AskContext, assistant: Message) -> AsyncGenerator[Event,
 			}
 		)
 		first_token_at: float | None = None
+		# No em dashes (ADR 0061): filtered as it streams, so what the person watches
+		# appear is what is saved.
+		dashes = DashFilter()
 		async with aclosing(
 			ctx.answer_provider.stream(
-				system=answer_v2.SYSTEM_PROMPT, messages=messages
+				system=answer_v2.system(user.tone if user is not None else None),
+				messages=messages,
 			)
 		) as tokens:
 			async for delta in tokens:
 				if first_token_at is None:
 					first_token_at = time.perf_counter()
 					assistant.ttft_ms = round((first_token_at - started) * 1000)
-				partial.append(delta)
-				yield Event("token", {"delta": delta})
+				shown = dashes.feed(delta)
+				if shown:
+					partial.append(shown)
+					yield Event("token", {"delta": shown})
+		rest = dashes.close()
+		if rest:
+			partial.append(rest)
+			yield Event("token", {"delta": rest})
 
 		call = ctx.answer_provider.usage()
 		assistant.text = "".join(partial)

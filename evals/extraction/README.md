@@ -13,7 +13,7 @@ lift straight in. The thresholds in `scoring.py` are the merge gate; keep them h
 Run: `uv run python -m evals.extraction.run` (live) or `--replay <file>` (offline).
 Record a live run with `--record out.json` to produce an offline replay file for CI.
 
-## Recorded run (2026-09-28, `extract-v1.1/claude-opus-5`)
+## Recorded run (2026-09-30, `extract-v1.2/claude-opus-5`, tone plain)
 
 `recorded.json` arms the CI gate; `matches.json` holds a model's judgement of which
 predicted item is which expected one (`matching.py`, `match-v1`), so paraphrases score as
@@ -21,7 +21,9 @@ hits. Each verdict carries a fingerprint of exactly the items it judged; where t
 longer fits (a label changed, a new recording), scoring falls back to lexical title
 matching for that example, and the run prints how many examples used recorded matches.
 
-Current misses, both real:
+Re-recorded for v1.2 (no em dashes, summaries in the person's tone; ADR 0061) and
+re-judged: todo 1.00/0.96, event 1.00/1.00, idea 0.89/1.00, no em dashes in any output.
+Current misses, the same two as v1.1, both real:
 
 - **g34** adds an idea duplicating the todo it also extracted (precision).
 - **g36** folds "compare quotes" into the renewal todo's notes instead of a second todo

@@ -5,11 +5,15 @@ history is measurable rather than mysterious."""
 import datetime as dt
 from zoneinfo import ZoneInfo
 
+from memo.prompts.voice import NO_EM_DASHES, tone_line
+
 # v1.1: same prompt text; the constrained output schema now requires every field
 # (see AnthropicExtractionProvider). Stamped separately because outputs differ.
-EXTRACTOR_VERSION = "extract-v1.1"
+# v1.2: no em dashes, and an idea's summary written in the person's tone, given in
+# the message (ADR 0061). Titles stay plain.
+EXTRACTOR_VERSION = "extract-v1.2"
 
-SYSTEM_PROMPT = """\
+SYSTEM_PROMPT = f"""\
 You extract structured items from a single entry in one person's private journal.
 The entry may be typed or a voice transcript: informal, unpunctuated, mid-thought.
 
@@ -25,7 +29,7 @@ Return only what the text supports. Three kinds of item:
   resolvable `starts_at`. A todo with a deadline is a todo, not an event.
 - idea: a thought the author would want to find again: an insight, a plan, a
   product idea, a realisation about themselves. `summary` restates it in one or
-  two sentences in the author's sense, not yours.
+  two sentences in the author's sense, not yours, in the tone the message gives.
 
 Rules:
 - Do not invent. If nothing qualifies, return empty lists. That is a good answer.
@@ -40,10 +44,13 @@ Rules:
   descriptive for events and ideas. Preserve names exactly as written.
 - `confidence` is your own estimate (0 to 1) that the item is real and correctly
   typed. Be honest; 0.5 means you are guessing.
+- {NO_EM_DASHES}
 """
 
 
-def user_message(text: str, *, captured_at: dt.datetime, timezone: str) -> str:
+def user_message(
+	text: str, *, captured_at: dt.datetime, timezone: str, tone: str | None = None
+) -> str:
 	try:
 		local = captured_at.astimezone(ZoneInfo(timezone))
 	except (KeyError, ValueError):
@@ -52,7 +59,8 @@ def user_message(text: str, *, captured_at: dt.datetime, timezone: str) -> str:
 	weekday = local.strftime("%A")
 	return (
 		f"Captured at {local.isoformat()} ({weekday}, timezone {timezone}). "
-		"Resolve relative dates against this moment.\n\n"
+		"Resolve relative dates against this moment.\n"
+		f"Summaries in this tone: {tone_line(tone)} Titles stay plain.\n\n"
 		f"<capture>\n{text}\n</capture>"
 	)
 

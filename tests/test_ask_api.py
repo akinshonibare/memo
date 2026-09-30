@@ -356,7 +356,9 @@ async def test_client_disconnect_closes_the_upstream_stream_and_keeps_the_partia
 			)
 		).one()
 	assert status_ == "failed"
-	assert text_ == "one two "
+	# What the person saw: the dash filter (ADR 0061) holds a trailing space until the
+	# next token, and there was none.
+	assert text_ == "one two"
 	assert "client disconnected after 2 tokens" == error
 
 
@@ -466,3 +468,24 @@ async def test_rejecting_a_derivation_retires_its_chunk(
 			{"d": derivation_id},
 		)
 	assert live == 0
+
+
+async def test_answers_are_in_your_tone_and_never_use_em_dashes(
+	client: AsyncClient, corpus: list[uuid.UUID], app: FastAPI
+) -> None:
+	# ADR 0061: the tone rides in the system prompt; em dashes are taken out as the
+	# answer streams, so the saved text is what the person watched appear.
+	answers = FakeAnswerProvider(["You were ", "tired ", "— ", "the launch", "."])
+	app.state.answer_provider = answers
+	assert (await client.patch("/v1/me", json={"tone": "warm"})).status_code == 200
+	accepted = await _ask(client, "how was the week?")
+	events = await _events(client, accepted["stream_url"])
+
+	assert "Tone: Warm:" in answers.last_system
+	assert "Never use em dashes" in answers.last_system
+	streamed = "".join(e[1]["delta"] for e in events if e[0] == "token")
+	assert streamed == "You were tired, the launch."
+	history = (
+		await client.get(f"/v1/conversations/{accepted['conversation_id']}/messages")
+	).json()
+	assert history[1]["text"] == streamed

@@ -95,6 +95,7 @@ class FakeAnswerProvider:
 	) -> AsyncGenerator[str, None]:
 		self.calls += 1
 		self.last_messages = list(messages)
+		self.last_system = system
 		try:
 			for token in self.tokens:
 				if self.fail_with is not None:
@@ -148,7 +149,7 @@ class FakeRedis:
 
 class FakeExtractor:
 	model = "fake"
-	version = "extract-v1.1/fake"
+	version = "extract-v1.2/fake"
 
 	def __init__(
 		self,
@@ -160,12 +161,19 @@ class FakeExtractor:
 		self.fail_with = fail_with
 		self.calls = 0
 		self.seen: list[tuple[str, dt.datetime, str]] = []
+		self.tones: list[str | None] = []
 
 	async def extract(
-		self, text: str, *, captured_at: dt.datetime, timezone: str
+		self,
+		text: str,
+		*,
+		captured_at: dt.datetime,
+		timezone: str,
+		tone: str | None = None,
 	) -> ExtractResult:
 		self.calls += 1
 		self.seen.append((text, captured_at, timezone))
+		self.tones.append(tone)
 		if self.fail_with is not None:
 			raise self.fail_with
 		return ExtractResult(
@@ -361,7 +369,12 @@ class FakeDescriber:
 		self.captions: list[str | None] = []
 
 	async def describe(
-		self, image: bytes, mime: str, *, caption: str | None = None
+		self,
+		image: bytes,
+		mime: str,
+		*,
+		caption: str | None = None,
+		tone: str | None = None,
 	) -> DescribeResult:
 		self.seen.append((len(image), mime))
 		self.captions.append(caption)

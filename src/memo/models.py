@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from memo.ids import uuid7
+from memo.prompts.voice import TONES
 from memo.schemas.derivations import ALL_KINDS, DERIVATION_STATUSES, PERSON_KINDS
 from memo.status import CaptureStatus
 
@@ -83,9 +84,15 @@ class User(Base):
 	habits_enabled: Mapped[bool] = mapped_column(default=True, server_default=true())
 	# The morning push (ADR 0047): the local time it arrives, or NULL for none.
 	morning_push_at: Mapped[dt.time | None] = mapped_column(Time())
+	# How memo writes for this person (ADR 0061): Ask's answers, highlight summaries,
+	# photo descriptions. Titles stay plain whatever it is.
+	tone: Mapped[str] = mapped_column(
+		String(16), default="plain", server_default="plain"
+	)
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 	__table_args__ = (
+		CheckConstraint(f"tone IN ({_in_list(TONES)})", name="ck_users_tone"),
 		CheckConstraint(
 			f"bible_translation IN ({_in_list(BIBLE_TRANSLATIONS)})",
 			name="ck_users_bible_translation",

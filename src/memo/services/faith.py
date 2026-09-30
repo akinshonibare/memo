@@ -45,6 +45,7 @@ from memo.services.extraction import AnthropicExtractionProvider, complete_valid
 from memo.services.llm import LLMCall
 from memo.services.morning import local_day_range, look_back_days, tz_or_utc
 from memo.services.people import normalize
+from memo.services.prose import plain_dashes
 from memo.services.retry import TerminalError
 from memo.services.scripture import (
 	Passage,
@@ -324,7 +325,7 @@ async def apply_prayers(
 			user_id=capture.user_id,
 			capture_id=capture.id,
 			kind=PRAYER,
-			payload={"title": found.title, "notes": None, "answer": None},
+			payload={"title": plain_dashes(found.title), "notes": None, "answer": None},
 			# Shown in Faith at once, like a passage; removing one is the "wrong" label.
 			status="accepted",
 			extractor_version=version,
