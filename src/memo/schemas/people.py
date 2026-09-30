@@ -19,6 +19,7 @@ from pydantic import (
 	model_validator,
 )
 
+from memo.prompts.lately_v1 import MAX_CHARS as LATELY_CHARS
 from memo.schemas.derivations import DerivationOut, no_leaked_field
 from memo.schemas.faith import PrayerOut
 
@@ -157,6 +158,10 @@ class PersonOut(BaseModel):
 	# Family, for the "time with family" habit (ADR 0043): what you set, or else memo's
 	# guess from a word like "Mum" or "brother" in the name or note.
 	family: bool = False
+	# Lately (ADR 0062): a line on what's been going on with them, and when memo wrote
+	# it. Null until the sweep has written one, or when the notes say nothing yet.
+	lately: str | None = None
+	lately_at: dt.datetime | None = None
 
 
 class PeopleList(BaseModel):
@@ -264,3 +269,22 @@ class ReachOut(BaseModel):
 	every_days: int
 	latest: str | None
 	latest_on: dt.date | None
+
+
+class LatelyWrite(BaseModel):
+	"""What the Lately writer returns (prompts/lately_v1): the line, or "" when the
+	notes say nothing about the person worth a line."""
+
+	model_config = ConfigDict(
+		extra="forbid", json_schema_serialization_defaults_required=True
+	)
+
+	text: str = Field(default="", max_length=LATELY_CHARS + 60)
+
+	@field_validator("text")
+	@classmethod
+	def _one_short_line(cls, value: str) -> str:
+		cleaned = " ".join(value.split())
+		if len(cleaned) > LATELY_CHARS + 20:
+			raise ValueError(f"at most {LATELY_CHARS} characters, one or two sentences")
+		return str(no_leaked_field(cleaned))

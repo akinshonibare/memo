@@ -82,6 +82,8 @@ def _person_out(
 		due=is_due(p, lasts.get(p.id), today),
 		created_at=p.created_at,
 		family=is_family(p),
+		lately=p.lately,
+		lately_at=p.lately_at,
 	)
 
 
@@ -253,6 +255,8 @@ async def update_person(
 		previous = person.name
 		person.name = body.name
 		person.aliases = with_alias(person, previous)
+		# Lately calls them by name (ADR 0062): the sweep writes it again.
+		person.lately_at = None
 	own = normalize(person.name)
 	person.aliases = [a for a in person.aliases if normalize(a) != own]
 	if "note" in fields:

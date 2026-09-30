@@ -9,18 +9,20 @@ from typing import Any
 
 from anthropic.types import MessageParam
 
+from memo.prompts.lately_v1 import Mentioned
 from memo.prompts.reconcile_v1 import Listed
 from memo.schemas.derivations import Extraction
 from memo.schemas.faith import FaithExtraction
 from memo.schemas.habits import HabitsExtraction
 from memo.schemas.mood import MoodRead
-from memo.schemas.people import PeopleExtraction
+from memo.schemas.people import LatelyWrite, PeopleExtraction
 from memo.schemas.reconcile import Change, Reconciliation
 from memo.services.apple import AppleIdentity, InvalidIdentityToken
 from memo.services.embeddings import EmbedResult
 from memo.services.extraction import ExtractResult, RawCompletion
 from memo.services.faith import FaithResult
 from memo.services.habits import HabitsResult
+from memo.services.lately import LatelyResult
 from memo.services.llm import LLMCall
 from memo.services.mood import MoodResult
 from memo.services.people import PeopleResult
@@ -219,6 +221,32 @@ class FakePeopleReader:
 			extraction=extraction,
 			raw=extraction.model_dump_json(),
 			calls=[fake_llm_call("people")],
+		)
+
+
+class FakeLatelyWriter:
+	"""Scripted Lately lines (ADR 0062): records what it was asked to write from."""
+
+	version = "lately-v1/fake"
+
+	def __init__(self, text: str = "", *, fail_with: Exception | None = None) -> None:
+		self.text = text
+		self.fail_with = fail_with
+		self.calls = 0
+		self.seen: list[tuple[str, list[Mentioned], str | None]] = []
+
+	async def write(
+		self, name: str, today: dt.date, notes: list[Mentioned], *, tone: str | None
+	) -> LatelyResult:
+		self.calls += 1
+		self.seen.append((name, list(notes), tone))
+		if self.fail_with is not None:
+			raise self.fail_with
+		written = LatelyWrite(text=self.text)
+		return LatelyResult(
+			written=written,
+			raw=written.model_dump_json(),
+			calls=[fake_llm_call("lately")],
 		)
 
 

@@ -21,6 +21,7 @@ from memo.jobs import (
 	read_mood_backlog_task,
 	read_people_backlog_task,
 	refresh_derivation_chunks_task,
+	refresh_lately_task,
 	requeue_stale_captures_task,
 	send_morning_pushes_task,
 	sweep_unclaimed_recordings_task,
@@ -30,6 +31,7 @@ from memo.services.embeddings import make_embedder
 from memo.services.extraction import make_extractor
 from memo.services.faith import make_faith_reader
 from memo.services.habits import make_habits_reader
+from memo.services.lately import make_lately_writer
 from memo.services.mood import make_mood_reader
 from memo.services.people import make_people_reader
 from memo.services.push import make_push_sender
@@ -58,6 +60,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 		faith=make_faith_reader(settings),
 		habits=make_habits_reader(settings),
 		mood=make_mood_reader(settings),
+		lately=make_lately_writer(settings),
 		describer=make_describer(settings),
 		embedder=make_embedder(settings, http),
 		push_sender=make_push_sender(settings, http),
@@ -84,6 +87,7 @@ class WorkerSettings:
 		read_habits_backlog_task,
 		read_mood_backlog_task,
 		refresh_derivation_chunks_task,
+		refresh_lately_task,
 		send_morning_pushes_task,
 		check_push_receipts_task,
 	]
@@ -98,6 +102,8 @@ class WorkerSettings:
 		cron(read_habits_backlog_task, minute={6, 16, 26, 36, 46, 56}),
 		# The month before Within was turned on, for the mood it shows (ADR 0058).
 		cron(read_mood_backlog_task, minute={4, 14, 24, 34, 44, 54}),
+		# People whose Lately line their notes have outrun (ADR 0062).
+		cron(refresh_lately_task, minute={8, 23, 38, 53}),
 		# Item chunks whose text has gone stale, one embedding call an hour (ADR 0045).
 		cron(refresh_derivation_chunks_task, minute=29),
 		# The morning push, at the minute each user chose, give or take five (ADR 0047).
