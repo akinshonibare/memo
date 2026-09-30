@@ -31,6 +31,10 @@ words), in the person's tone with no em dashes (ADR 0061), at most 220 character
 empty when the notes only name them in passing.** It uses their name and never a
 pronoun the notes don't use.
 
+On the page it is the line alone, under their name: no list of the notes it came from
+and nothing to tap (Akin, after trying it: "too much, it's not nice"). The notes are
+further down the same page.
+
 **A worker sweep (`refresh_lately_task`, four times an hour) rewrites whoever is out
 of date**, most recently mentioned first, twenty at a time. The row records what the
 line was written from (`lately_at`, `lately_count` of live mentions, `lately_tone`,
