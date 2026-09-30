@@ -2,9 +2,9 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Application from "expo-application";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ComponentProps, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
-import { Api, type Me, type Voice } from "../api";
+import { Api, type Me, type Tone, type Voice } from "../api";
 import { asTranslation, TRANSLATIONS, translationName } from "../bible";
 import { Avatar, IconCircle, Pill, SheetHandle } from "../components";
 import { type Config, saveBaseUrl } from "../config";
@@ -37,7 +37,21 @@ type Busy =
   | "faith"
   | "translation"
   | "health"
-  | "morning";
+  | "morning"
+  | "tone";
+
+// How memo writes for you (ADR 0061): answers, highlight summaries, photo descriptions.
+const TONES: { tone: Tone; label: string; icon: ComponentProps<typeof Ionicons>["name"] }[] = [
+  { tone: "plain", label: "Plain: clear and neutral", icon: "remove-outline" },
+  { tone: "warm", label: "Warm: friendly and encouraging", icon: "sunny-outline" },
+  { tone: "brief", label: "Brief: as few words as it takes", icon: "flash-outline" },
+  { tone: "playful", label: "Playful: light, a bit witty", icon: "happy-outline" },
+];
+
+function toneName(tone: Tone | undefined): string {
+  const t = tone ?? "plain";
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
 
 // You first, then how memo looks, then how the assistant treats you, then what memo may
 // do on this phone, then your data, then the account.
@@ -185,6 +199,19 @@ export function ProfileSheet({
     if (i === null) return;
     const chosen = TRANSLATIONS[i];
     if (chosen && chosen !== current) void saveProfile("translation", { bible_translation: chosen });
+  };
+
+  const pickTone = async () => {
+    const current = me?.tone ?? "plain";
+    const i = await choose({
+      title: "Tone",
+      message:
+        "How memo writes your answers, highlight summaries and photo descriptions. Titles stay plain, and what's true never changes.",
+      options: TONES.map((t) => ({ label: `${t.tone === current ? "✓ " : ""}${t.label}`, icon: t.icon })),
+    });
+    if (i === null) return;
+    const chosen = TONES[i]?.tone;
+    if (chosen && chosen !== current) void saveProfile("tone", { tone: chosen });
   };
 
   const pickVoice = async () => {
@@ -372,9 +399,15 @@ export function ProfileSheet({
 
           {signedIn && (
             <>
-              <Group title="Assistant" footer="memo calls you by this name in answers, and reads spoken answers in this voice.">
+              <Group
+                title="Assistant"
+                footer="memo calls you by this name in answers, writes answers and summaries in this tone, and reads spoken answers in this voice."
+              >
                 <Row icon="person-outline" label="Name" onPress={editName} chevron busy={busy === "name"}>
                   <Text style={styles.value}>{me?.name ?? "Not set"}</Text>
+                </Row>
+                <Row icon="chatbubble-ellipses-outline" label="Tone" onPress={pickTone} chevron busy={busy === "tone"}>
+                  <Text style={styles.value}>{toneName(me?.tone)}</Text>
                 </Row>
                 <Row icon="volume-high-outline" label="Voice" onPress={pickVoice} chevron busy={busy === "voice"}>
                   <Text style={styles.value}>{voiceLabel(me?.voice)}</Text>

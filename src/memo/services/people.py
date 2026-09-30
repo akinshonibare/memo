@@ -52,6 +52,7 @@ from memo.services.extraction import (
 	complete_validated,
 )
 from memo.services.llm import LLMCall
+from memo.services.prose import plain_dashes
 from memo.services.retry import TerminalError
 
 log = structlog.get_logger("memo.people")
@@ -359,7 +360,7 @@ def new_person(user_id: uuid.UUID, payload: MentionPayload) -> Person:
 		user_id=user_id,
 		name=name,
 		aliases=[],
-		note=payload.hint,
+		note=plain_dashes(payload.hint) if payload.hint else payload.hint,
 		reach_out_every_days=DEFAULT_REACH_OUT_DAYS,
 	)
 	person.aliases = with_alias(person, titled(payload.name))
@@ -511,6 +512,10 @@ async def apply_mentions(
 	out: list[Derivation] = []
 	for item in extraction.people:
 		payload = item.model_dump(mode="json", exclude={"confidence"})
+		# What the reader wrote about them is memo's prose: no em dashes (ADR 0061).
+		for key in ("hint", "context"):
+			if isinstance(payload.get(key), str):
+				payload[key] = plain_dashes(payload[key])
 		if item.contact in IN_TOUCH and item.occurred_on is None:
 			payload["occurred_on"] = captured_on.isoformat()
 		resolution = resolve(item, known)

@@ -644,7 +644,7 @@ async def test_a_prayer_you_acted_on_survives_its_note_being_read_again(
 		capture,
 		FaithExtraction(prayers=[PrayerFound(title="Kemi's exams")]),
 		version="faith-v1/fake",
-		extract_version="extract-v1.1/fake",
+		extract_version="extract-v1.2/fake",
 	)
 	await session.commit()
 	await bind_user(session, SEED_USER_ID)

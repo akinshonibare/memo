@@ -155,12 +155,19 @@ class Extractor:
 		return f"{EXTRACTOR_VERSION}/{self.model}"
 
 	async def extract(
-		self, text: str, *, captured_at: dt.datetime, timezone: str
+		self,
+		text: str,
+		*,
+		captured_at: dt.datetime,
+		timezone: str,
+		tone: str | None = None,
 	) -> ExtractResult:
 		extraction, raw, calls = await complete_validated(
 			self._provider,
 			system=SYSTEM_PROMPT,
-			first=user_message(text, captured_at=captured_at, timezone=timezone),
+			first=user_message(
+				text, captured_at=captured_at, timezone=timezone, tone=tone
+			),
 			parse=Extraction.model_validate_json,
 			repair=repair_message,
 			stage=STAGE,
@@ -230,7 +237,12 @@ class ExtractorLike(Protocol):
 	def version(self) -> str: ...
 
 	async def extract(
-		self, text: str, *, captured_at: dt.datetime, timezone: str
+		self,
+		text: str,
+		*,
+		captured_at: dt.datetime,
+		timezone: str,
+		tone: str | None = None,
 	) -> ExtractResult: ...
 
 
@@ -241,7 +253,12 @@ class UnconfiguredExtractor:
 	version = f"{EXTRACTOR_VERSION}/unconfigured"
 
 	async def extract(
-		self, text: str, *, captured_at: dt.datetime, timezone: str
+		self,
+		text: str,
+		*,
+		captured_at: dt.datetime,
+		timezone: str,
+		tone: str | None = None,
 	) -> ExtractResult:
 		raise TerminalError("extraction is not configured (ANTHROPIC_API_KEY is unset)")
 

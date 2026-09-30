@@ -20,6 +20,7 @@ from memo.prompts.describe_v1 import (
 	user_message,
 )
 from memo.services.llm import LLMCall
+from memo.services.prose import plain_dashes
 from memo.services.retry import RetryableError, TerminalError
 
 log = structlog.get_logger("memo.vision")
@@ -47,7 +48,12 @@ class Describer(Protocol):
 	def version(self) -> str: ...
 
 	async def describe(
-		self, image: bytes, mime: str, *, caption: str | None = None
+		self,
+		image: bytes,
+		mime: str,
+		*,
+		caption: str | None = None,
+		tone: str | None = None,
 	) -> DescribeResult: ...
 
 
@@ -65,7 +71,12 @@ class AnthropicDescriber:
 		return f"{DESCRIBER_VERSION}/{self.model}"
 
 	async def describe(
-		self, image: bytes, mime: str, *, caption: str | None = None
+		self,
+		image: bytes,
+		mime: str,
+		*,
+		caption: str | None = None,
+		tone: str | None = None,
 	) -> DescribeResult:
 		if mime not in VISION_MIME:
 			raise TerminalError(f"unsupported image type {mime}")
@@ -84,7 +95,7 @@ class AnthropicDescriber:
 							"data": base64.standard_b64encode(image).decode(),
 						},
 					},
-					{"type": "text", "text": user_message(caption)},
+					{"type": "text", "text": user_message(caption, tone)},
 				],
 			}
 		]
@@ -126,8 +137,11 @@ class AnthropicDescriber:
 			cache_write_tokens=usage.cache_creation_input_tokens or 0,
 			latency_ms=round((time.perf_counter() - started) * 1000),
 		)
+		# The description is memo's writing, so no em dashes (ADR 0061); the text in
+		# the photo is the photo's, verbatim.
 		return DescribeResult(
-			text=note_text(parsed.description, parsed.text_in_image), call=call
+			text=note_text(plain_dashes(parsed.description), parsed.text_in_image),
+			call=call,
 		)
 
 
@@ -137,7 +151,12 @@ class UnconfiguredDescriber:
 	version = f"{DESCRIBER_VERSION}/unconfigured"
 
 	async def describe(
-		self, image: bytes, mime: str, *, caption: str | None = None
+		self,
+		image: bytes,
+		mime: str,
+		*,
+		caption: str | None = None,
+		tone: str | None = None,
 	) -> DescribeResult:
 		raise TerminalError("image description is not configured (no Anthropic key)")
 

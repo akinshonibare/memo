@@ -8,13 +8,16 @@ from dataclasses import dataclass, field
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from memo.prompts.voice import writing_rules
+
 # v2.1: a done todo is marked "done" in its status (the Planner's checkbox).
 # v2.2: the person's chosen name, when set, opens the user turn.
 # v2.3: the people a note is about, and whether they were in touch (ADR 0029);
 #       "accepted automatically" items, from the auto-accept setting (ADR 0030).
 # v2.4: the days the question is about, and the people it names with their last
 #       contact, both read from the records rather than retrieved (ADR 0045).
-ANSWER_VERSION = "answer-v2.4"
+# v2.5: the person's tone and no em dashes, appended by system() (ADR 0061).
+ANSWER_VERSION = "answer-v2.5"
 
 SYSTEM_PROMPT = """\
 You answer questions about one person's private journal, for that person. The only
@@ -68,6 +71,12 @@ class Note:
 	written_at: dt.datetime
 	text: str
 	extracted: list[str] = field(default_factory=list)
+
+
+def system(tone: str | None) -> str:
+	"""The system prompt for one person: the rules, then how to write for them. Four
+	tones, four stable prompts, so each still hits the prompt cache."""
+	return f"{SYSTEM_PROMPT}\n{writing_rules(tone)}\n"
 
 
 def _when(iso: str, zone: ZoneInfo) -> str:

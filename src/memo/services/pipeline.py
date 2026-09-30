@@ -13,6 +13,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import structlog
 from sqlalchemy import delete, select, text
@@ -60,6 +61,7 @@ from memo.services.mood import (
 	mood_on,
 )
 from memo.services.people import PeopleReaderLike, apply_mentions, keyterms
+from memo.services.prose import plain_dashes
 from memo.services.reconcile import (
 	ReconcilerLike,
 	UnconfiguredReconciler,
@@ -187,7 +189,13 @@ async def _describe(ctx: PipelineContext, capture: Capture) -> None:
 		raise TerminalError(f"image bytes missing at {photo.storage_key}")
 	started = time.perf_counter()
 	image = await ctx.object_store.get(photo.storage_key)
-	result = await ctx.describer.describe(image, photo.mime, caption=capture.caption)
+	user = await ctx.session.get(User, capture.user_id)
+	result = await ctx.describer.describe(
+		image,
+		photo.mime,
+		caption=capture.caption,
+		tone=user.tone if user is not None else None,
+	)
 	await _record_calls(ctx, capture, [result.call])
 	# Your words first, then the description (ADR 0056), rebuilt from `caption` so a
 	# re-run neither loses nor doubles them.
@@ -232,6 +240,10 @@ def _skip(stage: str, capture: Capture) -> None:
 	log.info(f"stage.{stage}.skipped", capture_id=str(capture.id), reason="no_text")
 
 
+def _undashed(payload: dict[str, Any]) -> dict[str, Any]:
+	return {k: plain_dashes(v) if isinstance(v, str) else v for k, v in payload.items()}
+
+
 async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 	if not capture.text or not capture.text.strip():
 		_skip("extract", capture)
@@ -243,7 +255,10 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 	version = ctx.extractor.version
 	try:
 		result = await ctx.extractor.extract(
-			capture.text, captured_at=capture.created_at, timezone=timezone
+			capture.text,
+			captured_at=capture.created_at,
+			timezone=timezone,
+			tone=user.tone if user is not None else None,
 		)
 	except ExtractionFailed as exc:
 		# Paid-for calls are recorded even when the outcome is a failure.
@@ -273,7 +288,8 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 				user_id=capture.user_id,
 				capture_id=capture.id,
 				kind=kind,
-				payload=item.model_dump(mode="json", exclude={"confidence"}),
+				# No em dashes in what memo writes (ADR 0061), whatever the model did.
+				payload=_undashed(item.model_dump(mode="json", exclude={"confidence"})),
 				status=status,
 				extractor_version=version,
 				confidence=item.confidence,
