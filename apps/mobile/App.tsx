@@ -46,11 +46,14 @@ import { ThemeProvider, useTheme } from "./src/theme";
 import { captureOrQueue, flushOutbox, onNoteSaved, useOutbox } from "./src/outbox";
 import { birthdayToday, milestoneReached, type Moment } from "./src/delight";
 
-// memo://record, write, ask, planner: what a Shortcut or widget opens (ADR 0027).
+// memo://record, write, ask, planner, ideas: what a Shortcut or widget opens (ADR 0027).
+// memo://note/<id>: one note, from the On this day widget (ADR 0057).
 // memo://capture?text=...: a note dictated to Siri (ADR 0028), saved as it is.
-type LinkAction = "record" | "write" | "ask" | "planner" | `capture:${string}`;
+type LinkAction = "record" | "write" | "ask" | "planner" | "ideas" | `note:${string}` | `capture:${string}`;
 function linkAction(url: string | null): LinkAction | null {
-  const match = url?.match(/^memo:\/\/(record|write|ask|planner|capture)\b(?:\?(.*))?/);
+  const note = url?.match(/^memo:\/\/note\/([0-9a-f-]{36})$/i);
+  if (note) return `note:${note[1]}`;
+  const match = url?.match(/^memo:\/\/(record|write|ask|planner|ideas|capture)\b(?:\?(.*))?/);
   if (!match) return null;
   if (match[1] !== "capture") return match[1] as LinkAction;
   const param = /(?:^|&)text=([^&]*)/.exec(match[2] ?? "");
@@ -170,7 +173,7 @@ function Root() {
   const openPerson = (id: string) => {
     if (nav.isReady()) nav.dispatch(StackActions.push("Person", { id }));
   };
-  const goHome = (then?: "Planner") => {
+  const goHome = (then?: "Planner" | "Ideas") => {
     if (!nav.isReady()) return;
     nav.reset({ index: then ? 1 : 0, routes: then ? [{ name: "Home" }, { name: then }] : [{ name: "Home" }] });
   };
@@ -247,7 +250,8 @@ function Root() {
   useEffect(() => {
     if (!ready || !pending) return;
     const run = setTimeout(() => {
-      goHome(pending === "planner" ? "Planner" : undefined);
+      goHome(pending === "planner" ? "Planner" : pending === "ideas" ? "Ideas" : undefined);
+      if (pending.startsWith("note:")) openNote(pending.slice("note:".length));
       setSettings(false);
       if (pending.startsWith("capture:")) {
         // Straight to the outbox path: saved now, or kept until there's a network.

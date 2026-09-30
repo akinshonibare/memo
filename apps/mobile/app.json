@@ -90,6 +90,17 @@
                   "accessoryCircular"
                 ]
               }
+            },
+            {
+              "name": "OnThisDayWidget",
+              "displayName": "On this day",
+              "description": "A note from this day in another year, or an idea worth another look.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium"
+                ]
+              }
             }
           ]
         }
