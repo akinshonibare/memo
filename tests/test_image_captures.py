@@ -38,7 +38,12 @@ async def session(app: FastAPI) -> AsyncIterator[AsyncSession]:
 		yield s
 
 
-async def _photo(client: AsyncClient, store: FakeObjectStore, token: str) -> str:
+async def _photo(
+	client: AsyncClient,
+	store: FakeObjectStore,
+	token: str,
+	caption: str | None = None,
+) -> str:
 	rec = await client.post(
 		"/v1/recordings", json={"mime": "image/jpeg", "bytes": 1024}
 	)
@@ -46,10 +51,13 @@ async def _photo(client: AsyncClient, store: FakeObjectStore, token: str) -> str
 	key = rec.json()["upload_url"].split("fake-bucket.test/")[1].split("?")[0]
 	assert key.endswith(".jpg")
 	store.objects[key] = b"\xff\xd8jpeg-bytes"
-	cap = await client.post(
-		"/v1/captures",
-		json={"recording_id": rec.json()["recording_id"], "client_token": token},
-	)
+	body: dict[str, str] = {
+		"recording_id": rec.json()["recording_id"],
+		"client_token": token,
+	}
+	if caption is not None:
+		body["caption"] = caption
+	cap = await client.post("/v1/captures", json=body)
 	assert cap.status_code == 202, cap.text
 	assert cap.json()["kind"] == "image"
 	capture_id: str = cap.json()["id"]
@@ -142,3 +150,56 @@ async def test_a_photo_the_model_cannot_read_fails_visibly(
 async def test_unsupported_media_is_refused(client: AsyncClient) -> None:
 	heic = await client.post("/v1/recordings", json={"mime": "image/heic"})
 	assert heic.status_code == 422
+
+
+async def test_a_photo_with_your_words_keeps_them_first(
+	client: AsyncClient, session: AsyncSession, store: FakeObjectStore
+) -> None:
+	words = "The flyer Kemi sent - we should go on Friday"
+	capture_id = await _photo(client, store, "tok-photo-words", caption=words)
+	# Before it's described, the note already reads as what you wrote.
+	assert (await client.get(f"/v1/captures/{capture_id}")).json()["text"] == words
+
+	describer = FakeDescriber()
+	extractor = FakeExtractor()
+	ctx = PipelineContext(
+		session=session,
+		transcriber=FakeTranscriber(),
+		object_store=store,
+		extractor=extractor,
+		embedder=FakeEmbedder(),
+		people=FakePeopleReader(),
+		describer=describer,
+	)
+	assert (
+		await process_capture(ctx, uuid.UUID(capture_id), SEED_USER_ID)
+	).status == "ready"
+
+	assert describer.captions == [words], "the describer gets your words as context"
+	expected = f"{words}\n\nPhoto: A flyer for a jazz night."
+	assert extractor.seen[0][0].startswith(expected), "and every stage reads both"
+	detail = (await client.get(f"/v1/captures/{capture_id}")).json()
+	assert detail["text"].startswith(expected)
+	assert detail["text"].count(words) == 1
+
+
+async def test_only_a_photo_takes_a_caption(
+	client: AsyncClient, store: FakeObjectStore
+) -> None:
+	alone = await client.post(
+		"/v1/captures",
+		json={"text": "hi", "caption": "words", "client_token": "tok-cap-text"},
+	)
+	assert alone.status_code == 422
+	rec = await client.post("/v1/recordings", json={"mime": "audio/m4a", "bytes": 64})
+	key = rec.json()["upload_url"].split("fake-bucket.test/")[1].split("?")[0]
+	store.objects[key] = b"audio"
+	voice = await client.post(
+		"/v1/captures",
+		json={
+			"recording_id": rec.json()["recording_id"],
+			"caption": "words",
+			"client_token": "tok-cap-audio",
+		},
+	)
+	assert voice.status_code == 422 and "only a photo" in voice.text

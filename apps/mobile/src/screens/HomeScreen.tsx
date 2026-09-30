@@ -3,7 +3,6 @@ import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AccessibilityInfo,
-  ActivityIndicator,
   Pressable,
   Text,
   TextInput,
@@ -29,7 +28,7 @@ import { usePullToRefresh } from "../refresh";
 import { OutboxSection } from "./OutboxSection";
 import { TodaySection, useMorning } from "./TodaySection";
 import { haptic } from "../haptics";
-import { captureOrQueue, useOutbox } from "../outbox";
+import { useOutbox } from "../outbox";
 
 const POLL_MS = 3000;
 // How long a deleted row takes to fade before it leaves the list.
@@ -100,7 +99,7 @@ export function HomeScreen({
   onChanged: () => void;
   onAsk: () => void;
   onRecord: () => void;
-  onCompose: () => void;
+  onCompose: (photo?: string) => void; // with a photo already picked, to write beside it
   onSettings: () => void;
   name: string | null;
   moment: Moment | null;
@@ -210,21 +209,14 @@ export function HomeScreen({
     }
   };
   // "+" holds the quieter ways to capture: writing, and photos (ADR 0024). Record keeps
-  // its own big button because it is the one used without looking.
-  const [uploading, setUploading] = useState(false);
+  // its own big button because it is the one used without looking. A photo opens the
+  // note sheet with it attached, so you can say why you kept it (ADR 0056).
   const addPhoto = async (source: "camera" | "library") => {
     try {
       const uri = await pickPhoto(source);
-      if (!uri) return;
-      setUploading(true);
-      const id = await captureOrQueue(api, { kind: "image", file: uri });
-      haptic.done();
-      await refresh();
-      if (id) onOpen(id); // watch what memo takes from it arrive
+      if (uri) onCompose(uri);
     } catch (e) {
       setError(`Couldn't add the photo: ${String(e)}`);
-    } finally {
-      setUploading(false);
     }
   };
   const add = async () => {
@@ -388,13 +380,7 @@ export function HomeScreen({
       >
         <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <AskBar onPress={onAsk} />
-        {uploading ? (
-          <View style={styles.uploading}>
-            <ActivityIndicator color={colors.text} />
-          </View>
-        ) : (
-          <IconCircle name="add" size={56} onPress={() => void add()} accessibilityLabel="Write a note or add a photo" />
-        )}
+        <IconCircle name="add" size={56} onPress={() => void add()} accessibilityLabel="Write a note or add a photo" />
         <PressableScale
           onPress={() => {
             haptic.press();
@@ -673,13 +659,5 @@ const useStyles = makeStyles((colors) => ({
     backgroundColor: colors.record,
     borderWidth: 6,
     borderColor: colors.recordRing,
-  },
-  uploading: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
   },
 }));

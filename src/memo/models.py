@@ -146,6 +146,9 @@ class Capture(Base):
 	# alongside `text` by the transcribe stage (ADR 0039). NULL: not a voice note, or
 	# transcribed before words were kept.
 	words: Mapped[list[Any] | None] = mapped_column(JSONB)
+	# A photo's own words, written with it (ADR 0056). `text` is rebuilt from them and
+	# the description, so this is the source that survives reprocessing.
+	caption: Mapped[str | None] = mapped_column(Text)
 	recording_id: Mapped[uuid.UUID | None]
 	status: Mapped[str] = mapped_column(
 		String(16), default=CaptureStatus.PENDING.value, server_default="pending"
@@ -175,6 +178,9 @@ class Capture(Base):
 		),
 		CheckConstraint(
 			f"kind IN ({_in_list(CAPTURE_KINDS)})", name="ck_captures_kind"
+		),
+		CheckConstraint(
+			"caption IS NULL OR kind = 'image'", name="ck_captures_caption_on_photos"
 		),
 		CheckConstraint(
 			f"status IN ({_in_list(tuple(s.value for s in CaptureStatus))})",

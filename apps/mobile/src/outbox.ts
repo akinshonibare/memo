@@ -70,7 +70,7 @@ async function send(api: Api, item: OutboxItem) {
   const space = item.space ?? "main";
   if (item.kind === "text") return api.createTextCapture(item.text ?? "", once, space);
   if (item.kind === "audio") return api.createAudioCapture(item.file!, item.mime, item.durationMs, once, space);
-  return api.createImageCapture(item.file!, once, space);
+  return api.createImageCapture(item.file!, once, space, item.text?.trim() || undefined);
 }
 
 // Try to save now; if the network is the problem, keep it for later. Returns the new

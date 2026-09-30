@@ -128,7 +128,14 @@ async def create_capture(
 				status.HTTP_409_CONFLICT, "recording has not been uploaded yet"
 			)
 		kind = "image" if recording.mime.startswith("image/") else "audio"
+		if body.caption is not None and kind != "image":
+			raise HTTPException(
+				status.HTTP_422_UNPROCESSABLE_CONTENT, "only a photo takes a caption"
+			)
 		values.update(kind=kind, recording_id=recording.id)
+		if body.caption is not None:
+			# Shown as the note's text until the photo is described (ADR 0056).
+			values.update(caption=body.caption.strip(), text=body.caption.strip())
 	else:
 		values.update(kind="text", text=body.text)
 
