@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any, Protocol
 
 import aioboto3
@@ -101,6 +102,48 @@ class S3ObjectStore:
 	async def delete(self, key: str) -> None:
 		async with self._client() as s3:
 			await s3.delete_object(Bucket=self.bucket, Key=key)
+
+	async def list_keys(self, prefix: str = "", *, page_size: int = 1000) -> list[str]:
+		"""Every key under prefix, a page at a time. Operator use only (ADR 0059): the
+		app itself only ever addresses a key it holds in a row."""
+		keys: list[str] = []
+		async with self._client() as s3:
+			paginator = s3.get_paginator("list_objects_v2")
+			async for page in paginator.paginate(
+				Bucket=self.bucket,
+				Prefix=prefix,
+				PaginationConfig={"PageSize": page_size},
+			):
+				keys.extend(obj["Key"] for obj in page.get("Contents", []))
+		return keys
+
+	async def delete_keys(self, keys: Sequence[str], *, batch_size: int = 1000) -> None:
+		"""Delete keys in batches; 1000 is the most one DeleteObjects call takes. A key
+		already gone counts as deleted, as with delete; anything else S3 reports for a
+		key raises, since the call itself succeeds either way.
+
+		Railway's bucket docs don't list DeleteObjects (Tigris, underneath, does). If
+		the store rejects the call, each key is deleted on its own instead: slower, and
+		a real error such as AccessDenied still raises from there."""
+		async with self._client() as s3:
+			for start in range(0, len(keys), batch_size):
+				batch = keys[start : start + batch_size]
+				try:
+					response = await s3.delete_objects(
+						Bucket=self.bucket,
+						Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
+					)
+				except ClientError:
+					for key in batch:
+						await s3.delete_object(Bucket=self.bucket, Key=key)
+					continue
+				errors = response.get("Errors", [])
+				if errors:
+					key, code = errors[0].get("Key"), errors[0].get("Code")
+					raise RuntimeError(
+						f"{len(errors)} of {len(batch)} objects not deleted; "
+						f"first: {key}: {code} {errors[0].get('Message')}"
+					)
 
 	async def ensure_bucket(self) -> None:
 		"""Dev/test only: MinIO starts empty. A Railway Bucket already exists."""

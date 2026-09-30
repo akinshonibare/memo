@@ -314,6 +314,8 @@ class FakeHabitsReader:
 
 
 class FakeObjectStore:
+	bucket = "fake-bucket"
+
 	def __init__(self) -> None:
 		self.objects: dict[str, bytes] = {}
 		self.deleted: list[str] = []
@@ -333,6 +335,13 @@ class FakeObjectStore:
 	async def delete(self, key: str) -> None:
 		self.objects.pop(key, None)
 		self.deleted.append(key)
+
+	async def list_keys(self) -> list[str]:
+		return sorted(self.objects)
+
+	async def delete_keys(self, keys: Sequence[str]) -> None:
+		for key in keys:
+			await self.delete(key)
 
 
 class FakeDescriber:
