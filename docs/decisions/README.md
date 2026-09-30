@@ -108,6 +108,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0055](0055-deleting-a-person.md) | Deleting a person forgets them and their mentions; notes and prayers stay | active |
 | [0056](0056-a-photo-with-your-words.md) | A photo carries your words: they come first, the description after | active |
 | [0057](0057-on-this-day-widget.md) | An "On this day" widget, fed by Today's look-back | active |
+| [0058](0058-mood-in-within.md) | Mood is read from your notes into Within (Faith, renamed); your word for a day outranks the read | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

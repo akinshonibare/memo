@@ -12,12 +12,14 @@ from memo.db import bind_system, bind_user
 from memo.models import Capture, Recording
 from memo.services.derivation_index import reembed_derivation, refresh_stale_chunks
 from memo.services.habits import unread_for_habits
+from memo.services.mood import unread_for_mood
 from memo.services.morning import build_morning_view, is_build_hour
 from memo.services.people import unread_notes
 from memo.services.pipeline import (
 	PipelineContext,
 	process_capture,
 	read_habits_in_old_note,
+	read_mood_in_old_note,
 	read_people_in_old_note,
 )
 from memo.services.push import check_receipts, send_due_mornings
@@ -48,6 +50,7 @@ async def process_capture_task(
 			describer=ctx["describer"],
 			faith=ctx["faith"],
 			habits=ctx["habits"],
+			mood=ctx["mood"],
 			reconciler=ctx["reconciler"],
 		)
 		outcome = await process_capture(
@@ -283,4 +286,37 @@ async def read_habits_backlog_task(ctx: dict[str, Any]) -> int:
 		if outcome == "retry_later":
 			break
 	log.info("sweep.habits_backlog", notes=len(backlog), **outcomes)
+	return len(backlog)
+
+
+MOOD_BACKLOG_BATCH = 40
+
+
+async def read_mood_backlog_task(ctx: dict[str, Any]) -> int:
+	"""Read the last 30 days of notes for mood, once Within is turned on (ADR 0058),
+	so the Within screen opens on the weeks memo already has. A sweep like the habits
+	backlog: the job_runs ledger is the bookmark, and an empty backlog costs one
+	query."""
+	structlog.contextvars.clear_contextvars()
+	structlog.contextvars.bind_contextvars(job_id=ctx.get("job_id"))
+	async with ctx["session_factory"]() as session:
+		await bind_system(session)
+		backlog = await unread_for_mood(session, limit=MOOD_BACKLOG_BATCH)
+	outcomes: dict[str, int] = {}
+	for capture_id, user_id in backlog:
+		async with ctx["session_factory"]() as session:
+			pipeline = PipelineContext(
+				session=session,
+				transcriber=ctx["transcriber"],
+				object_store=ctx["object_store"],
+				extractor=ctx["extractor"],
+				embedder=ctx["embedder"],
+				people=ctx["people"],
+				mood=ctx["mood"],
+			)
+			outcome = await read_mood_in_old_note(pipeline, capture_id, user_id)
+		outcomes[outcome] = outcomes.get(outcome, 0) + 1
+		if outcome == "retry_later":
+			break
+	log.info("sweep.mood_backlog", notes=len(backlog), **outcomes)
 	return len(backlog)

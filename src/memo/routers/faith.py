@@ -1,4 +1,5 @@
-"""Faith (ADR 0042): the Faith screen, prayers, and the reading plan.
+"""Faith (ADR 0042): the Faith screen - Within, in the app since ADR 0058 - prayers,
+the reading plan, and how you've sounded (mood).
 
 Prayers are derivations of kind 'prayer', but they live here rather than under
 /v1/derivations: the generic routes serve the Planner, the phone sync and apps built
@@ -32,6 +33,7 @@ from memo.schemas.faith import (
 	ReadingState,
 	SetReading,
 )
+from memo.schemas.mood import MoodDayDetail, SetMood
 from memo.services.faith import (
 	ANSWERED_SHOWN,
 	NotAPassage,
@@ -44,6 +46,15 @@ from memo.services.faith import (
 	prayers_out,
 	reading_state,
 	set_reading,
+)
+from memo.services.mood import (
+	MAX_DAYS,
+	clear_day,
+	day_detail,
+	mood_on,
+	mood_week,
+	set_day,
+	today_for,
 )
 from memo.services.morning import tz_or_utc
 
@@ -105,6 +116,7 @@ async def faith(session: DbSession, user_id: CurrentUser) -> FaithOut:
 		passages=await passage_index(session, user),
 		open=await prayers_out(session, user_id, open_rows),
 		answered=await prayers_out(session, user_id, answered_rows),
+		mood=await mood_week(session, user) if mood_on(user) else None,
 	)
 
 
@@ -235,3 +247,52 @@ async def unread(
 	await session.delete(reading)
 	await commit_and_rebind(session, user_id)
 	return await reading_state(session, await _user(session, user_id))
+
+
+# --- mood (ADR 0058) ------------------------------------------------------------------
+
+
+def _mood_day(user: User, day: dt.date) -> dt.date:
+	today = today_for(user)
+	if day > today:
+		raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "not a future day")
+	if day < today - dt.timedelta(days=MAX_DAYS):
+		raise HTTPException(
+			status.HTTP_422_UNPROCESSABLE_CONTENT, f"only the last {MAX_DAYS} days"
+		)
+	return day
+
+
+@router.get("/mood/{day}", response_model=MoodDayDetail)
+async def mood_of_day(
+	day: dt.date, session: DbSession, user_id: CurrentUser
+) -> MoodDayDetail:
+	"""One day: how it reads, from which notes and the phrase in each, and your own
+	word for it if you gave one."""
+	user = await _user(session, user_id)
+	return await day_detail(session, user, _mood_day(user, day))
+
+
+@router.put("/mood/{day}", response_model=MoodDayDetail)
+async def say_mood(
+	day: dt.date, body: SetMood, session: DbSession, user_id: CurrentUser
+) -> MoodDayDetail:
+	"""Your word for a day. It outranks every read of the day's notes; saying again
+	replaces it."""
+	user = await _user(session, user_id)
+	on = _mood_day(user, day)
+	await set_day(session, user_id, on, body.valence)
+	await commit_and_rebind(session, user_id)
+	return await day_detail(session, await _user(session, user_id), on)
+
+
+@router.delete("/mood/{day}", response_model=MoodDayDetail)
+async def unsay_mood(
+	day: dt.date, session: DbSession, user_id: CurrentUser
+) -> MoodDayDetail:
+	"""Take your word back: the day reads from the notes again."""
+	user = await _user(session, user_id)
+	on = _mood_day(user, day)
+	await clear_day(session, user_id, on)
+	await commit_and_rebind(session, user_id)
+	return await day_detail(session, await _user(session, user_id), on)

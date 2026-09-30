@@ -37,7 +37,7 @@ from memo.models import (
 	User,
 )
 from memo.prompts import answer_v2, rewrite_v1
-from memo.schemas.derivations import MENTION
+from memo.schemas.derivations import MENTION, MOOD_KINDS
 from memo.schemas.people import IN_TOUCH
 from memo.services import timewindow
 from memo.services.embeddings import Embedder
@@ -559,6 +559,9 @@ async def _notes(
 					Derivation.id.in_(orphan_ids),
 				),
 				Derivation.status != "rejected",
+				# A read of how a note sounded is memo's guess, not something the
+				# note says (ADR 0058): Ask answers from the notes.
+				Derivation.kind.not_in(MOOD_KINDS),
 			)
 			.order_by(Derivation.created_at, Derivation.id)
 		)

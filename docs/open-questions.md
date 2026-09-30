@@ -172,3 +172,12 @@ nothing. Worth weighing when it becomes load-bearing:
   explicit yes before it's proposed as a default.
 - **Overlap with Faith:** prayer and Bible reading are obvious first habits. They must be
   one record shown in two places, not two counts that disagree.
+
+### Q12 — Should memo write mood to Apple Health's State of Mind?
+
+Raised with [ADR 0058](decisions/0058-mood-in-within.md). Health's State of Mind is meant
+to be self-reported, so memo's guesses don't belong there; your own word for a day might.
+Writing needs HealthKit's write permission (`NSHealthUpdateUsageDescription`), which is a
+native build, and Akin's rule is that memo writes to the phone only by a settings switch
+(Calendar, Reminders). Decide when someone asks to see memo's mood in Health, not before.
+

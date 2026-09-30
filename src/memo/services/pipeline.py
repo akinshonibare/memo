@@ -31,7 +31,7 @@ from memo.models import (
 	User,
 )
 from memo.prompts.describe_v1 import with_caption
-from memo.schemas.derivations import ACTIVITY, FAITH_KINDS, UNREVIEWED
+from memo.schemas.derivations import ACTIVITY, FAITH_KINDS, MOOD_KINDS, UNREVIEWED
 from memo.services.chunking import CHUNKER_VERSION, chunk_text
 from memo.services.derivation_index import derivation_text, reembed_derivation
 from memo.services.embeddings import Embedder
@@ -53,6 +53,12 @@ from memo.services.habits import (
 	own_keys,
 )
 from memo.services.llm import LLMCall
+from memo.services.mood import (
+	MoodReaderLike,
+	UnconfiguredMoodReader,
+	apply_mood,
+	mood_on,
+)
 from memo.services.people import PeopleReaderLike, apply_mentions, keyterms
 from memo.services.reconcile import (
 	ReconcilerLike,
@@ -99,6 +105,8 @@ class PipelineContext:
 	faith: FaithReaderLike = field(default_factory=UnconfiguredFaithReader)
 	# Habits (ADR 0043), defaulted like faith: only ever read for someone with it on.
 	habits: HabitsReaderLike = field(default_factory=UnconfiguredHabitsReader)
+	# Mood (ADR 0058), defaulted like faith: only ever read with Within (Faith) on.
+	mood: MoodReaderLike = field(default_factory=UnconfiguredMoodReader)
 	# Reconcile (ADR 0048), defaulted: it runs only when a note has something to be
 	# compared with, and an unconfigured reader fails the (optional) stage visibly.
 	reconciler: ReconcilerLike = field(default_factory=UnconfiguredReconciler)
@@ -114,7 +122,8 @@ StageFn = Callable[[PipelineContext, Capture], Awaitable[None]]
 
 
 class StageOff(Exception):
-	"""Raised by a stage its owner hasn't turned on (Habits, ADR 0043). The note is not
+	"""Raised by a stage its owner hasn't turned on (Habits, ADR 0043; Mood, ADR 0058).
+	The note is not
 	read, and its ledger row is removed rather than marked succeeded: "succeeded" would
 	mean read, and the backlog that runs once the switch is on would skip the note."""
 
@@ -377,6 +386,30 @@ async def _habits(ctx: PipelineContext, capture: Capture) -> None:
 	)
 
 
+async def _mood(ctx: PipelineContext, capture: Capture) -> None:
+	"""How the author sounds in a note (ADR 0058), for the Within screen. Only for
+	someone with Within (Faith) on; every note of theirs, since a mood can be anywhere.
+	Off is StageOff, not a skip, so the backlog reads the month once it's turned on."""
+	user = await ctx.session.get(User, capture.user_id)
+	if not mood_on(user):
+		raise StageOff("mood")
+	if not (capture.text or "").strip():
+		_skip("mood", capture)
+		return
+	assert user is not None
+	result = await ctx.mood.read(
+		capture.text or "", captured_at=capture.created_at, timezone=user.timezone
+	)
+	await _record_calls(ctx, capture, result.calls)
+	made = await apply_mood(ctx.session, capture, result.read, version=ctx.mood.version)
+	log.info(
+		"stage.mood",
+		capture_id=str(capture.id),
+		version=ctx.mood.version,
+		read=made is not None,
+	)
+
+
 async def _scripture(ctx: PipelineContext, capture: Capture) -> None:
 	"""The Bible passages a note is about (ADR 0042): every faith note, and any note
 	while Faith is on. No model call: references have a regular shape, and
@@ -397,9 +430,9 @@ async def _embed(ctx: PipelineContext, capture: Capture) -> None:
 				Derivation.capture_id == capture.id,
 				Derivation.user_id == capture.user_id,
 				Derivation.status != "rejected",
-				# Prayers, passages (ADR 0042) and activities (ADR 0043) answer
-				# nothing in Ask.
-				Derivation.kind.not_in((*FAITH_KINDS, ACTIVITY)),
+				# Prayers, passages (ADR 0042), activities (ADR 0043) and moods
+				# (ADR 0058) answer nothing in Ask.
+				Derivation.kind.not_in((*FAITH_KINDS, ACTIVITY, *MOOD_KINDS)),
 			)
 			.order_by(Derivation.created_at, Derivation.id)
 		)
@@ -542,6 +575,14 @@ STAGES: tuple[Stage, ...] = (
 		status=CaptureStatus.EXTRACTING,
 		version=lambda ctx: ctx.habits.version,
 		run=_habits,
+		applies=lambda c: True,
+		optional=True,
+	),
+	Stage(
+		name="mood",
+		status=CaptureStatus.EXTRACTING,
+		version=lambda ctx: ctx.mood.version,
+		run=_mood,
 		applies=lambda c: True,
 		optional=True,
 	),
@@ -811,12 +852,29 @@ async def read_habits_in_old_note(
 	ctx: PipelineContext, capture_id: uuid.UUID, user_id: uuid.UUID
 ) -> str:
 	"""Run the habits stage over a note written before Habits was turned on (ADR
-	0043), so a habit accepted today comes with the days memo already knew about. The
-	same ledger row (capture, "habits", version) as the pipeline, so a note is read
-	once however it gets there. Failures are set aside as for people: a transient one
-	returns "retry_later" and stops the sweep.
+	0043), so a habit accepted today comes with the days memo already knew about.
 
 	Returns: missing | off | done | read | failed | retry_later."""
+	return await _read_old_note(ctx, capture_id, user_id, "habits")
+
+
+async def read_mood_in_old_note(
+	ctx: PipelineContext, capture_id: uuid.UUID, user_id: uuid.UUID
+) -> str:
+	"""Run the mood stage over a note written before Within was turned on (ADR 0058),
+	so the Within screen shows the month memo already has, not an empty week.
+
+	Returns: missing | off | done | read | failed | retry_later."""
+	return await _read_old_note(ctx, capture_id, user_id, "mood")
+
+
+async def _read_old_note(
+	ctx: PipelineContext, capture_id: uuid.UUID, user_id: uuid.UUID, name: str
+) -> str:
+	"""One optional stage over one old, ready note. The same ledger row (capture,
+	stage, version) as the pipeline, so a note is read once however it gets there.
+	Failures are set aside as for people: a transient one returns "retry_later" and
+	stops the sweep."""
 	session = ctx.session
 	await bind_user(session, user_id)
 	capture = await session.scalar(
@@ -824,13 +882,13 @@ async def read_habits_in_old_note(
 	)
 	if capture is None or capture.status != CaptureStatus.READY.value:
 		return "missing"
-	stage = next(s for s in STAGES if s.name == "habits")
+	stage = next(s for s in STAGES if s.name == name)
 	run_id = await _claim_run(session, capture, stage, stage.version(ctx))
 	await commit_and_rebind(session, user_id)
 	if run_id is None:
 		return "done"
 	try:
-		await _habits(ctx, capture)
+		await stage.run(ctx, capture)
 	except StageOff:  # turned off since the sweep picked the note
 		await _forget_run(session, run_id)
 		await commit_and_rebind(session, user_id)
@@ -839,11 +897,11 @@ async def read_habits_in_old_note(
 		await _set_aside(session, run_id, exc)
 		await commit_and_rebind(session, user_id)
 		log.warning(
-			"habits.backlog_failed", capture_id=str(capture_id), error=repr(exc)
+			f"{name}.backlog_failed", capture_id=str(capture_id), error=repr(exc)
 		)
 		return "retry_later" if isinstance(exc, RetryableError) else "failed"
 	except Exception as exc:
-		log.exception("habits.backlog_crashed", capture_id=str(capture_id))
+		log.exception(f"{name}.backlog_crashed", capture_id=str(capture_id))
 		await session.rollback()
 		await bind_user(session, user_id)
 		await _finish_run(session, run_id, "failed", repr(exc))

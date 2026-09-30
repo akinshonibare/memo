@@ -167,7 +167,37 @@ export type Faith = {
   passages?: PassageRef[];
   open: Prayer[];
   answered: Prayer[];
+  // How you've sounded this week (ADR 0058). Null while Within is off; absent from a
+  // server older than mood.
+  mood?: MoodWeek | null;
 };
+
+// --- Mood, in Within (ADR 0058) -----------------------------------------------------
+
+// Five steps, low to bright. memo's read of a note is a guess; your own word for a day
+// (`yours`) outranks it.
+export type Valence = -2 | -1 | 0 | 1 | 2;
+
+export type MoodDay = {
+  day: string; // YYYY-MM-DD, your local day
+  valence: Valence | null; // null: nothing said that day
+  yours: boolean;
+  words: string[];
+  notes: number;
+};
+
+export type MoodWeek = { days: MoodDay[]; summary: string | null };
+
+export type MoodRead = {
+  capture_id: string;
+  title: string;
+  created_at: string;
+  valence: Valence;
+  words: string[];
+  evidence: string | null;
+};
+
+export type MoodDayDetail = { day: MoodDay; reads: MoodRead[] };
 
 // --- Habits (ADR 0043) --------------------------------------------------------------
 
@@ -661,6 +691,18 @@ export class Api {
   // What you're reading: "John", "Psalms", "Romans 8". null clears it.
   setReading(ref: string | null) {
     return this.request<ReadingState>("/v1/faith/reading", { method: "PUT", body: JSON.stringify({ ref }) });
+  }
+
+  // One day's mood: the reads behind it, the phrase from each, and your word if given.
+  moodDay(day: string) {
+    return this.request<MoodDayDetail>(`/v1/faith/mood/${day}`);
+  }
+
+  // Your word for a day, which outranks memo's reads of it; null takes it back.
+  sayMood(day: string, valence: Valence | null) {
+    return valence === null
+      ? this.request<MoodDayDetail>(`/v1/faith/mood/${day}`, { method: "DELETE" })
+      : this.request<MoodDayDetail>(`/v1/faith/mood/${day}`, { method: "PUT", body: JSON.stringify({ valence }) });
   }
 
   // You read something: what you typed, or else the next chapter of what you're reading.

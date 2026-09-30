@@ -1,0 +1,36 @@
+{"id": "m01", "text": "Long day. The launch slipped again and I'm shattered.", "valence": -1, "note": "the plain heavy case"}
+{"id": "m02", "text": "WE GOT THE FLAT!! can't stop smiling", "valence": 2, "note": "the plain bright case"}
+{"id": "m03", "text": "dentist Tuesday 3pm, buy milk", "valence": null, "note": "logistics: the usual answer is null"}
+{"id": "m04", "text": "Tunde's really stressed about the move", "valence": null, "note": "someone else's feeling is not the author's"}
+{"id": "m05", "text": "Tunde's really stressed about the move, and honestly I'm worried for him", "valence": -1, "note": "the author says how it leaves them"}
+{"id": "m06", "text": "great, another delay, love that for me", "valence": -1, "note": "sarcasm reads as meant"}
+{"id": "m07", "text": "Lord I'm struggling this week. Pray for strength.", "valence": -1, "accept": [-1, -2], "note": "a prayer is feeling too"}
+{"id": "m08", "text": "so thankful today, God has been so good to us", "valence": 2, "accept": [1, 2], "note": "thanks in faith words"}
+{"id": "m09", "text": "hospital appointment for Mum on Friday", "valence": null, "note": "a hard topic told flatly is not anxious"}
+{"id": "m10", "text": "Quiet day. Worked, cooked, early night.", "valence": 0, "accept": [0, null], "note": "steady, or nothing shown: both fine"}
+{"id": "m11", "text": "Last year was the hardest of my life, but I'm finally okay", "valence": 1, "accept": [0, 1], "note": "the author now, not then"}
+{"id": "m12", "text": "can't see the point of any of it anymore. everything feels grey", "valence": -2, "note": "low, and must never come back as a clinical word"}
+{"id": "m13", "text": "Nice lunch with Ada, felt like myself again", "valence": 1, "accept": [1, 2]}
+{"id": "m14", "text": "idea: an app that reads receipts and splits the bill", "valence": null, "note": "an idea is not a mood"}
+{"id": "m15", "text": "Romans 8:28 - all things work together for good", "valence": null, "note": "scripture quoted, no feeling said"}
+{"id": "m16", "text": "ugh I overslept AGAIN and missed the standup. so annoyed with myself", "valence": -1}
+{"id": "m17", "text": "Grandma passed this morning. I don't know what to do with myself.", "valence": -2, "accept": [-2, -1], "note": "grief"}
+{"id": "m18", "text": "call the landlord about the boiler, it's freezing in here", "valence": null, "accept": [null, -1], "note": "an errand with a grumble in it"}
+{"id": "m19", "text": "okay so um the meeting went fine I think, they liked the deck, we'll see", "valence": 1, "accept": [0, 1], "note": "a voice transcript, cautiously pleased"}
+{"id": "m20", "text": "promotion!!! finally. told Mum and she cried", "valence": 2}
+{"id": "m21", "text": "I should be happy about the offer but I just feel flat", "valence": -1, "accept": [-1, 0], "note": "the good news is not the mood"}
+{"id": "m22", "text": "ran 10k this morning, legs are dead but I feel amazing", "valence": 2, "accept": [1, 2], "note": "sore is not sad"}
+{"id": "m23", "text": "Kemi's wedding was beautiful, she looked so happy", "valence": 1, "accept": [null, 1, 2], "note": "Kemi's happiness; the author's enjoyment is implied at most"}
+{"id": "m24", "text": "Can't sleep. Mind racing about money again.", "valence": -1, "accept": [-1, -2]}
+{"id": "m25", "text": "church at 10, bring the projector for the youth group", "valence": null}
+{"id": "m26", "text": "feeling a bit low today, nothing specific", "valence": -1, "accept": [-1, -2], "note": "'low' said casually is heavy, not despair"}
+{"id": "m27", "text": "honestly a pretty average day, nothing to report", "valence": 0, "accept": [0, null]}
+{"id": "m28", "text": "the kids were a nightmare at bedtime but we laughed about it after", "valence": 0, "accept": [0, 1], "note": "mixed, ending lighter"}
+{"id": "m29", "text": "pray for Tunde's mum, surgery Thursday", "valence": null, "note": "a prayer request says nothing about the author's mood"}
+{"id": "m30", "text": "Thank God the flight landed, the turbulence was mad", "valence": 1, "accept": [0, 1], "note": "relief"}
+{"id": "m31", "text": "so proud of the team today, we shipped it", "valence": 2, "accept": [1, 2]}
+{"id": "m32", "text": "tired.", "valence": -1, "note": "one word is enough"}
+{"id": "m33", "text": "Remind me to renew my passport before March", "valence": null}
+{"id": "m34", "text": "Not sure how I feel about Lagos. Excited and terrified at the same time.", "valence": 0, "accept": [0, -1, 1], "note": "balanced mixed feelings"}
+{"id": "m35", "text": "Tunde was so happy about the baby news, we're all buzzing", "valence": 2, "accept": [1, 2], "note": "'we're all buzzing' includes the author"}
+{"id": "m36", "text": "board meeting went badly. the numbers didn't land and I could feel the room turn. need a walk", "valence": -1, "accept": [-1, -2]}
