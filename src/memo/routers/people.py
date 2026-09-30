@@ -10,7 +10,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 
 from memo.auth import CurrentUser
 from memo.db import DbSession, commit_and_rebind
@@ -351,6 +351,27 @@ async def merge_person(
 	# A note that named both is now two mentions of one person.
 	await collapse_duplicates(session, user_id, target.id)
 	return await _detail(session, user_id, target)
+
+
+@router.delete("/{person_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_person(
+	person_id: uuid.UUID, session: DbSession, user_id: CurrentUser
+) -> None:
+	"""Forget someone (ADR 0055): the person, and every mention of them - who a note
+	was about, a contact you logged - with what Ask indexed of those. The notes stay.
+	A prayer for them stays, no longer linked to anyone (the foreign key sets it
+	null). A later note that names them meets them again as someone new."""
+	await lock_people(session, user_id)
+	person = await _person_or_404(session, user_id, person_id)
+	await session.execute(
+		delete(Derivation).where(
+			Derivation.user_id == user_id,
+			Derivation.kind == MENTION,
+			Derivation.person_id == person.id,
+		)
+	)
+	await session.delete(person)
+	await session.flush()
 
 
 @mentions_router.patch("/{mention_id}", response_model=MentionOut)
