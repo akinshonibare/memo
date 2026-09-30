@@ -30,6 +30,7 @@ from memo.models import (
 	Recording,
 	User,
 )
+from memo.prompts.describe_v1 import with_caption
 from memo.schemas.derivations import ACTIVITY, FAITH_KINDS, UNREVIEWED
 from memo.services.chunking import CHUNKER_VERSION, chunk_text
 from memo.services.derivation_index import derivation_text, reembed_derivation
@@ -177,9 +178,11 @@ async def _describe(ctx: PipelineContext, capture: Capture) -> None:
 		raise TerminalError(f"image bytes missing at {photo.storage_key}")
 	started = time.perf_counter()
 	image = await ctx.object_store.get(photo.storage_key)
-	result = await ctx.describer.describe(image, photo.mime)
+	result = await ctx.describer.describe(image, photo.mime, caption=capture.caption)
 	await _record_calls(ctx, capture, [result.call])
-	capture.text = result.text
+	# Your words first, then the description (ADR 0056), rebuilt from `caption` so a
+	# re-run neither loses nor doubles them.
+	capture.text = with_caption(capture.caption, result.text)
 	log.info(
 		"stage.describe",
 		capture_id=str(capture.id),

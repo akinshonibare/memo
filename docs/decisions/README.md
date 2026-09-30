@@ -106,6 +106,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0053](0053-deleting-a-note-deletes-what-came-from-it.md) | Deleting a note deletes everything taken from it, enforced by a cascade | active |
 | [0054](0054-habits-is-always-on.md) | Habits is always on; the column stays as an operator's switch | active |
 | [0055](0055-deleting-a-person.md) | Deleting a person forgets them and their mentions; notes and prayers stay | active |
+| [0056](0056-a-photo-with-your-words.md) | A photo carries your words: they come first, the description after | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

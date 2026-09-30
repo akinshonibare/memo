@@ -179,10 +179,11 @@ function Root() {
   // tap can arrive before the "active" event that decides whether memo locks.
   const ready = !!api && onboarded === true && navReady && lock.ready && !lock.locked && !lock.covered;
 
-  // Shared into memo from another app (ADR 0027). A photo becomes a photo capture at
-  // once; a link or text opens a new note prefilled, so you can say why you kept it.
+  // Shared into memo from another app (ADR 0027). A photo, a link or text opens a new
+  // note with it in (ADR 0056 for photos), so you can say why you kept it.
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent();
   const [composeText, setComposeText] = useState<string | undefined>(undefined);
+  const [composePhoto, setComposePhoto] = useState<string | undefined>(undefined);
   useEffect(() => {
     if (!ready || !api || !hasShareIntent) return;
     const image = shareIntent.files?.find((f) => f.mimeType.startsWith("image/"));
@@ -192,10 +193,11 @@ function Root() {
       goHome();
       if (image) {
         preparePhoto(image.path, image.width, image.height)
-          .then((uri) => captureOrQueue(api, { kind: "image", file: uri }))
-          .then(() => {
-            haptic.done();
-            bump();
+          .then((uri) => {
+            setComposePhoto(uri);
+            setComposeText(text || undefined);
+            setSpace("main");
+            setCompose(true);
           })
           .catch(() => {});
       } else if (text) {
@@ -392,8 +394,9 @@ function Root() {
                     setSpace("main");
                     setRecord(true);
                   }}
-                  onCompose={() => {
+                  onCompose={(photo) => {
                     setSpace("main");
+                    setComposePhoto(photo);
                     setCompose(true);
                   }}
                   onSettings={() => setSettings(true)}
@@ -559,10 +562,12 @@ function Root() {
         <ComposeSheet
           api={api}
           initialText={composeText}
+          initialPhoto={composePhoto}
           space={space}
           onClose={() => {
             setCompose(false);
             setComposeText(undefined);
+            setComposePhoto(undefined);
           }}
           onSaved={savedNote}
         />

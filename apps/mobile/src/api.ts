@@ -566,11 +566,19 @@ export class Api {
   }
 
   // A photo (ADR 0024): resized JPEG, uploaded like a recording, described on the server.
-  createImageCapture(fileUri: string, once: Once = newOnce(), space: Space = "main") {
-    return this.uploadCapture(fileUri, "image/jpeg", once, undefined, space);
+  // `caption`: your own words with the photo (ADR 0056), kept first in the note.
+  createImageCapture(fileUri: string, once: Once = newOnce(), space: Space = "main", caption?: string) {
+    return this.uploadCapture(fileUri, "image/jpeg", once, undefined, space, caption);
   }
 
-  private async uploadCapture(fileUri: string, mime: string, once: Once, durationMs?: number, space: Space = "main") {
+  private async uploadCapture(
+    fileUri: string,
+    mime: string,
+    once: Once,
+    durationMs?: number,
+    space: Space = "main",
+    caption?: string,
+  ) {
     const presigned = await this.request<{ recording_id: string; upload_url: string }>("/v1/recordings", {
       method: "POST",
       body: JSON.stringify({ mime, duration_ms: durationMs }),
@@ -590,6 +598,7 @@ export class Api {
         client_token: once.clientToken,
         captured_at: once.capturedAt,
         ...(space === "faith" ? { space } : {}),
+        ...(caption ? { caption } : {}),
       }),
     });
   }

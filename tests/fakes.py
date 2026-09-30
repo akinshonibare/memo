@@ -304,7 +304,7 @@ class FakeObjectStore:
 
 
 class FakeDescriber:
-	version = "describe-v1/fake"
+	version = "describe-v1.1/fake"
 
 	def __init__(
 		self,
@@ -317,9 +317,13 @@ class FakeDescriber:
 		self.text = text
 		self.fail_with = fail_with
 		self.seen: list[tuple[int, str]] = []
+		self.captions: list[str | None] = []
 
-	async def describe(self, image: bytes, mime: str) -> DescribeResult:
+	async def describe(
+		self, image: bytes, mime: str, *, caption: str | None = None
+	) -> DescribeResult:
 		self.seen.append((len(image), mime))
+		self.captions.append(caption)
 		if self.fail_with is not None:
 			raise self.fail_with
 		return DescribeResult(text=self.text, call=fake_llm_call("describe"))

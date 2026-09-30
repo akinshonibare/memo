@@ -13,7 +13,12 @@ from anthropic.types import MessageParam, OutputConfigParam
 from pydantic import BaseModel, ValidationError
 
 from memo.config import Settings
-from memo.prompts.describe_v1 import DESCRIBER_VERSION, SYSTEM_PROMPT, note_text
+from memo.prompts.describe_v1 import (
+	DESCRIBER_VERSION,
+	SYSTEM_PROMPT,
+	note_text,
+	user_message,
+)
 from memo.services.llm import LLMCall
 from memo.services.retry import RetryableError, TerminalError
 
@@ -41,7 +46,9 @@ class Describer(Protocol):
 	@property
 	def version(self) -> str: ...
 
-	async def describe(self, image: bytes, mime: str) -> DescribeResult: ...
+	async def describe(
+		self, image: bytes, mime: str, *, caption: str | None = None
+	) -> DescribeResult: ...
 
 
 class AnthropicDescriber:
@@ -57,7 +64,9 @@ class AnthropicDescriber:
 	def version(self) -> str:
 		return f"{DESCRIBER_VERSION}/{self.model}"
 
-	async def describe(self, image: bytes, mime: str) -> DescribeResult:
+	async def describe(
+		self, image: bytes, mime: str, *, caption: str | None = None
+	) -> DescribeResult:
 		if mime not in VISION_MIME:
 			raise TerminalError(f"unsupported image type {mime}")
 		if len(image) > MAX_IMAGE_BYTES:
@@ -75,7 +84,7 @@ class AnthropicDescriber:
 							"data": base64.standard_b64encode(image).decode(),
 						},
 					},
-					{"type": "text", "text": "Describe this photo."},
+					{"type": "text", "text": user_message(caption)},
 				],
 			}
 		]
@@ -127,7 +136,9 @@ class UnconfiguredDescriber:
 
 	version = f"{DESCRIBER_VERSION}/unconfigured"
 
-	async def describe(self, image: bytes, mime: str) -> DescribeResult:
+	async def describe(
+		self, image: bytes, mime: str, *, caption: str | None = None
+	) -> DescribeResult:
 		raise TerminalError("image description is not configured (no Anthropic key)")
 
 

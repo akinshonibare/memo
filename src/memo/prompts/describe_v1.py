@@ -3,7 +3,7 @@ extraction, chunking, retrieval, Ask - works on that text exactly as it does on 
 transcript. Versioned like the extractor: stamped on the job ledger, changed only with
 a bump, so re-describing old photos is measurable."""
 
-DESCRIBER_VERSION = "describe-v1"
+DESCRIBER_VERSION = "describe-v1.1"  # .1: your own words with a photo (ADR 0056)
 
 SYSTEM_PROMPT = """\
 You turn a photo from one person's private notes app into text. They took or saved it
@@ -19,6 +19,25 @@ Return two things:
   reading order. Empty if there is none. Never guess at text you cannot read; leave it
   out instead.
 """
+
+
+def user_message(caption: str | None) -> str:
+	"""The text beside the image. Your words, when you wrote some, are context: they
+	say what about the photo matters, and they're kept as they are, not repeated."""
+	if not caption:
+		return "Describe this photo."
+	return (
+		"The person wrote this with the photo. Use it to judge what about the photo "
+		"matters; don't repeat it in the description.\n\n"
+		f"<their_words>\n{caption}\n</their_words>\n\nDescribe this photo."
+	)
+
+
+def with_caption(caption: str | None, described: str) -> str:
+	"""A photo note's text: your words first, then what the photo shows."""
+	if not caption or not caption.strip():
+		return described
+	return f"{caption.strip()}\n\n{described}"
 
 
 def note_text(description: str, text_in_image: str) -> str:

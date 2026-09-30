@@ -14,6 +14,8 @@ class CaptureCreate(BaseModel):
 
 	text: str | None = Field(default=None, min_length=1, max_length=50_000)
 	recording_id: uuid.UUID | None = None
+	# Your words with a photo (ADR 0056): only alongside a recording_id that's an image.
+	caption: str | None = Field(default=None, min_length=1, max_length=10_000)
 	client_token: str = Field(
 		min_length=8, max_length=128, pattern=r"^[A-Za-z0-9._~-]+$"
 	)
@@ -44,6 +46,8 @@ class CaptureCreate(BaseModel):
 	def exactly_one_source(self) -> "CaptureCreate":
 		if (self.text is None) == (self.recording_id is None):
 			raise ValueError("provide exactly one of text or recording_id")
+		if self.caption is not None and self.recording_id is None:
+			raise ValueError("a caption goes with a photo (recording_id)")
 		return self
 
 
