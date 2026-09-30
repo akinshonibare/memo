@@ -271,6 +271,15 @@ class Person(Base):
 	# Family, for the "time with family" habit (ADR 0043). NULL: memo guesses from the
 	# name or note; true or false: you said.
 	family: Mapped[bool | None]
+	# Lately (ADR 0062): a line or two on what's been going on with them, written from
+	# the notes that mention them, and what it was written from, so the sweep can tell
+	# when it's out of date: how many live mentions there were, the newest one's
+	# update, and the tone. NULL text with a written_at: nothing worth saying yet.
+	lately: Mapped[str | None] = mapped_column(Text)
+	lately_at: Mapped[dt.datetime | None]
+	lately_count: Mapped[int | None]
+	lately_tone: Mapped[str | None] = mapped_column(String(16))
+	lately_version: Mapped[str | None] = mapped_column(String(64))
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 	updated_at: Mapped[dt.datetime] = mapped_column(
 		server_default=func.now(), onupdate=func.now()

@@ -9,9 +9,11 @@ from arq import Retry
 from sqlalchemy import select, text
 
 from memo.db import bind_system, bind_user
-from memo.models import Capture, Recording
+from memo.ids import uuid7
+from memo.models import Capture, LLMCallRow, Person, Recording, User
 from memo.services.derivation_index import reembed_derivation, refresh_stale_chunks
 from memo.services.habits import unread_for_habits
+from memo.services.lately import mark_unwritten, refresh_lately, stale_people
 from memo.services.mood import unread_for_mood
 from memo.services.morning import build_morning_view, is_build_hour
 from memo.services.people import unread_notes
@@ -320,3 +322,72 @@ async def read_mood_backlog_task(ctx: dict[str, Any]) -> int:
 			break
 	log.info("sweep.mood_backlog", notes=len(backlog), **outcomes)
 	return len(backlog)
+
+
+LATELY_BATCH = 20
+
+
+async def refresh_lately_task(ctx: dict[str, Any]) -> int:
+	"""Rewrite the Lately line (ADR 0062) of people whose notes changed since it was
+	written, a batch at a time, most recently mentioned first. The row itself is the
+	bookmark: a person rewritten, or given up on, is stamped and left alone until their
+	notes or their tone change again. An empty sweep costs one query."""
+	structlog.contextvars.clear_contextvars()
+	structlog.contextvars.bind_contextvars(job_id=ctx.get("job_id"))
+	async with ctx["session_factory"]() as session:
+		await bind_system(session)
+		stale = await stale_people(session, limit=LATELY_BATCH)
+	outcomes: dict[str, int] = {}
+	for person_id, user_id in stale:
+		outcome = await _refresh_one(ctx, person_id, user_id)
+		outcomes[outcome] = outcomes.get(outcome, 0) + 1
+		if outcome == "retry_later":
+			break
+	log.info("sweep.lately", people=len(stale), **outcomes)
+	return len(stale)
+
+
+async def _refresh_one(
+	ctx: dict[str, Any], person_id: uuid.UUID, user_id: uuid.UUID
+) -> str:
+	async with ctx["session_factory"]() as session:
+		await bind_user(session, user_id)
+		person = await session.get(Person, person_id)
+		user = await session.get(User, user_id)
+		if person is None or user is None:
+			return "missing"
+		try:
+			calls = await refresh_lately(session, person, user, ctx["lately"])
+		except RetryableError as exc:
+			log.warning("lately.retry_later", person_id=str(person_id), error=repr(exc))
+			return "retry_later"
+		except TerminalError as exc:
+			# Stamped as written with nothing to say, so a note that can't be
+			# summarised isn't retried (and paid for) every few minutes.
+			log.warning("lately.failed", person_id=str(person_id), error=repr(exc))
+			await session.rollback()
+			await bind_user(session, user_id)
+			person = await session.get(Person, person_id)
+			if person is not None:
+				await mark_unwritten(session, person, user_id)
+				await session.commit()
+			return "failed"
+		for call in calls:
+			session.add(
+				LLMCallRow(
+					id=uuid7(),
+					user_id=user_id,
+					capture_id=None,
+					stage=call.stage,
+					provider=call.provider,
+					model=call.model,
+					input_tokens=call.input_tokens,
+					output_tokens=call.output_tokens,
+					cache_read_tokens=call.cache_read_tokens,
+					cache_write_tokens=call.cache_write_tokens,
+					latency_ms=call.latency_ms,
+					cost_usd=call.cost_usd,
+				)
+			)
+		await session.commit()
+		return "written"

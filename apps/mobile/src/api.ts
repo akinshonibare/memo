@@ -71,6 +71,10 @@ export type Person = {
   due: boolean;
   created_at: string;
   family?: boolean; // for the "time with family" habit (ADR 0043); absent from an older server
+  // Lately (ADR 0062): a line on what's been going on with them, written ahead by the
+  // server from their newest notes. Null until written, or when the notes say nothing.
+  lately?: string | null;
+  lately_at?: string | null;
 };
 
 export type PersonDetail = Person & {
