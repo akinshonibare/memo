@@ -94,7 +94,7 @@
             {
               "name": "OnThisDayWidget",
               "displayName": "On this day",
-              "description": "A note from this day in another year, or an idea worth another look.",
+              "description": "A note from this day in another year, or a highlight worth another look.",
               "ios": {
                 "supportedFamilies": [
                   "systemSmall",

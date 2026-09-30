@@ -390,7 +390,7 @@ export function ProfileSheet({
 
               <Group
                 title="Review"
-                footer="On: new todos, events and ideas are kept as soon as memo finds them, and you can still edit or remove any of them. A name that could be two people is still asked about. Off: each one waits for a tap."
+                footer="On: new todos, events and highlights are kept as soon as memo finds them, and you can still edit or remove any of them. A name that could be two people is still asked about. Off: each one waits for a tap."
               >
                 <Row icon="checkmark-done-outline" label="Keep without asking" busy={busy === "accept"}>
                   <Switch

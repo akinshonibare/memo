@@ -179,7 +179,7 @@ export function PlannerScreen({
         <IconCircle name="chevron-back" size={38} onPress={onBack} />
         <Text style={styles.title}>Planner</Text>
         <View style={{ flex: 1 }} />
-        <IconCircle name="bulb-outline" size={38} onPress={onIdeas} />
+        <IconCircle name="sparkles-outline" size={38} onPress={onIdeas} />
         <IconCircle name="add" size={38} tone="light" onPress={() => void add()} />
       </View>
 

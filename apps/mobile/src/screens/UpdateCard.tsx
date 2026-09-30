@@ -35,7 +35,7 @@ export function UpdateCard({
   const when = new Date(update.written_at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   return (
     <View style={styles.card}>
-      <Text style={ui.meta}>{prayer ? "Answered?" : "Carries on an idea?"}</Text>
+      <Text style={ui.meta}>{prayer ? "Answered?" : "Carries on a highlight?"}</Text>
       <Text style={ui.rowTitle}>
         {update.target.title}
         {update.target.person_name ? <Text style={ui.bodyMuted}> · {update.target.person_name}</Text> : null}

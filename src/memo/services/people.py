@@ -184,6 +184,45 @@ def make_people_reader(settings: Settings) -> PeopleReaderLike:
 
 _WORD = re.compile(r"[\w']+")
 
+# Lower-case inside a name, not at its start: "Ruud van Nistelrooy", "Maria de la Cruz".
+_PARTICLES = frozenset(
+	{"al", "bin", "da", "de", "del", "della", "der", "di", "du", "ibn", "la", "le"}
+	| {"van", "von"}
+)
+
+
+def titled(name: str) -> str:
+	"""A name as the page should show it, from however the note said it (ADR 0060):
+	"tunde bakare" is "Tunde Bakare", "mary-jane" "Mary-Jane", "o'neil" "O'Neil".
+
+	Only a word written all in lower case changes: one with a capital in it was
+	written that way on purpose ("McKenzie", "DJ", "LaToya"). A voice transcript or a
+	quick typed note is where the lower case comes from, not the person's name."""
+	words = name.split()
+	out = []
+	for i, word in enumerate(words):
+		if word != word.lower():
+			out.append(word)
+		elif i > 0 and word in _PARTICLES:
+			out.append(word)
+		else:
+			out.append(_capitalise(word))
+	return " ".join(out)
+
+
+def _capitalise(word: str) -> str:
+	# After a hyphen, and after an apostrophe that follows one letter ("o'neil",
+	# "d'angelo"): never after a possessive's ("tunde's" stays "Tunde's").
+	parts = re.split(r"(-)", word)
+	done = []
+	for part in parts:
+		head, sep, tail = part.partition("'")
+		if sep and len(head) == 1 and tail:
+			done.append(head.upper() + sep + tail[:1].upper() + tail[1:])
+		else:
+			done.append(part[:1].upper() + part[1:])
+	return "".join(done)
+
 
 def normalize(name: str) -> str:
 	"""Case, accents and punctuation don't make a different person: "Túndé" is
@@ -312,7 +351,9 @@ def with_alias(person: Person, name: str) -> list[str]:
 
 
 def new_person(user_id: uuid.UUID, payload: MentionPayload) -> Person:
-	name = payload.full_name or payload.name
+	"""A person memo met in a note, named the way the page should show it (titled):
+	the note's "kemi adeyemi" is Kemi Adeyemi. A name you type is kept as typed."""
+	name = titled(payload.full_name or payload.name)
 	person = Person(
 		id=uuid7(),
 		user_id=user_id,
@@ -321,7 +362,7 @@ def new_person(user_id: uuid.UUID, payload: MentionPayload) -> Person:
 		note=payload.hint,
 		reach_out_every_days=DEFAULT_REACH_OUT_DAYS,
 	)
-	person.aliases = with_alias(person, payload.name)
+	person.aliases = with_alias(person, titled(payload.name))
 	return person
 
 

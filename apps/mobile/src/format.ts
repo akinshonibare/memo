@@ -1,5 +1,13 @@
 import type { Capture } from "./api";
 
+// What each kind of item is called on screen (ADR 0060): the extractor's "idea" is a
+// highlight, what in a note is worth coming back to.
+export const KIND_NAME: Record<"todo" | "event" | "idea", string> = {
+  todo: "todo",
+  event: "event",
+  idea: "highlight",
+};
+
 export function formatStamp(iso: string, long = false): string {
   const d = new Date(iso);
   const date = d.toLocaleDateString(undefined, {

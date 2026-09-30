@@ -57,7 +57,7 @@ const ICON_LABELS: Record<string, string> = {
   "people-outline": "People",
   "reader-outline": "Weekly review",
   "calendar-outline": "Planner",
-  "bulb-outline": "Ideas",
+  "sparkles-outline": "Highlights",
   "arrow-up": "Send",
   "headset-outline": "Talk hands-free",
   "volume-high": "Stop speaking",

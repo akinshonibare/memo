@@ -62,7 +62,7 @@ export function IdeasScreen({
     <View style={ui.screen}>
       <View style={[styles.topBar, ui.pad]}>
         <IconCircle name="chevron-back" size={38} onPress={onBack} />
-        <Text style={styles.title}>Ideas</Text>
+        <Text style={styles.title}>Highlights</Text>
         <View style={{ flex: 1 }} />
         <IconCircle name="add" size={38} tone="light" onPress={() => setSheet({})} />
       </View>
@@ -112,7 +112,7 @@ export function IdeasScreen({
           </Pressable>
         )}
         ListEmptyComponent={
-          ideas ? <Text style={[ui.empty, { marginTop: 48 }]}>No ideas yet.</Text> : null
+          ideas ? <Text style={[ui.empty, { marginTop: 48 }]}>No highlights yet.</Text> : null
         }
       />
       {sheet && (

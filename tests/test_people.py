@@ -26,6 +26,7 @@ from memo.services.people import (
 	normalize,
 	resolve,
 	similar,
+	titled,
 	unread_notes,
 	with_alias,
 )
@@ -62,6 +63,26 @@ def test_normalize_ignores_case_accents_punctuation_and_my() -> None:
 	assert normalize("Túndé") == "tunde"
 	assert normalize("  my Mum! ") == "mum"
 	assert normalize("Dr. Okafor") == "dr okafor"
+
+
+@pytest.mark.parametrize(
+	("said", "shown"),
+	[
+		("tunde bakare", "Tunde Bakare"),
+		("mum", "Mum"),
+		("mary-jane watson", "Mary-Jane Watson"),
+		("o'neil", "O'Neil"),
+		("ruud van nistelrooy", "Ruud van Nistelrooy"),
+		("maria de la cruz", "Maria de la Cruz"),
+		("Tunde bakare", "Tunde Bakare"),
+		# Written with a capital on purpose: left as it was.
+		("McKenzie", "McKenzie"),
+		("DJ khaled", "DJ Khaled"),
+		("tunde's", "Tunde's"),
+	],
+)
+def test_a_name_from_a_note_is_titled_as_a_page_shows_it(said: str, shown: str) -> None:
+	assert titled(said) == shown
 
 
 def test_compatible_is_one_name_inside_the_other() -> None:
@@ -292,6 +313,22 @@ async def test_a_note_names_people_and_memo_meets_them(
 	assert linked["person"]["id"] == by_name["Tunde Bakare"]["id"]
 	# No date given for the call: it happened when the note was written.
 	assert linked["occurred_on"] == TODAY.isoformat()
+
+
+async def test_names_said_in_lower_case_are_titled_and_typed_ones_kept(
+	client: AsyncClient, session: AsyncSession
+) -> None:
+	reader = FakePeopleReader(
+		_read(_mention("kemi", full_name="kemi adeyemi"), _mention("mum"))
+	)
+	await _note(client, session, "saw kemi adeyemi and mum", reader)
+	listed = (await client.get("/v1/people")).json()["people"]
+	assert sorted(p["name"] for p in listed) == ["Kemi Adeyemi", "Mum"]
+
+	# A name you type is yours, lower case and all.
+	mum = next(p for p in listed if p["name"] == "Mum")
+	renamed = await client.patch(f"/v1/people/{mum['id']}", json={"name": "bell hooks"})
+	assert renamed.json()["name"] == "bell hooks"
 
 
 async def test_a_name_that_fits_two_people_waits_for_the_user(
