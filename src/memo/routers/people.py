@@ -49,6 +49,7 @@ from memo.services.people import (
 	owned_person,
 	prune_if_empty,
 	timeline,
+	titled,
 	with_alias,
 )
 from memo.services.queue import Queue
@@ -400,7 +401,7 @@ async def resolve_mention(
 			person = await _person_or_404(session, user_id, body.person_id)
 			for name in (payload.name, payload.full_name):
 				if name:
-					person.aliases = with_alias(person, name)
+					person.aliases = with_alias(person, titled(name))
 		else:
 			person = new_person(user_id, payload)
 			session.add(person)

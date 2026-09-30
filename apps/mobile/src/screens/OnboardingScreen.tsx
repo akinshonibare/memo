@@ -32,7 +32,7 @@ const PAGES: Page[] = [
   {
     icon: "calendar-outline",
     title: "memo does the sorting",
-    body: "Todos, events and ideas are pulled out for you and land in your Planner. You confirm what's right.",
+    body: "Todos, events and highlights are pulled out for you and land in your Planner. You confirm what's right.",
   },
   {
     icon: "chatbubble-ellipses-outline",

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Modal, ScrollView, Text, TextInput, View } from "react-native";
 import { Api, ApiError, type Derivation } from "../api";
 import { confirmDiscard, Pill, SheetAction, SheetActions, SheetHandle, SheetHeader } from "../components";
-import { toIsoDate, toLocalIso } from "../format";
+import { KIND_NAME, toIsoDate, toLocalIso } from "../format";
 import { useKeyboardHeight } from "../keyboard";
 import { useUi } from "../ui";
 import { makeStyles, useTheme } from "../theme";
@@ -124,7 +124,7 @@ export function DerivationSheet({
           action={<Pill label="Save" tone="light" onPress={save} busy={busy} disabled={!canSave} />}
         />
         <Text style={[ui.h2, styles.heading]}>
-          {existing ? `Edit ${kind}` : `Add ${kind === "todo" ? "a" : "an"} ${kind}`}
+          {existing ? `Edit ${KIND_NAME[kind]}` : `Add ${kind === "event" ? "an" : "a"} ${KIND_NAME[kind]}`}
         </Text>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
           <Text style={ui.label}>Title</Text>
@@ -132,7 +132,7 @@ export function DerivationSheet({
             style={styles.input}
             value={title}
             onChangeText={setTitle}
-            placeholder={kind === "todo" ? "Call Tunde" : kind === "event" ? "Dentist" : "The idea, in a line"}
+            placeholder={kind === "todo" ? "Call Tunde" : kind === "event" ? "Dentist" : "The highlight, in a line"}
             placeholderTextColor={colors.muted}
             autoFocus={!existing}
             maxLength={200}

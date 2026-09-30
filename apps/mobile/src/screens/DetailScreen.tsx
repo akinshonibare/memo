@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type Capture, type CaptureDetail, type Derivation, type Word } from "../api";
 import { asTranslation, openInBible } from "../bible";
 import { AskBar, IconCircle, Pill, confirmDelete } from "../components";
-import { ACTIVE_STATUSES, formatClock, formatDue, formatStamp, formatWhen, headline, statusLabel } from "../format";
+import { ACTIVE_STATUSES, formatClock, formatDue, formatStamp, formatWhen, headline, KIND_NAME, statusLabel } from "../format";
 import { useRefetchOnFocus } from "../focus";
 import { InkText, LiveDot } from "../motion";
 import { playUrl, seekPlayback, stopPlayback, usePlaybackDerived, usePlayingId } from "../playback";
@@ -32,7 +32,7 @@ async function chooseKind(onPick: (kind: Derivation["kind"]) => void) {
     options: [
       { label: "A todo", icon: "checkbox-outline" },
       { label: "An event", icon: "calendar-outline" },
-      { label: "An idea", icon: "bulb-outline" },
+      { label: "A highlight", icon: "sparkles-outline" },
     ],
   });
   if (picked !== null) onPick(KINDS[picked]);
@@ -510,7 +510,7 @@ function DerivationCard({
       style={({ pressed }) => [styles.card, pressed && { opacity: 0.7 }]}
     >
       <Text style={ui.meta}>
-        {d.kind}
+        {KIND_NAME[d.kind]}
         {statusText ? ` · ${statusText}` : ""}
       </Text>
       <Text style={ui.rowTitle}>{String(p.title ?? "")}</Text>

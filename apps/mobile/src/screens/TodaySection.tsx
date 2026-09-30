@@ -36,7 +36,7 @@ function onThisDayProps(view: MorningView): OnThisDayProps {
   const idea = view.resurfaced_idea;
   if (idea) {
     return {
-      label: "An idea worth another look",
+      label: "A highlight worth another look",
       text: idea.summary ? `${idea.title}. ${idea.summary}` : idea.title,
       date: formatDay(idea.captured_on, true),
       link: idea.capture_id ? `memo://note/${idea.capture_id}` : "memo://ideas",
@@ -239,7 +239,7 @@ export function TodaySection({
           disabled={!idea.capture_id}
           style={({ pressed }) => [styles.card, styles.idea, pressed && styles.pressed]}
         >
-          <Text style={ui.meta}>An idea from {formatDay(idea.captured_on, true)}</Text>
+          <Text style={ui.meta}>A highlight from {formatDay(idea.captured_on, true)}</Text>
           <Text style={ui.rowTitle}>{idea.title}</Text>
           {idea.summary ? (
             <Text style={ui.bodyMuted} numberOfLines={3}>

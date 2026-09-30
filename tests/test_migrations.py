@@ -160,3 +160,38 @@ async def test_0018_turns_plan_readings_into_the_passages_they_stood_for(
 		}
 	]
 	assert table is None, "the old table is gone"
+
+
+async def test_0026_titles_the_names_a_note_said_in_lower_case(
+	admin_engine: AsyncEngine,
+) -> None:
+	config = Config("alembic.ini")
+	await asyncio.to_thread(command.downgrade, config, "0025")
+	try:
+		async with admin_engine.begin() as conn:
+			for name, aliases in (
+				("kemi adeyemi", ["kemi"]),
+				("McKenzie", []),
+				("bell hooks", []),
+			):
+				await conn.execute(
+					text(
+						"INSERT INTO people (id, user_id, name, aliases) "
+						"VALUES (:id, :u, :n, :a)"
+					),
+					{"id": uuid.uuid4(), "u": SEED_USER_ID, "n": name, "a": aliases},
+				)
+	finally:
+		await asyncio.to_thread(command.upgrade, config, "head")
+
+	async with admin_engine.connect() as conn:
+		rows = (
+			await conn.execute(text("SELECT name, aliases FROM people ORDER BY name"))
+		).all()
+	# Every name the migration met was lower case from a note, as far as it can know:
+	# "bell hooks" too. A name typed that way after this can be typed again.
+	assert [(r[0], list(r[1])) for r in rows] == [
+		("Bell Hooks", []),
+		("Kemi Adeyemi", ["Kemi"]),
+		("McKenzie", []),
+	]

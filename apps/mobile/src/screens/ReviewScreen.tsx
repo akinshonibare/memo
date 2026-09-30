@@ -149,7 +149,7 @@ export function ReviewScreen({
           {(d) => <Line key={d.id} d={d} onPress={() => d.capture_id && onOpenCapture(d.capture_id)} />}
         </Section>
 
-        <Section title="New ideas" items={week?.new_ideas ?? []} empty="No new ideas this week.">
+        <Section title="New highlights" items={week?.new_ideas ?? []} empty="No new highlights this week.">
           {(d) => <Line key={d.id} d={d} onPress={() => d.capture_id && onOpenCapture(d.capture_id)} />}
         </Section>
 
@@ -298,7 +298,7 @@ function Line({
           onPress={done ? undefined : onTick}
         />
       ) : (
-        <Ionicons name={d.kind === "event" ? "calendar-outline" : "bulb-outline"} size={19} color={colors.muted} />
+        <Ionicons name={d.kind === "event" ? "calendar-outline" : "sparkles-outline"} size={19} color={colors.muted} />
       )}
       <View style={{ flex: 1 }}>
         <Text style={[styles.lineTitle, done && styles.doneTitle]}>{String(p.title ?? "")}</Text>

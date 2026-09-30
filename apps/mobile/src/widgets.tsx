@@ -93,7 +93,7 @@ const Record = (_props: object, env: WidgetEnvironment) => {
 // What the On this day widget shows: a note from this day in another year, else the
 // idea Today resurfaced, else a word that there's nothing yet (ADR 0057).
 export type OnThisDayProps = {
-  label: string; // "A year ago today", "An idea worth another look"
+  label: string; // "A year ago today", "A highlight worth another look"
   text: string;
   date: string | null; // the note's own date, so an old snapshot still reads true
   link: string; // memo://note/<id>, or memo://ideas
