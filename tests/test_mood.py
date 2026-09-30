@@ -112,7 +112,7 @@ async def _backdate(admin: AsyncEngine, capture_id: str, days: int) -> None:
 		)
 
 
-# --- the read ---------------------------------------------------------------------------
+# --- the read -------------------------------------------------------------------------
 
 
 def test_a_read_says_nothing_else_when_the_note_shows_no_mood() -> None:
@@ -164,15 +164,24 @@ def test_the_sentence_says_no_more_than_the_dots() -> None:
 		"Only a day or two so far. There'll be a week to see soon."
 	)
 	assert summary(_days(0, 0, 0, 0, 0, 0, 0)) == "A steady week."
+	# A steady Thursday is not "brighter" in a heavy week: only the far side is named.
 	assert summary(_days(-1, -1, -1, 0, -1, 1, -1)) == (
-		"A heavy week. Brighter on Thursday and Saturday."
+		"A heavy week. Brighter on Saturday."
 	)
 	assert summary(_days(1, 1, -1, 2, 1, None, 1)) == (
-		"A good week. Brighter on Thursday. Heavier on Wednesday."
+		"A good week. Heavier on Wednesday."
+	)
+	assert (
+		summary(_days(0, 1, 0, 0, None, 0, 0)) == "A steady week. Brighter on Tuesday."
+	)
+	# Both ways, two days or more each: never averaged into "steady".
+	assert summary(_days(0, -1, 2, 2, -1, -1)) == (
+		"An up-and-down week. Brighter on Wednesday and Thursday."
+		" Heavier on Tuesday, Friday and Saturday."
 	)
 
 
-# --- the stage --------------------------------------------------------------------------
+# --- the stage ------------------------------------------------------------------------
 
 
 async def test_off_until_within_is_on_and_then_every_note_is_read(
@@ -184,7 +193,9 @@ async def test_off_until_within_is_on_and_then_every_note_is_read(
 	assert await _moods(admin_engine) == []
 	async with admin_engine.connect() as conn:
 		assert (
-			await conn.scalar(text("SELECT count(*) FROM job_runs WHERE stage = 'mood'"))
+			await conn.scalar(
+				text("SELECT count(*) FROM job_runs WHERE stage = 'mood'")
+			)
 			== 0
 		), "off leaves no ledger row, so the backlog reads it later"
 	assert (await client.get("/v1/faith")).json()["mood"] is None
@@ -250,7 +261,9 @@ async def test_the_week_on_the_within_screen(
 		"words": ["tired", "excited", "grateful"],
 		"notes": 2,
 	}
-	assert mood["summary"] == "Only a day or two so far. There'll be a week to see soon."
+	assert (
+		mood["summary"] == "Only a day or two so far. There'll be a week to see soon."
+	)
 
 
 async def test_your_word_for_a_day_outranks_the_reads_and_can_be_taken_back(
@@ -322,7 +335,7 @@ async def test_mood_is_the_users_own(
 	assert (mine["day"]["valence"], mine["day"]["yours"]) == (-1, False)
 
 
-# --- the backlog ------------------------------------------------------------------------
+# --- the backlog ----------------------------------------------------------------------
 
 
 async def test_turning_within_on_reads_the_last_month(
@@ -344,9 +357,7 @@ async def test_turning_within_on_reads_the_last_month(
 	await _within(client, True)
 	async with app.state.session_factory() as s, s.begin():
 		await bind_system(s)
-		assert await unread_for_mood(s, limit=10) == [
-			(uuid.UUID(recent), SEED_USER_ID)
-		]
+		assert await unread_for_mood(s, limit=10) == [(uuid.UUID(recent), SEED_USER_ID)]
 
 	flaky = FakeMoodReader(fail_with=RetryableError("429"))
 	assert (

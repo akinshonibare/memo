@@ -313,25 +313,27 @@ def summary(days: Sequence[MoodDayOut]) -> str | None:
 	"""One sentence about a run of days, from the days alone: no model call, so it is
 	cheap, the same every time, and never says more than the dots do.
 
-	"A heavy week. Brighter on Saturday and Sunday." The overall word is the mean of the
-	days that said something; the days named are the ones clearly off it."""
-	said = [d for d in days if d.valence is not None]
+	A week that went both ways (two days or more on each side of steady) is
+	"up-and-down", never averaged into "steady". Otherwise the mean names the week, and
+	only days on the far side of steady from it are named: a steady Thursday is not
+	"heavier" in a good week."""
+	said = [(d.day, d.valence) for d in days if d.valence is not None]
 	if not said:
 		return None
 	if len(said) < 3:
 		return "Only a day or two so far. There'll be a week to see soon."
-	mean = sum(d.valence for d in said if d.valence is not None) / len(said)
-	overall = _round(mean)
+	brighter = [day for day, v in said if v >= 1]
+	heavier = [day for day, v in said if v <= -1]
+	if len(brighter) >= 2 and len(heavier) >= 2:
+		return (
+			f"An up-and-down week. Brighter on {_names(brighter)}."
+			f" Heavier on {_names(heavier)}."
+		)
+	overall = _round(sum(v for _, v in said) / len(said))
 	sentence = f"A {NAMES[overall]} week."
-	lighter = [
-		d.day for d in said if d.valence is not None and d.valence >= overall + 1
-	]
-	heavier = [
-		d.day for d in said if d.valence is not None and d.valence <= overall - 1
-	]
-	if lighter and len(lighter) < len(said):
-		sentence += f" Brighter on {_names(lighter)}."
-	if heavier and len(heavier) < len(said):
+	if overall <= 0 and brighter:
+		sentence += f" Brighter on {_names(brighter)}."
+	if overall >= 0 and heavier:
 		sentence += f" Heavier on {_names(heavier)}."
 	return sentence
 

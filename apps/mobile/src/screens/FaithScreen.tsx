@@ -23,14 +23,16 @@ import { celebrate, PressableScale } from "../motion";
 import { usePullToRefresh } from "../refresh";
 import { makeStyles, useTheme } from "../theme";
 import { fonts, useUi } from "../ui";
+import { MoodCard, MoodDaySheet } from "./MoodSection";
 import { PrayerSheet } from "./PrayerSheet";
 import { UpdateCard } from "./UpdateCard";
 
-// Faith (ADR 0042): a space of its own, turned on in Settings. One thing a day to
-// remember, what you're reading (you set it; there is no fixed plan), the passages
-// your notes talk about, prayers, and the notes written here. No score anywhere: an
-// open prayer is never overdue, and nothing is behind. A later note that sounds like an
-// answer is asked about at the top (ADR 0048): "Answered?", with the note's words.
+// Within - Faith until ADR 0058 renamed it (ADR 0042): a space of its own, turned on in
+// Settings. How you've sounded this week (ADR 0058), one thing a day to remember, what
+// you're reading (you set it; there is no fixed plan), the passages your notes talk
+// about, prayers, and the notes written here. No score anywhere: an open prayer is
+// never overdue, and nothing is behind. A later note that sounds like an answer is
+// asked about near the top (ADR 0048): "Answered?", with the note's words.
 export function FaithScreen({
   api,
   refreshKey,
@@ -58,6 +60,7 @@ export function FaithScreen({
   const [sheet, setSheet] = useState<{ existing?: Prayer } | null>(null);
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState<Update[]>([]);
+  const [moodDay, setMoodDay] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -121,7 +124,7 @@ export function FaithScreen({
     <View style={ui.screen}>
       <View style={[styles.topBar, ui.pad]}>
         <IconCircle name="chevron-back" size={38} onPress={onBack} />
-        <Text style={styles.title}>Faith</Text>
+        <Text style={styles.title}>Within</Text>
         <View style={{ flex: 1 }} />
         <IconCircle
           name="add"
@@ -137,6 +140,8 @@ export function FaithScreen({
         refreshControl={pull}
       >
         {error && <Text style={[ui.danger, { marginTop: 12 }]}>{error}</Text>}
+
+        {faith?.mood && <MoodCard week={faith.mood} onOpenDay={setMoodDay} />}
 
         {asking.length > 0 && (
           <View style={{ marginTop: 12 }}>
@@ -248,6 +253,16 @@ export function FaithScreen({
           accessibilityLabel="Record a reflection"
         />
       </View>
+
+      {moodDay && (
+        <MoodDaySheet
+          api={api}
+          day={moodDay}
+          onClose={() => setMoodDay(null)}
+          onChanged={() => void load()}
+          onOpenNote={onOpenNote}
+        />
+      )}
 
       {sheet && (
         <PrayerSheet

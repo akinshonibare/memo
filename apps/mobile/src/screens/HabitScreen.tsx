@@ -19,7 +19,7 @@ const SOURCE: Record<HabitDetail["source"], string> = {
     "Counted from your notes, the days you log, and workouts in Apple Health if it's on. Remove a day that shouldn't count.",
   family:
     "Counted from People: the days you saw, called or texted someone who's family. Mark who's family on their page.",
-  bible: "Counted from Faith: what you mark as read, notes that name a passage, and notes that say you read your Bible.",
+  bible: "Counted from Within: what you mark as read, notes that name a passage, and notes that say you read your Bible.",
 };
 
 // One habit (ADR 0043): this week, eight weeks at a glance, and every day that counted
