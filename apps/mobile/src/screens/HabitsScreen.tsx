@@ -232,17 +232,34 @@ function HabitCard({
 }
 
 // This week, Monday to Sunday: a filled dot for each day it happened, today ringed.
-export function WeekDots({ days }: { days: boolean[] }) {
+// This week, Monday first. With `onDay`, a past or present dot is a tap: an empty one
+// logs that day ("I did it yesterday and forgot to say"), a filled one asks to remove
+// it. Days still to come are not tappable.
+const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+export function WeekDots({ days, onDay }: { days: boolean[]; onDay?: (index: number) => void }) {
   const styles = useStyles();
   const today = todayIndex();
   return (
     <View style={styles.dots}>
-      {DAYS.map((d, i) => (
-        <View key={i} style={styles.dotCol}>
-          <View style={[styles.dot, days[i] && styles.dotOn, i === today && styles.dotToday]} />
-          <Text style={[styles.dotLabel, i === today && styles.dotLabelToday]}>{d}</Text>
-        </View>
-      ))}
+      {DAYS.map((d, i) => {
+        const tappable = !!onDay && i <= today;
+        return (
+          <Pressable
+            key={i}
+            style={styles.dotCol}
+            disabled={!tappable}
+            onPress={tappable ? () => onDay(i) : undefined}
+            hitSlop={8}
+            accessibilityRole={tappable ? "button" : undefined}
+            accessibilityLabel={tappable ? `${DAY_NAMES[i]}, ${days[i] ? "done" : "not done"}` : undefined}
+            accessibilityHint={tappable ? (days[i] ? "Removes the day" : "Logs the day") : undefined}
+          >
+            <View style={[styles.dot, days[i] && styles.dotOn, i === today && styles.dotToday]} />
+            <Text style={[styles.dotLabel, i === today && styles.dotLabelToday]}>{d}</Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
