@@ -7,6 +7,7 @@ from fastapi import Depends, FastAPI
 from redis.asyncio import Redis
 
 from memo import __version__, pages
+from memo.admin import site as admin_site
 from memo.config import Settings, get_settings
 from memo.db import make_engine, make_session_factory
 from memo.logging import RequestIdMiddleware, configure_logging
@@ -64,6 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 		app.dependency_overrides[get_settings] = lambda: settings
 	app.include_router(v1)
 	app.include_router(pages.router)
+	app.include_router(admin_site.router)
 
 	@app.get("/health")
 	async def health(
