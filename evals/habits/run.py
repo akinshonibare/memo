@@ -122,7 +122,7 @@ def main(argv: list[str] | None = None) -> int:
 		reader = HabitsReader(
 			AnthropicExtractionProvider(
 				client,
-				model=args.model or settings.extraction_model,
+				model=args.model or settings.habits_model,
 				schema=HabitsExtraction,
 			)
 		)

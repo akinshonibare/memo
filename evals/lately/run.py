@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
 		writer = LatelyWriter(
 			AnthropicExtractionProvider(
 				client,
-				model=args.model or settings.extraction_model,
+				model=args.model or settings.lately_model,
 				schema=LatelyWrite,
 			)
 		)

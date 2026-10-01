@@ -35,3 +35,9 @@ a recall label.
 about $0.19 for the run. As with people, that says the set is too easy, not that the
 reader is perfect. Re-record after any change to the prompt, `FaithExtraction` or the
 model, and read the outputs before committing.
+
+**Re-armed on Sonnet (2026-10-01, `faith-v1/claude-sonnet-5`, ADR 0065):** the reader now
+runs on `FAITH_MODEL`, Sonnet 5 by default. Four live Sonnet runs scored 1.00 on every
+metric each time; `recorded.json` is the fourth, outputs read before committing. To go
+back, set `FAITH_MODEL=claude-opus-5` on the worker and re-record with `--model
+claude-opus-5`.

@@ -102,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
 		reader = PeopleReader(
 			AnthropicExtractionProvider(
 				client,
-				model=args.model or settings.extraction_model,
+				model=args.model or settings.people_model,
 				schema=PeopleExtraction,
 			)
 		)

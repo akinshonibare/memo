@@ -110,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
 		reader = MoodReader(
 			AnthropicExtractionProvider(
 				client,
-				model=args.model or settings.extraction_model,
+				model=args.model or settings.mood_model,
 				schema=MoodRead,
 			)
 		)

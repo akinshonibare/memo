@@ -45,3 +45,9 @@ and about numbers - miles and pounds copied and converted in code, a distance an
 on one run, two lifts in one note, a named half marathon - and traps: "a long run", a
 "quick session", calories, body weight, a time of day, pages, and a plan with a number
 in it. Every metric 1.00, about $0.62 for the run. Outputs read before committing.
+
+**Re-armed on Sonnet (2026-10-01, `habits-v2/claude-sonnet-5`, ADR 0065):** the reader now
+runs on `HABITS_MODEL`, Sonnet 5 by default. Four live Sonnet runs scored 1.00 on every
+metric each time; `recorded.json` is the fourth, outputs read before committing. To go
+back, set `HABITS_MODEL=claude-opus-5` on the worker and re-record with `--model
+claude-opus-5`.

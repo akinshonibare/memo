@@ -131,9 +131,7 @@ def make_mood_reader(settings: Settings) -> MoodReaderLike:
 		api_key=settings.anthropic_api_key.get_secret_value(), max_retries=0
 	)
 	return MoodReader(
-		AnthropicExtractionProvider(
-			client, model=settings.extraction_model, schema=MoodRead
-		)
+		AnthropicExtractionProvider(client, model=settings.mood_model, schema=MoodRead)
 	)
 
 

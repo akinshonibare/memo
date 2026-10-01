@@ -258,7 +258,7 @@ def make_habits_reader(settings: Settings) -> HabitsReaderLike:
 	)
 	return HabitsReader(
 		AnthropicExtractionProvider(
-			client, model=settings.extraction_model, schema=HabitsExtraction
+			client, model=settings.habits_model, schema=HabitsExtraction
 		)
 	)
 

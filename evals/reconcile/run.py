@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
 		reader = Reconciler(
 			AnthropicExtractionProvider(
 				client,
-				model=args.model or settings.extraction_model,
+				model=args.model or settings.reconcile_model,
 				schema=Reconciliation,
 			)
 		)

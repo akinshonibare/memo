@@ -3,6 +3,8 @@
 **Status:** active — since [#23](https://github.com/akinshonibare/memo/issues/23) (2026-09-28)
 **Date:** 2026-09-27
 **Closes:** Q1, [#20](https://github.com/akinshonibare/memo/issues/20)
+**Revisited:** 2026-10-01 in [0065](0065-sonnet-for-four-readers.md). Sonnet 5 scored
+todo recall 0.92 and 0.88 against Opus's 0.96: outside the 2-point rule, so this stands.
 
 ## Problem
 
