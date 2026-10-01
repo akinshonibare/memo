@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import structlog
-from anthropic import AsyncAnthropic
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,11 +28,12 @@ from memo.prompts.lately_v1 import (
 )
 from memo.prompts.voice import as_tone
 from memo.schemas.people import IN_TOUCH, LatelyWrite
-from memo.services.extraction import AnthropicExtractionProvider, complete_validated
+from memo.services.extraction import ExtractionProvider, complete_validated
 from memo.services.llm import LLMCall
 from memo.services.morning import tz_or_utc
 from memo.services.people import timeline
 from memo.services.prose import plain_dashes
+from memo.services.providers import structured_provider
 from memo.services.retry import TerminalError
 
 log = structlog.get_logger("memo.lately")
@@ -67,7 +67,7 @@ class LatelyWriterLike(Protocol):
 
 
 class LatelyWriter:
-	def __init__(self, provider: AnthropicExtractionProvider, *, max_repairs: int = 1):
+	def __init__(self, provider: ExtractionProvider, *, max_repairs: int = 1):
 		self._provider = provider
 		self._max_repairs = max_repairs
 
@@ -91,27 +91,23 @@ class LatelyWriter:
 
 
 class UnconfiguredLatelyWriter:
-	"""Stands in when no Anthropic key is set: the sweep leaves lines unwritten."""
+	"""Stands in when the model's API key is unset: the sweep leaves lines unwritten."""
 
 	version = f"{LATELY_VERSION}/unconfigured"
 
 	async def write(
 		self, name: str, today: dt.date, notes: list[Mentioned], *, tone: str | None
 	) -> LatelyResult:
-		raise TerminalError("Lately is not configured (no ANTHROPIC_API_KEY)")
+		raise TerminalError("Lately is not configured (no API key for its model)")
 
 
 def make_lately_writer(settings: Settings) -> LatelyWriterLike:
-	if settings.anthropic_api_key is None:
+	provider = structured_provider(
+		settings, model=settings.lately_model, schema=LatelyWrite
+	)
+	if provider is None:
 		return UnconfiguredLatelyWriter()
-	client = AsyncAnthropic(
-		api_key=settings.anthropic_api_key.get_secret_value(), max_retries=0
-	)
-	return LatelyWriter(
-		AnthropicExtractionProvider(
-			client, model=settings.lately_model, schema=LatelyWrite
-		)
-	)
+	return LatelyWriter(provider)
 
 
 # --- what's out of date --------------------------------------------------------------

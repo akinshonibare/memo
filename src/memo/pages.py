@@ -7,11 +7,12 @@ processor or a retention rule changes, the same pull request changes this page.
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
-from memo.config import get_settings
+from memo.config import Settings, get_settings
+from memo.services import providers
 
 router = APIRouter(include_in_schema=False)
 
-UPDATED = "28 September 2026"
+UPDATED = "1 October 2026"
 
 _PAGE = """<!doctype html>
 <html lang="en"><head>
@@ -51,16 +52,14 @@ it stores, who processes it, and how to get it back or delete it.</p>
 <h2>Who processes it</h2>
 <p>Your content is sent to these services only to do the job listed.</p>
 <ul>
-  <li><b>Anthropic</b> (Claude): pulling items out of notes, describing photos,
-      answering your questions.</li>
+{models}
   <li><b>Deepgram</b>: turning voice into text and reading answers aloud.</li>
   <li><b>Voyage AI</b>, via MongoDB Atlas: search indexes of your notes.</li>
   <li><b>Railway</b>: hosting, the database and file storage.</li>
   <li><b>Apple</b>: signing you in.</li>
 </ul>
-<p><b>Model training.</b> Anthropic does not train on content sent through its API.
-Deepgram does by default; memo opts every request out of Deepgram's model-improvement
-program. {voyage}</p>
+<p><b>Model training.</b> {training} Deepgram trains by default; memo opts every
+request out of Deepgram's model-improvement program. {voyage}</p>
 
 <h2>What memo does not do</h2>
 <ul>
@@ -106,4 +105,47 @@ async def privacy() -> str:
 		if get_settings().voyage_training_opted_out
 		else "Voyage AI may use indexed text to improve its models under its own terms."
 	)
-	return _PAGE.format(updated=UPDATED, contact=contact, voyage=voyage)
+	models, training = model_processors(get_settings())
+	return _PAGE.format(
+		updated=UPDATED,
+		contact=contact,
+		voyage=voyage,
+		models=models,
+		training=training,
+	)
+
+
+# The companies behind the model settings, named as a person would know them.
+_COMPANIES = {"anthropic": ("Anthropic", "Claude"), "google": ("Google", "Gemini")}
+
+
+def _listed(jobs: list[str]) -> str:
+	if len(jobs) <= 2:
+		return " and ".join(jobs)
+	return ", ".join(jobs[:-1]) + ", and " + jobs[-1]
+
+
+def model_processors(settings: Settings) -> tuple[str, str]:
+	"""The model companies in use and what each does, read off the model settings
+	(ADR 0067), so the page cannot name a provider the configuration doesn't, or
+	leave one out. Returns (list items, the training sentences)."""
+	uses = providers.in_use(settings)
+	items: list[str] = []
+	training: list[str] = []
+	for name in _COMPANIES:
+		jobs = uses.get(name)
+		if not jobs:
+			continue
+		company, family = _COMPANIES[name]
+		items.append(f"  <li><b>{company}</b> ({family}): {_listed(jobs)}.</li>")
+	if "anthropic" in uses:
+		training.append("Anthropic does not train on content sent through its API.")
+	if "google" in uses:
+		training.append(
+			"Google does not use content sent on the Gemini API's paid tier, which "
+			"memo uses, to improve its products."
+			if settings.gemini_paid_tier
+			else "Google may use content sent on the Gemini API's free tier to improve "
+			"its products, and its reviewers may read it."
+		)
+	return "\n".join(items), " ".join(training)

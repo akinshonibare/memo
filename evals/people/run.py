@@ -14,13 +14,13 @@ import json
 import sys
 from pathlib import Path
 
-from anthropic import AsyncAnthropic
 from pydantic import BaseModel, ValidationError
 
+from evals.live import live_provider
 from evals.people.scoring import Expected, Report, score_example
 from memo.config import get_settings
 from memo.schemas.people import PeopleExtraction
-from memo.services.extraction import AnthropicExtractionProvider, ExtractionFailed
+from memo.services.extraction import ExtractionFailed
 from memo.services.people import PeopleReader, PeopleReaderLike
 from memo.services.retry import TerminalError
 
@@ -95,17 +95,10 @@ def main(argv: list[str] | None = None) -> int:
 	reader: PeopleReaderLike | None = None
 	if replay is None:
 		settings = get_settings()
-		if settings.anthropic_api_key is None:
-			print("ANTHROPIC_API_KEY is unset; use --replay for an offline run")
+		provider = live_provider(args.model or settings.people_model, PeopleExtraction)
+		if provider is None:
 			return 2
-		client = AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
-		reader = PeopleReader(
-			AnthropicExtractionProvider(
-				client,
-				model=args.model or settings.people_model,
-				schema=PeopleExtraction,
-			)
-		)
+		reader = PeopleReader(provider)
 	report = asyncio.run(run(examples, reader, replay, args.record))
 	print(f"{report.examples} examples")
 	print(report.table())

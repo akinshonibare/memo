@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import structlog
-from anthropic import AsyncAnthropic
 from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,11 +40,12 @@ from memo.schemas.faith import (
 	ReadingLogOut,
 	ReadingState,
 )
-from memo.services.extraction import AnthropicExtractionProvider, complete_validated
+from memo.services.extraction import ExtractionProvider, complete_validated
 from memo.services.llm import LLMCall
 from memo.services.morning import local_day_range, look_back_days, tz_or_utc
 from memo.services.people import normalize
 from memo.services.prose import plain_dashes
+from memo.services.providers import structured_provider
 from memo.services.retry import TerminalError
 from memo.services.scripture import (
 	Passage,
@@ -209,7 +209,7 @@ class FaithReaderLike(Protocol):
 
 
 class FaithReader:
-	def __init__(self, provider: AnthropicExtractionProvider, *, max_repairs: int = 1):
+	def __init__(self, provider: ExtractionProvider, *, max_repairs: int = 1):
 		self._provider = provider
 		self._max_repairs = max_repairs
 
@@ -237,7 +237,7 @@ class FaithReader:
 
 
 class UnconfiguredFaithReader:
-	"""Stands in when no Anthropic key is set, so the stage fails visibly."""
+	"""Stands in when the model's API key is unset, so the stage fails visibly."""
 
 	model = "unconfigured"
 	version = f"{FAITH_VERSION}/unconfigured"
@@ -245,20 +245,18 @@ class UnconfiguredFaithReader:
 	async def read(
 		self, text: str, *, captured_at: dt.datetime, timezone: str
 	) -> FaithResult:
-		raise TerminalError("the faith stage is not configured (no ANTHROPIC_API_KEY)")
+		raise TerminalError(
+			"the faith stage is not configured (no API key for its model)"
+		)
 
 
 def make_faith_reader(settings: Settings) -> FaithReaderLike:
-	if settings.anthropic_api_key is None:
+	provider = structured_provider(
+		settings, model=settings.faith_model, schema=FaithExtraction
+	)
+	if provider is None:
 		return UnconfiguredFaithReader()
-	client = AsyncAnthropic(
-		api_key=settings.anthropic_api_key.get_secret_value(), max_retries=0
-	)
-	return FaithReader(
-		AnthropicExtractionProvider(
-			client, model=settings.faith_model, schema=FaithExtraction
-		)
-	)
+	return FaithReader(provider)
 
 
 async def _people_in_note(

@@ -1,15 +1,16 @@
-"""Describe a photo with Claude vision, so a photo capture has text like any other."""
+"""Describe a photo with a vision model, so a photo capture has text like any other.
+
+The describer is provider-neutral: it builds one image-plus-text message in the
+shape every stage uses and hands it to a structured provider (ADR 0067), which is
+constrained to `_Description` the way the readers are constrained to theirs.
+"""
 
 import base64
-import time
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
-import anthropic
 import structlog
-from anthropic import AsyncAnthropic
-from anthropic.lib._parse._transform import transform_schema
-from anthropic.types import MessageParam, OutputConfigParam
+from anthropic.types import MessageParam
 from pydantic import BaseModel, ValidationError
 
 from memo.config import Settings
@@ -19,14 +20,16 @@ from memo.prompts.describe_v1 import (
 	note_text,
 	user_message,
 )
+from memo.services.extraction import ExtractionProvider
 from memo.services.llm import LLMCall
 from memo.services.prose import plain_dashes
-from memo.services.retry import TerminalError, classify_anthropic
+from memo.services.retry import TerminalError
 
 log = structlog.get_logger("memo.vision")
 
 STAGE = "describe"
-# Claude's limit for one base64 image. The app resizes to 1568px JPEG long before this.
+# Claude's limit for one base64 image, kept as memo's own rule for every provider.
+# The app resizes to 1568px JPEG long before this.
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 _VisionMime = Literal["image/jpeg", "image/png", "image/gif", "image/webp"]
 VISION_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif"}
@@ -57,14 +60,13 @@ class Describer(Protocol):
 	) -> DescribeResult: ...
 
 
-class AnthropicDescriber:
-	def __init__(self, client: AsyncAnthropic, *, model: str) -> None:
-		self._client = client
-		self.model = model
-		self._output_config: OutputConfigParam = {
-			"format": {"type": "json_schema", "schema": transform_schema(_Description)},
-			"effort": "low",
-		}
+class PhotoDescriber:
+	def __init__(self, provider: ExtractionProvider) -> None:
+		self._provider = provider
+
+	@property
+	def model(self) -> str:
+		return self._provider.model
 
 	@property
 	def version(self) -> str:
@@ -99,37 +101,20 @@ class AnthropicDescriber:
 				],
 			}
 		]
-		started = time.perf_counter()
+		raw = await self._provider.complete(system=SYSTEM_PROMPT, messages=messages)
 		try:
-			response = await self._client.messages.create(
-				model=self.model,
-				max_tokens=4096,
-				system=SYSTEM_PROMPT,
-				messages=messages,
-				output_config=self._output_config,
-			)
-		except (anthropic.APIStatusError, anthropic.APIConnectionError) as exc:
-			raise classify_anthropic(exc) from exc
-
-		if response.stop_reason == "refusal":
-			raise TerminalError("model declined to describe this image")
-		if response.stop_reason == "max_tokens":
-			raise TerminalError("image description was truncated at max_tokens")
-		raw = next((b.text for b in response.content if b.type == "text"), "")
-		try:
-			parsed = _Description.model_validate_json(raw)
+			parsed = _Description.model_validate_json(raw.text)
 		except ValidationError as exc:
 			raise TerminalError(f"description did not validate: {exc}") from exc
-		usage = response.usage
 		call = LLMCall.priced(
-			provider="anthropic",
-			model=response.model,
+			provider=raw.provider,
+			model=raw.model,
 			stage=STAGE,
-			input_tokens=usage.input_tokens,
-			output_tokens=usage.output_tokens,
-			cache_read_tokens=usage.cache_read_input_tokens or 0,
-			cache_write_tokens=usage.cache_creation_input_tokens or 0,
-			latency_ms=round((time.perf_counter() - started) * 1000),
+			input_tokens=raw.input_tokens,
+			output_tokens=raw.output_tokens,
+			cache_read_tokens=raw.cache_read_tokens,
+			cache_write_tokens=raw.cache_write_tokens,
+			latency_ms=raw.latency_ms,
 		)
 		# The description is memo's writing, so no em dashes (ADR 0061); the text in
 		# the photo is the photo's, verbatim.
@@ -140,7 +125,7 @@ class AnthropicDescriber:
 
 
 class UnconfiguredDescriber:
-	"""Stands in when no Anthropic key is set, so a photo fails visibly."""
+	"""Stands in when the model's API key is unset, so a photo fails visibly."""
 
 	version = f"{DESCRIBER_VERSION}/unconfigured"
 
@@ -152,13 +137,15 @@ class UnconfiguredDescriber:
 		caption: str | None = None,
 		tone: str | None = None,
 	) -> DescribeResult:
-		raise TerminalError("image description is not configured (no Anthropic key)")
+		raise TerminalError("image description is not configured (no API key)")
 
 
 def make_describer(settings: Settings) -> Describer:
-	if settings.anthropic_api_key is None:
-		return UnconfiguredDescriber()
-	client = AsyncAnthropic(
-		api_key=settings.anthropic_api_key.get_secret_value(), max_retries=0
+	from memo.services.providers import structured_provider
+
+	provider = structured_provider(
+		settings, model=settings.extraction_model, schema=_Description
 	)
-	return AnthropicDescriber(client, model=settings.extraction_model)
+	if provider is None:
+		return UnconfiguredDescriber()
+	return PhotoDescriber(provider)

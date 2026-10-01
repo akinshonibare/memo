@@ -6,7 +6,7 @@ import {
   useAudioRecorderState,
 } from "expo-audio";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Modal, ScrollView, Text, View } from "react-native";
+import { AppState, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { Api, ApiError, type Space } from "../api";
 import { confirmDiscard, IconCircle, Pill, SheetHandle } from "../components";
 import { formatClock } from "../format";
@@ -263,18 +263,29 @@ export function RecordSheet({
                   ? "Saved."
                   : "Uploading…"
                 : live
-                  ? "Listening. Tap End when you're done."
+                  ? "Listening. Tap the orb or End when you're done."
                   : "Paused."}
         </Text>
         {notice && phase === "paused" && <Text style={[ui.meta, { marginTop: 12 }]}>{notice}</Text>}
         {error && <Text style={[ui.danger, { marginTop: 16 }]}>{error}</Text>}
         <LiveTranscript words={transcript.words} partial={transcript.partial} status={transcript.status} />
         <View style={styles.stage}>
-          <VoiceOrb
-            level={levelFromDb(state.metering)}
-            state={phase === "saving" ? "saving" : live ? "live" : "paused"}
-            drop={drop}
-          />
+          {/* The orb is the one big thing on the screen, so it ends the take too: a tap
+              does what End does. While starting, waiting or saving it does nothing. */}
+          <Pressable
+            onPress={() => void end()}
+            disabled={!recordingNow}
+            accessibilityRole="button"
+            accessibilityLabel="End recording"
+            accessibilityHint="Saves the voice note"
+            hitSlop={12}
+          >
+            <VoiceOrb
+              level={levelFromDb(state.metering)}
+              state={phase === "saving" ? "saving" : live ? "live" : "paused"}
+              drop={drop}
+            />
+          </Pressable>
         </View>
         {phase === "waiting" ? (
           // Nothing to pause or end yet: the one useful thing is to write it down now.

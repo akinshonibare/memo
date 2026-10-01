@@ -14,13 +14,13 @@ import json
 import sys
 from pathlib import Path
 
-from anthropic import AsyncAnthropic
 from pydantic import BaseModel, ValidationError
 
 from evals.habits.scoring import Expected, Report, score_example
+from evals.live import live_provider
 from memo.config import get_settings
 from memo.schemas.habits import HabitsExtraction
-from memo.services.extraction import AnthropicExtractionProvider, ExtractionFailed
+from memo.services.extraction import ExtractionFailed
 from memo.services.habits import HabitsReader, HabitsReaderLike
 from memo.services.retry import RetryableError, TerminalError
 
@@ -115,17 +115,10 @@ def main(argv: list[str] | None = None) -> int:
 	reader: HabitsReaderLike | None = None
 	if replay is None:
 		settings = get_settings()
-		if settings.anthropic_api_key is None:
-			print("ANTHROPIC_API_KEY is unset; use --replay for an offline run")
+		provider = live_provider(args.model or settings.habits_model, HabitsExtraction)
+		if provider is None:
 			return 2
-		client = AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
-		reader = HabitsReader(
-			AnthropicExtractionProvider(
-				client,
-				model=args.model or settings.habits_model,
-				schema=HabitsExtraction,
-			)
-		)
+		reader = HabitsReader(provider)
 	report = asyncio.run(run(examples, reader, replay, args.record))
 	print(f"{report.examples} examples")
 	print(report.table())

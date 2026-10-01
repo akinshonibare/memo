@@ -47,6 +47,8 @@ day the eval runner works.
 **Vendor lock-in at the most important call site.** The prompt and the structured-output
 mechanism ([0015](0015-structured-outputs-and-terminal-validation.md)) are Anthropic-shaped.
 Swapping providers is a rewrite of `services/extraction.py`, not a config change.
+*2026-10-01: no longer so. Since [0067](0067-gemini-behind-the-same-seam.md) a stage's
+model setting names its provider.*
 
 **A thinking model on a job that mostly doesn't need to think.** Adaptive thinking is on by
 default; `output_config.effort` is set to `low` for extraction so the model doesn't spend

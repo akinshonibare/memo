@@ -71,7 +71,8 @@ path. It is the difference between "it failed" and knowing *why* without re-runn
 - Repair attempts succeed less than ~2% of the time. Then the repair is theatre and a single
   attempt straight to `failed` is cheaper and more honest.
 - A second provider is needed. `instructor` or a thin internal equivalent becomes the right
-  seam at that point, not before.
+  seam at that point, not before. *2026-10-01: it was needed, and the thin internal seam
+  won ([0067](0067-gemini-behind-the-same-seam.md)); the repair loop did not change.*
 
 ## Interview angle
 

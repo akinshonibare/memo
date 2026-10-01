@@ -32,7 +32,9 @@ Deepgram for voice notes, live words and spoken answers wasn't in it at all.
 ## Decision
 
 **Each person gets a daily AI budget, $1 by default (`DAILY_AI_LIMIT_USD`; 0 turns it
-off), overridable per person by the operator (`users.daily_ai_limit_usd`, migration
+off; *lowered to $0.50 on 2026-10-01 at Akin's ask, with five users and a typical day of
+one person's notes at about $0.40 on the 0065 routing; the Flash-Lite moves in
+[0067](0067-gemini-behind-the-same-seam.md) take a day well under it*), overridable per person by the operator (`users.daily_ai_limit_usd`, migration
 0029; NULL means the default, 0 means none; no route writes it).** Spend is the sum of
 their `llm_calls` since their own midnight. Before anything paid starts:
 
