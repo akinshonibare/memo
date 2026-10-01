@@ -163,7 +163,7 @@ def make_reconciler(settings: Settings) -> ReconcilerLike:
 	)
 	return Reconciler(
 		AnthropicExtractionProvider(
-			client, model=settings.extraction_model, schema=Reconciliation
+			client, model=settings.reconcile_model, schema=Reconciliation
 		)
 	)
 

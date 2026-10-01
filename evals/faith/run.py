@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
 		reader = FaithReader(
 			AnthropicExtractionProvider(
 				client,
-				model=args.model or settings.extraction_model,
+				model=args.model or settings.faith_model,
 				schema=FaithExtraction,
 			)
 		)

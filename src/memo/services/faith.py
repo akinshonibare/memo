@@ -256,7 +256,7 @@ def make_faith_reader(settings: Settings) -> FaithReaderLike:
 	)
 	return FaithReader(
 		AnthropicExtractionProvider(
-			client, model=settings.extraction_model, schema=FaithExtraction
+			client, model=settings.faith_model, schema=FaithExtraction
 		)
 	)
 

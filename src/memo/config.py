@@ -73,6 +73,17 @@ class Settings(BaseSettings):
 	# Extraction (ADR 0014/0015). Unset means every capture fails at the extract stage.
 	anthropic_api_key: SecretStr | None = None
 	extraction_model: str = "claude-opus-5"
+	# One model per reader (ADR 0065), each held to its own eval. To go back for one,
+	# set e.g. PEOPLE_MODEL=claude-opus-5 on the worker; new notes use it, old rows keep
+	# the model they were read with in extractor_version.
+	people_model: str = "claude-sonnet-5"
+	habits_model: str = "claude-sonnet-5"
+	faith_model: str = "claude-sonnet-5"
+	reconcile_model: str = "claude-sonnet-5"
+	# Kept on Opus: on Sonnet, mood flipped a feeling's sign and lately guessed a
+	# pronoun, each in one run of several; both are 1.00 gates.
+	mood_model: str = "claude-opus-5"
+	lately_model: str = "claude-opus-5"
 
 	# Embeddings (ADR 0016). Changing the model or dim is a full re-embed.
 	voyage_api_key: SecretStr | None = None

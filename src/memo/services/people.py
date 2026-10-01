@@ -176,7 +176,7 @@ def make_people_reader(settings: Settings) -> PeopleReaderLike:
 	)
 	return PeopleReader(
 		AnthropicExtractionProvider(
-			client, model=settings.extraction_model, schema=PeopleExtraction
+			client, model=settings.people_model, schema=PeopleExtraction
 		)
 	)
 

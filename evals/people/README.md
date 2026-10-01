@@ -53,3 +53,9 @@ Resolving that is a merge in the app, which then teaches memo the alias.
     uv run python -m evals.people.resolution
 
 Every "which one?" you answer in the app is a labelled case. Add real ones here.
+
+**Re-armed on Sonnet (2026-10-01, `people-v1/claude-sonnet-5`, ADR 0065):** the reader now
+runs on `PEOPLE_MODEL`, Sonnet 5 by default. Four live Sonnet runs scored 1.00 on every
+metric each time; `recorded.json` is the fourth, outputs read before committing. To go
+back, set `PEOPLE_MODEL=claude-opus-5` on the worker and re-record with `--model
+claude-opus-5`.

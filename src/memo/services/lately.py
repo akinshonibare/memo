@@ -109,7 +109,7 @@ def make_lately_writer(settings: Settings) -> LatelyWriterLike:
 	)
 	return LatelyWriter(
 		AnthropicExtractionProvider(
-			client, model=settings.extraction_model, schema=LatelyWrite
+			client, model=settings.lately_model, schema=LatelyWrite
 		)
 	)
 
