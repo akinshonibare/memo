@@ -88,6 +88,8 @@ def _map_error(exc: Exception) -> Exception:
 
 
 class AnthropicTextProvider:
+	provider = "anthropic"
+
 	def __init__(self, client: AsyncAnthropic, *, model: str) -> None:
 		self._client = client
 		self.model = model
@@ -111,6 +113,7 @@ class AnthropicTextProvider:
 			cache_read_tokens=usage.cache_read_input_tokens or 0,
 			cache_write_tokens=usage.cache_creation_input_tokens or 0,
 			latency_ms=round((time.perf_counter() - started) * 1000),
+			provider=self.provider,
 		)
 
 
@@ -164,12 +167,12 @@ class UnconfiguredProvider:
 	async def complete(
 		self, *, system: str, messages: list[MessageParam]
 	) -> RawCompletion:
-		raise TerminalError("ask is not configured (ANTHROPIC_API_KEY is unset)")
+		raise TerminalError("ask is not configured (no API key for its model)")
 
 	async def stream(
 		self, *, system: str, messages: list[MessageParam]
 	) -> AsyncGenerator[str, None]:
-		raise TerminalError("ask is not configured (ANTHROPIC_API_KEY is unset)")
+		raise TerminalError("ask is not configured (no API key for its model)")
 		yield ""  # pragma: no cover - makes this an async generator
 
 	def usage(self) -> LLMCall:
@@ -177,15 +180,12 @@ class UnconfiguredProvider:
 
 
 def make_providers(settings: Settings) -> tuple[AnswerProvider, TextProvider]:
-	if settings.anthropic_api_key is None:
-		unconfigured = UnconfiguredProvider()
-		return unconfigured, unconfigured
-	client = AsyncAnthropic(
-		api_key=settings.anthropic_api_key.get_secret_value(), max_retries=0
-	)
+	from memo.services.providers import answer_provider, text_provider
+
+	unconfigured = UnconfiguredProvider()
 	return (
-		AnthropicAnswerProvider(client, model=settings.answer_model),
-		AnthropicTextProvider(client, model=settings.rewrite_model),
+		answer_provider(settings, model=settings.answer_model) or unconfigured,
+		text_provider(settings, model=settings.rewrite_model) or unconfigured,
 	)
 
 
@@ -282,7 +282,7 @@ async def rewrite_query(
 		ctx.session,
 		assistant,
 		LLMCall.priced(
-			provider="anthropic",
+			provider=raw.provider,
 			model=raw.model,
 			stage="rewrite",
 			input_tokens=raw.input_tokens,

@@ -18,6 +18,16 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   evals for extraction (recorded), retrieval and faithfulness. CI runs on every PR.
 - **Decisions**: ADRs 0001–0049 in [decisions/](decisions/) (0046 is on the parked deploy-on-merge branch). 0006 and 0018 are superseded.
 
+- **Providers (2026-10-01, ADR 0067)**: a model setting names its provider (`claude-*`
+  Anthropic, `gemini-*` Google) through `services/providers.py`; Gemini over plain HTTP in
+  `services/gemini.py`. Measured on `gemini-3.5-flash-lite`: people, habits and faith
+  clear every bar on 3/3 runs at ~8% of Sonnet's cost; reconcile fails (two false
+  links); extraction stays on Opus (recall 0.92 vs 0.96); mood 2/2 and Lately 1/1 need
+  their remaining runs. Google's free tier trains on content and is refused outside
+  local/test; moving a reader needs billing linked, `GEMINI_API_KEY`,
+  `GEMINI_PAID_TIER=true` and `<READER>_MODEL`, then a commit that moves the default
+  and re-records the eval. No free credits apply.
+
 ## Not done, in the order it should happen
 
 1. **The learning pass.** _Deferred to the end of the build (Akin, 2026-09-28), together

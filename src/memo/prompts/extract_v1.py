@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from memo.prompts.voice import NO_EM_DASHES, tone_line
 
 # v1.1: same prompt text; the constrained output schema now requires every field
-# (see AnthropicExtractionProvider). Stamped separately because outputs differ.
+# (see the structured providers, ADR 0067). Stamped separately because outputs differ.
 # v1.2: no em dashes, and an idea's summary written in the person's tone, given in
 # the message (ADR 0061). Titles stay plain.
 EXTRACTOR_VERSION = "extract-v1.2"

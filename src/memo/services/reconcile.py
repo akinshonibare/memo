@@ -24,7 +24,6 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import structlog
-from anthropic import AsyncAnthropic
 from sqlalchemy import ColumnElement, and_, delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -41,9 +40,10 @@ from memo.prompts.reconcile_v1 import (
 )
 from memo.schemas.derivations import PRAYER, UNREVIEWED, UPDATE
 from memo.schemas.reconcile import Reconciliation, UpdateOut, UpdateTarget
-from memo.services.extraction import AnthropicExtractionProvider, complete_validated
+from memo.services.extraction import ExtractionProvider, complete_validated
 from memo.services.faith import faith_on, names_for
 from memo.services.llm import LLMCall
+from memo.services.providers import structured_provider
 from memo.services.retry import TerminalError
 
 log = structlog.get_logger("memo.reconcile")
@@ -101,7 +101,7 @@ class ReconcilerLike(Protocol):
 
 
 class Reconciler:
-	def __init__(self, provider: AnthropicExtractionProvider, *, max_repairs: int = 1):
+	def __init__(self, provider: ExtractionProvider, *, max_repairs: int = 1):
 		self._provider = provider
 		self._max_repairs = max_repairs
 
@@ -137,7 +137,7 @@ class Reconciler:
 
 
 class UnconfiguredReconciler:
-	"""Stands in when no Anthropic key is set, so the stage fails visibly."""
+	"""Stands in when the model's API key is unset, so the stage fails visibly."""
 
 	model = "unconfigured"
 	version = f"{RECONCILE_VERSION}/unconfigured"
@@ -151,21 +151,17 @@ class UnconfiguredReconciler:
 		timezone: str,
 	) -> ReconcileResult:
 		raise TerminalError(
-			"the reconcile stage is not configured (no ANTHROPIC_API_KEY)"
+			"the reconcile stage is not configured (no API key for its model)"
 		)
 
 
 def make_reconciler(settings: Settings) -> ReconcilerLike:
-	if settings.anthropic_api_key is None:
+	provider = structured_provider(
+		settings, model=settings.reconcile_model, schema=Reconciliation
+	)
+	if provider is None:
 		return UnconfiguredReconciler()
-	client = AsyncAnthropic(
-		api_key=settings.anthropic_api_key.get_secret_value(), max_retries=0
-	)
-	return Reconciler(
-		AnthropicExtractionProvider(
-			client, model=settings.reconcile_model, schema=Reconciliation
-		)
-	)
+	return Reconciler(provider)
 
 
 # --- candidates -----------------------------------------------------------------------

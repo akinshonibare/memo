@@ -20,7 +20,6 @@ from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 import structlog
-from anthropic import AsyncAnthropic
 from sqlalchemy import and_, delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,8 +48,9 @@ from memo.schemas.habits import (
 	normalize_key,
 )
 from memo.schemas.people import IN_TOUCH
-from memo.services.extraction import AnthropicExtractionProvider, complete_validated
+from memo.services.extraction import ExtractionProvider, complete_validated
 from memo.services.llm import LLMCall
+from memo.services.providers import structured_provider
 from memo.services.retry import TerminalError
 
 log = structlog.get_logger("memo.habits")
@@ -187,7 +187,7 @@ def _local_date(moment: dt.datetime, timezone: str) -> dt.date:
 
 
 class HabitsReader:
-	def __init__(self, provider: AnthropicExtractionProvider, *, max_repairs: int = 1):
+	def __init__(self, provider: ExtractionProvider, *, max_repairs: int = 1):
 		self._provider = provider
 		self._max_repairs = max_repairs
 
@@ -234,7 +234,7 @@ class HabitsReader:
 
 
 class UnconfiguredHabitsReader:
-	"""Stands in when no Anthropic key is set, so the stage fails visibly."""
+	"""Stands in when the model's API key is unset, so the stage fails visibly."""
 
 	model = "unconfigured"
 	version = f"{HABITS_VERSION}/unconfigured"
@@ -247,20 +247,18 @@ class UnconfiguredHabitsReader:
 		timezone: str,
 		extra_keys: list[str] | None = None,
 	) -> HabitsResult:
-		raise TerminalError("the habits stage is not configured (no ANTHROPIC_API_KEY)")
+		raise TerminalError(
+			"the habits stage is not configured (no API key for its model)"
+		)
 
 
 def make_habits_reader(settings: Settings) -> HabitsReaderLike:
-	if settings.anthropic_api_key is None:
+	provider = structured_provider(
+		settings, model=settings.habits_model, schema=HabitsExtraction
+	)
+	if provider is None:
 		return UnconfiguredHabitsReader()
-	client = AsyncAnthropic(
-		api_key=settings.anthropic_api_key.get_secret_value(), max_retries=0
-	)
-	return HabitsReader(
-		AnthropicExtractionProvider(
-			client, model=settings.habits_model, schema=HabitsExtraction
-		)
-	)
+	return HabitsReader(provider)
 
 
 async def own_keys(session: AsyncSession, user_id: uuid.UUID) -> list[str]:

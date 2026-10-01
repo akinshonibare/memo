@@ -100,7 +100,8 @@ least three times and move it only if every run clears every bar.
 - The golden sets grow (a reader's set doubles, or gains real-note cases): re-run both
   models; the comparison above was on starter sets.
 - Spend passes ~$5/day, or a new model changes the price/quality curve: re-run every
-  reader on every candidate, Haiku included.
+  reader on every candidate, Haiku included. *Done for Gemini on 2026-10-01 in
+  [0067](0067-gemini-behind-the-same-seam.md).*
 
 ## Interview angle
 

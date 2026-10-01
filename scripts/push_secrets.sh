@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 # Push the provider API keys from the local .env to both Railway services.
 #
-# Reads only the three named keys, never prints their values, and skips any that
-# are empty. Requires `railway login` and `railway link` to the memo project.
+# Reads only the named keys, never prints their values, and skips any that are
+# empty (GEMINI_API_KEY is empty unless a stage runs on Gemini, ADR 0067). Requires `railway login` and `railway link` to the memo project.
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -22,6 +22,7 @@ set_from_env() {
 }
 
 set_from_env ANTHROPIC_API_KEY
+set_from_env GEMINI_API_KEY
 set_from_env VOYAGE_API_KEY
 set_from_env DEEPGRAM_API_KEY
 

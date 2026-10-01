@@ -44,6 +44,8 @@ class RawCompletion:
 	cache_read_tokens: int
 	cache_write_tokens: int
 	latency_ms: int
+	# Who answered, as `llm_calls.provider` records it (ADR 0067).
+	provider: str = "anthropic"
 
 
 class ExtractionProvider(Protocol):
@@ -55,6 +57,8 @@ class ExtractionProvider(Protocol):
 
 
 class AnthropicExtractionProvider:
+	provider = "anthropic"
+
 	def __init__(
 		self,
 		client: AsyncAnthropic,
@@ -108,6 +112,7 @@ class AnthropicExtractionProvider:
 			cache_read_tokens=usage.cache_read_input_tokens or 0,
 			cache_write_tokens=usage.cache_creation_input_tokens or 0,
 			latency_ms=round((time.perf_counter() - started) * 1000),
+			provider=self.provider,
 		)
 
 
@@ -191,7 +196,7 @@ async def complete_validated[T](
 		raw = await provider.complete(system=system, messages=messages)
 		calls.append(
 			LLMCall.priced(
-				provider="anthropic",
+				provider=raw.provider,
 				model=raw.model,
 				stage=stage,
 				input_tokens=raw.input_tokens,
@@ -241,7 +246,7 @@ class ExtractorLike(Protocol):
 
 
 class UnconfiguredExtractor:
-	"""Stands in when no Anthropic key is set, so extraction fails visibly."""
+	"""Stands in when the model's API key is unset, so extraction fails visibly."""
 
 	model = "unconfigured"
 	version = f"{EXTRACTOR_VERSION}/unconfigured"
@@ -254,15 +259,15 @@ class UnconfiguredExtractor:
 		timezone: str,
 		tone: str | None = None,
 	) -> ExtractResult:
-		raise TerminalError("extraction is not configured (ANTHROPIC_API_KEY is unset)")
+		raise TerminalError("extraction is not configured (no API key for its model)")
 
 
 def make_extractor(settings: Settings) -> ExtractorLike:
-	if settings.anthropic_api_key is None:
+	from memo.services.providers import structured_provider
+
+	provider = structured_provider(
+		settings, model=settings.extraction_model, schema=Extraction
+	)
+	if provider is None:
 		return UnconfiguredExtractor()
-	client = AsyncAnthropic(
-		api_key=settings.anthropic_api_key.get_secret_value(), max_retries=0
-	)
-	return Extractor(
-		AnthropicExtractionProvider(client, model=settings.extraction_model)
-	)
+	return Extractor(provider)

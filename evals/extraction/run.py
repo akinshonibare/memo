@@ -25,10 +25,10 @@ from evals.extraction.matching import (
 	load_matches,
 )
 from evals.extraction.scoring import Report, score_example
+from evals.live import live_provider
 from memo.config import get_settings
 from memo.schemas.derivations import Extraction
 from memo.services.extraction import (
-	AnthropicExtractionProvider,
 	ExtractionFailed,
 	Extractor,
 	ExtractorLike,
@@ -128,20 +128,21 @@ def main(argv: list[str] | None = None) -> int:
 	replay = json.loads(args.replay.read_text()) if args.replay else None
 	extractor: ExtractorLike | None = None
 	matcher: LLMMatcher | None = None
-	if replay is None or args.match:
+	if replay is None:
+		settings = get_settings()
+		provider = live_provider(args.model or settings.extraction_model, Extraction)
+		if provider is None:
+			return 2
+		extractor = Extractor(provider)
+	if args.match:
+		# The matcher is a Claude judge whatever model is under test (matching.py).
 		settings = get_settings()
 		if settings.anthropic_api_key is None:
-			print("ANTHROPIC_API_KEY is unset; use --replay for an offline run")
+			print("ANTHROPIC_API_KEY is unset; --match needs the Claude judge")
 			return 2
-		client = AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
-		if replay is None:
-			extractor = Extractor(
-				AnthropicExtractionProvider(
-					client, model=args.model or settings.extraction_model
-				)
-			)
-		if args.match:
-			matcher = LLMMatcher(client)
+		matcher = LLMMatcher(
+			AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
+		)
 
 	matches = load_matches(
 		json.loads(MATCHES.read_text()) if MATCHES.exists() and not args.match else None

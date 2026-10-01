@@ -15,14 +15,14 @@ import json
 import sys
 from pathlib import Path
 
-from anthropic import AsyncAnthropic
 from pydantic import BaseModel, ValidationError
 
 from evals.lately.scoring import Expected, Report, score_example
+from evals.live import live_provider
 from memo.config import get_settings
 from memo.prompts.lately_v1 import Mentioned, user_message
 from memo.schemas.people import LatelyWrite
-from memo.services.extraction import AnthropicExtractionProvider, ExtractionFailed
+from memo.services.extraction import ExtractionFailed
 from memo.services.lately import LatelyWriter, LatelyWriterLike
 from memo.services.prose import plain_dashes
 from memo.services.retry import TerminalError
@@ -110,17 +110,10 @@ def main(argv: list[str] | None = None) -> int:
 	writer: LatelyWriterLike | None = None
 	if replay is None:
 		settings = get_settings()
-		if settings.anthropic_api_key is None:
-			print("ANTHROPIC_API_KEY is unset; use --replay for an offline run")
+		provider = live_provider(args.model or settings.lately_model, LatelyWrite)
+		if provider is None:
 			return 2
-		client = AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
-		writer = LatelyWriter(
-			AnthropicExtractionProvider(
-				client,
-				model=args.model or settings.lately_model,
-				schema=LatelyWrite,
-			)
-		)
+		writer = LatelyWriter(provider)
 	report = asyncio.run(run(examples, writer, replay, args.record))
 	print(f"{report.examples} examples")
 	print(report.table())

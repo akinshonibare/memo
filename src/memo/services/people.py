@@ -23,7 +23,6 @@ from typing import Literal, Protocol
 from zoneinfo import ZoneInfo
 
 import structlog
-from anthropic import AsyncAnthropic
 from sqlalchemy import Date, cast, delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,13 +45,10 @@ from memo.schemas.people import (
 	PersonRef,
 	ReachOut,
 )
-from memo.services.extraction import (
-	AnthropicExtractionProvider,
-	ExtractionProvider,
-	complete_validated,
-)
+from memo.services.extraction import ExtractionProvider, complete_validated
 from memo.services.llm import LLMCall
 from memo.services.prose import plain_dashes
+from memo.services.providers import structured_provider
 from memo.services.retry import TerminalError
 
 log = structlog.get_logger("memo.people")
@@ -152,7 +148,7 @@ class PeopleReader:
 
 
 class UnconfiguredPeopleReader:
-	"""Stands in when no Anthropic key is set, so the stage fails visibly."""
+	"""Stands in when the model's API key is unset, so the stage fails visibly."""
 
 	model = "unconfigured"
 	version = f"{PEOPLE_VERSION}/unconfigured"
@@ -165,20 +161,18 @@ class UnconfiguredPeopleReader:
 		timezone: str,
 		author: str | None,
 	) -> PeopleResult:
-		raise TerminalError("the people stage is not configured (no ANTHROPIC_API_KEY)")
+		raise TerminalError(
+			"the people stage is not configured (no API key for its model)"
+		)
 
 
 def make_people_reader(settings: Settings) -> PeopleReaderLike:
-	if settings.anthropic_api_key is None:
+	provider = structured_provider(
+		settings, model=settings.people_model, schema=PeopleExtraction
+	)
+	if provider is None:
 		return UnconfiguredPeopleReader()
-	client = AsyncAnthropic(
-		api_key=settings.anthropic_api_key.get_secret_value(), max_retries=0
-	)
-	return PeopleReader(
-		AnthropicExtractionProvider(
-			client, model=settings.people_model, schema=PeopleExtraction
-		)
-	)
+	return PeopleReader(provider)
 
 
 # --- resolving: pure functions, no database ------------------------------------------

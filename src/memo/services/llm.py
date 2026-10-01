@@ -13,6 +13,18 @@ PRICES_PER_MTOK: dict[str, tuple[Decimal, Decimal]] = {
 	"claude-opus-5": (Decimal("5"), Decimal("25")),
 	"claude-sonnet-5": (Decimal("2"), Decimal("10")),
 	"claude-haiku-4-5": (Decimal("1"), Decimal("5")),
+	# Gemini, Google's first-party API, paid tier, read off ai.google.dev/pricing on
+	# 2026-10-01 (ADR 0067). Thinking tokens bill as output; cached input at 0.1x,
+	# the same multiplier. The 3.6 to 3.8 Flash prices are promotional through
+	# 2026-12-31. On the free tier the invoice is $0; the column still records the
+	# list price, the number that decides whether paying would be worth it.
+	"gemini-3.8-flash": (Decimal("0.75"), Decimal("3.75")),
+	"gemini-3.7-flash": (Decimal("0.75"), Decimal("3.75")),
+	"gemini-3.6-flash": (Decimal("0.75"), Decimal("3.75")),
+	"gemini-3.5-flash": (Decimal("1.50"), Decimal("9")),
+	"gemini-3.5-flash-lite": (Decimal("0.30"), Decimal("2.50")),
+	"gemini-3.1-flash-lite": (Decimal("0.25"), Decimal("1.50")),
+	"gemini-3.1-pro-preview": (Decimal("2"), Decimal("12")),
 }
 CACHE_READ_MULTIPLIER = Decimal("0.1")
 CACHE_WRITE_MULTIPLIER = Decimal("1.25")

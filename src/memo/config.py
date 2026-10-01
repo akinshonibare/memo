@@ -70,8 +70,23 @@ class Settings(BaseSettings):
 	# the privacy page claims no-training for Voyage exactly when this is true.
 	voyage_training_opted_out: bool = False
 
-	# Extraction (ADR 0014/0015). Unset means every capture fails at the extract stage.
+	# Anthropic (ADR 0014/0015). Unset means every stage set to a Claude model fails
+	# visibly.
 	anthropic_api_key: SecretStr | None = None
+	# Google's Gemini API (ADR 0067). Every model setting below names its provider
+	# by prefix: `claude-` goes to Anthropic, `gemini-` or `gemma-` goes here. Named
+	# as AI Studio and Google's own tools name it, so the key pastes straight in.
+	gemini_api_key: SecretStr | None = None
+	# Google uses what is sent on the Gemini API's free tier to improve its products,
+	# its reviewers may read it, and its terms exclude personal information. The paid
+	# tier (a linked billing account) does none of that. Set true only once billing
+	# is linked: the privacy page claims no-training for Google exactly when this is
+	# true, and outside local/test a Gemini-routed stage refuses to start without it.
+	# The evals' synthetic notes are the free tier's one legitimate use here.
+	gemini_paid_tier: bool = False
+	# How much a Gemini model deliberates: minimal, low, medium or high. Low, as
+	# Anthropic's `effort` is low here: the schema does the constraining.
+	gemini_thinking_level: str = "low"
 	extraction_model: str = "claude-opus-5"
 	# One model per reader (ADR 0065), each held to its own eval. To go back for one,
 	# set e.g. PEOPLE_MODEL=claude-opus-5 on the worker; new notes use it, old rows keep

@@ -18,13 +18,13 @@ import json
 import sys
 from pathlib import Path
 
-from anthropic import AsyncAnthropic
 from pydantic import BaseModel, ValidationError
 
 from evals.faith.scoring import Expected, Report, score_example
+from evals.live import live_provider
 from memo.config import get_settings
 from memo.schemas.faith import FaithExtraction
-from memo.services.extraction import AnthropicExtractionProvider, ExtractionFailed
+from memo.services.extraction import ExtractionFailed
 from memo.services.faith import FaithReader, FaithReaderLike, might_pray
 from memo.services.retry import TerminalError
 
@@ -101,17 +101,10 @@ def main(argv: list[str] | None = None) -> int:
 	reader: FaithReaderLike | None = None
 	if replay is None:
 		settings = get_settings()
-		if settings.anthropic_api_key is None:
-			print("ANTHROPIC_API_KEY is unset; use --replay for an offline run")
+		provider = live_provider(args.model or settings.faith_model, FaithExtraction)
+		if provider is None:
 			return 2
-		client = AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
-		reader = FaithReader(
-			AnthropicExtractionProvider(
-				client,
-				model=args.model or settings.faith_model,
-				schema=FaithExtraction,
-			)
-		)
+		reader = FaithReader(provider)
 	report = asyncio.run(run(examples, reader, replay, args.record))
 	print(f"{report.examples} examples")
 	print(report.table())
