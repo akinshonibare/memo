@@ -123,6 +123,15 @@ export function HomeScreen({
   const captures = list.items.filter((c) => !deleted.has(c.id));
   const { view: morning, reload: reloadMorning } = useMorning(api, refreshKey);
   const fresh = useNews(api, refreshKey);
+  // At the daily AI limit (ADR 0063): notes still save; say why they wait.
+  const [atLimit, setAtLimit] = useState(false);
+  useEffect(() => {
+    if (!focused) return;
+    api
+      .getUsageToday()
+      .then((u) => setAtLimit(u.over))
+      .catch(() => setAtLimit(false));
+  }, [api, refreshKey, focused]);
 
   const refresh = useCallback(async () => {
     try {
@@ -268,6 +277,14 @@ export function HomeScreen({
       </View>
       <Wordmark live={anyActive || waiting} glow={!!moment} playful style={[ui.pad, styles.wordmark]} />
       <Text style={[ui.meta, ui.pad, styles.greeting]}>{greeting(name)}</Text>
+      {atLimit && (
+        <View style={[ui.pad, styles.limit]}>
+          <Ionicons name="moon-outline" size={16} color={colors.muted} />
+          <Text style={[ui.meta, { flex: 1 }]}>
+            {"Today's AI limit is reached. New notes are saved, and memo reads them after midnight."}
+          </Text>
+        </View>
+      )}
       {moment && focused && <MomentBanner moment={moment} onDone={onMomentSeen} />}
       <View style={[styles.search, { marginHorizontal: 20 }]}>
         <Ionicons name="search" size={20} color={colors.muted} />
@@ -597,6 +614,7 @@ const useStyles = makeStyles((colors) => ({
   },
   momentTitle: { fontFamily: "InstrumentSerif_400Regular", fontSize: 26, lineHeight: 30, color: colors.text },
   greeting: { marginBottom: 14 },
+  limit: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: -6, marginBottom: 14 },
   topBar: {
     flexDirection: "row",
     alignItems: "center",

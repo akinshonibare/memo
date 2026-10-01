@@ -2,13 +2,14 @@ import datetime as dt
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from memo.auth import CurrentUser
 from memo.db import DbSession
-from memo.models import LLMCallRow
+from memo.models import LLMCallRow, User
+from memo.services.budget import budget_for
 
 router = APIRouter(prefix="/usage", tags=["usage"])
 
@@ -68,4 +69,27 @@ async def usage(
 		since=since,
 		total_cost_usd=sum((s.cost_usd for s in by_stage), Decimal("0")),
 		by_stage=by_stage,
+	)
+
+
+class TodayOut(BaseModel):
+	"""Today's AI spend against the daily limit (ADR 0063). `limit_usd` null: none."""
+
+	spent_usd: Decimal
+	limit_usd: Decimal | None
+	over: bool
+	resets_at: dt.datetime  # their next midnight
+
+
+@router.get("/today", response_model=TodayOut)
+async def today(session: DbSession, user_id: CurrentUser) -> TodayOut:
+	user = await session.get(User, user_id)
+	if user is None:
+		raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+	budget = await budget_for(session, user)
+	return TodayOut(
+		spent_usd=budget.spent.quantize(Decimal("0.01")),
+		limit_usd=budget.limit,
+		over=budget.over,
+		resets_at=budget.resets_at,
 	)

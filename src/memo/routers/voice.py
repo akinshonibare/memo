@@ -25,7 +25,14 @@ from starlette.websockets import WebSocketDisconnect
 from memo.auth import CurrentUser, websocket_user
 from memo.db import DbSession, bind_user
 from memo.models import User
-from memo.routers.limits import limit_voice
+from memo.routers.limits import limit_voice, within_daily_budget
+from memo.services.budget import (
+	budget_for,
+	live_call,
+	log_calls,
+	speak_call,
+	transcribe_call,
+)
 from memo.services.live_stt import LiveTranscriber, minute_cost, relay
 from memo.services.people import keyterms
 from memo.services.ratelimit import check
@@ -78,7 +85,9 @@ def _upstream(exc: RetryableError | TerminalError) -> HTTPException:
 
 
 @router.post(
-	"/transcribe", response_model=TranscriptOut, dependencies=[Depends(limit_voice)]
+	"/transcribe",
+	response_model=TranscriptOut,
+	dependencies=[Depends(limit_voice), Depends(within_daily_budget)],
 )
 async def transcribe_question(
 	request: Request,
@@ -102,6 +111,10 @@ async def transcribe_question(
 		)
 	except (RetryableError, TerminalError) as exc:
 		raise _upstream(exc) from exc
+	# Priced into the daily AI budget (ADR 0063).
+	seconds = (transcript.duration_ms or 0) / 1000
+	log_calls(session, user_id, [transcribe_call(transcript.model, seconds)])
+	await session.commit()
 	return TranscriptOut(text=transcript.text.strip())
 
 
@@ -109,7 +122,7 @@ async def transcribe_question(
 	"/speak",
 	response_class=Response,
 	responses={200: {"content": {"audio/mpeg": {}}}},
-	dependencies=[Depends(limit_voice)],
+	dependencies=[Depends(limit_voice), Depends(within_daily_budget)],
 )
 async def speak(
 	body: SpeakIn,
@@ -125,6 +138,9 @@ async def speak(
 		audio = await speaker.speak(body.text, voice=voice)
 	except (RetryableError, TerminalError) as exc:
 		raise _upstream(exc) from exc
+	# Priced into the daily AI budget (ADR 0063), by the character.
+	log_calls(session, user_id, [speak_call(voice or "aura-2", len(body.text))])
+	await session.commit()
 	return Response(content=audio, media_type="audio/mpeg")
 
 
@@ -153,6 +169,15 @@ async def live(websocket: WebSocket) -> None:
 		on_error="closed",
 	)
 	if not decision.allowed:
+		await websocket.close(code=RATE_LIMITED)
+		return
+	# At the daily AI limit (ADR 0063): refused like a rate limit. A note being
+	# recorded still records; only its live words are off.
+	async with websocket.app.state.session_factory() as session:
+		await bind_user(session, user_id)
+		user = await session.get(User, user_id)
+		over = user is not None and (await budget_for(session, user)).over
+	if over:
 		await websocket.close(code=RATE_LIMITED)
 		return
 	try:
@@ -197,5 +222,12 @@ async def live(websocket: WebSocket) -> None:
 			audio_seconds=round(seconds, 1),
 			cost_usd=str(minute_cost(seconds)),
 		)
+		if seconds > 0:
+			# Into the cost log, so live words count towards the daily budget.
+			with contextlib.suppress(Exception):
+				async with websocket.app.state.session_factory() as session:
+					await bind_user(session, user_id)
+					log_calls(session, user_id, [live_call(transcriber.model, seconds)])
+					await session.commit()
 	with contextlib.suppress(Exception):
 		await websocket.close()

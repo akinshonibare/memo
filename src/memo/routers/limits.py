@@ -7,6 +7,9 @@ from fastapi import Depends, HTTPException, Request, Response, status
 
 from memo.auth import CurrentUser
 from memo.config import Settings, get_settings
+from memo.db import DbSession
+from memo.models import User
+from memo.services.budget import budget_for
 from memo.services.ratelimit import check
 
 
@@ -51,3 +54,20 @@ limit_capture = _limiter("capture", "open")
 limit_voice = _limiter("voice", "closed")
 # Fail open: search is a read, and a query embedding costs a fraction of a cent.
 limit_search = _limiter("search", "open")
+
+
+async def within_daily_budget(session: DbSession, user_id: CurrentUser) -> None:
+	"""Refuse the paid request of someone at their daily AI limit (ADR 0063), saying
+	when it comes back. 429 like the rate limits, so an app that handles those already
+	shows the message."""
+	user = await session.get(User, user_id)
+	if user is None:
+		return
+	budget = await budget_for(session, user)
+	if budget.over:
+		raise HTTPException(
+			status.HTTP_429_TOO_MANY_REQUESTS,
+			"You've reached today's AI limit. Your notes still save, and Ask is back "
+			"after midnight.",
+			headers={"Retry-After": str(budget.seconds_left_today())},
+		)

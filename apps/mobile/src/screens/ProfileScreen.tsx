@@ -88,6 +88,7 @@ export function ProfileSheet({
   const [me, setMe] = useState<Me | null>(null);
   const [voices, setVoices] = useState<Voice[]>([]);
   const [spend, setSpend] = useState<string | null>(null);
+  const [today, setToday] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [devTaps, setDevTaps] = useState(0);
@@ -105,6 +106,16 @@ export function ProfileSheet({
       .getUsage(30)
       .then((u) => setSpend(`$${Number(u.total_cost_usd).toFixed(2)}`))
       .catch(() => setSpend(null));
+    void api()
+      .getUsageToday()
+      .then((u) =>
+        setToday(
+          u.limit_usd === null
+            ? `$${Number(u.spent_usd).toFixed(2)}`
+            : `$${Number(u.spent_usd).toFixed(2)} of $${Number(u.limit_usd).toFixed(2)}`,
+        ),
+      )
+      .catch(() => setToday(null));
   }, [visible, signedIn, api]);
 
   useEffect(() => {
@@ -548,7 +559,13 @@ export function ProfileSheet({
                 </Row>
               </Group>
 
-              <Group title="Usage" footer="What memo's AI calls - extraction, answers, photo descriptions - have cost.">
+              <Group
+                title="Usage"
+                footer="What memo's AI has cost: reading notes, answers, photo descriptions and voice. Each day has a limit; once it's reached, your notes still save and memo reads them after midnight."
+              >
+                <Row icon="today-outline" label="Today">
+                  <Text style={styles.value}>{today ?? "…"}</Text>
+                </Row>
                 <Row icon="stats-chart-outline" label="Last 30 days">
                   <Text style={styles.value}>{spend ?? "…"}</Text>
                 </Row>

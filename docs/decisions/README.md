@@ -113,6 +113,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0060](0060-highlights-and-titled-names.md) | Ideas are called Highlights on screen (the kind stays `idea`); names memo meets in notes are titled word by word | active |
 | [0061](0061-tone-and-no-em-dashes.md) | A tone per person (plain, warm, brief, playful) for answers, summaries and photo descriptions; no em dashes in anything memo writes | active |
 | [0062](0062-lately-on-each-person.md) | Lately: a line on each person, written ahead from their six newest notes, rewritten when those notes or your tone change | active |
+| [0063](0063-daily-ai-limit.md) | A daily AI limit per person ($1 default): notes save and wait for midnight, Ask and voice say when they're back; Deepgram now priced in the cost log | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

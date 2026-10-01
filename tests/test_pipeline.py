@@ -503,8 +503,12 @@ async def test_a_capture_with_no_words_is_ready_and_costs_nothing(
 	assert row["status"] == "ready" and row["failure_reason"] is None
 	assert (extractor.calls, people.calls, embedder.calls) == (0, 0, 0)
 	async with admin_engine.connect() as conn:
-		costed = await conn.scalar(
-			text("SELECT count(*) FROM llm_calls WHERE capture_id = :id"),
-			{"id": capture_id},
-		)
-	assert costed == 0
+		costed = (
+			await conn.execute(
+				text("SELECT provider, stage FROM llm_calls WHERE capture_id = :id"),
+				{"id": capture_id},
+			)
+		).all()
+	# No model call; the audio itself was transcribed, and Deepgram bills for that
+	# (priced into the daily budget, ADR 0063).
+	assert [(r[0], r[1]) for r in costed] == [("deepgram", "transcribe")]

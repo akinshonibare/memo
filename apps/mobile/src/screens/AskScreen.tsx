@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import EventSource from "react-native-sse";
-import { Api, type Citation, type Message } from "../api";
+import { Api, ApiError, type Citation, type Message } from "../api";
 import { IconCircle } from "../components";
 import { formatStamp } from "../format";
 import { useKeyboardHeight } from "../keyboard";
@@ -158,7 +158,15 @@ export function AskSheet({
       setBusy(false);
       setTurns((prev) => [
         ...prev,
-        { id: `err-${Date.now()}`, role: "assistant", text: null, status: "failed", error: String(error), citations: [] },
+        {
+          id: `err-${Date.now()}`,
+          role: "assistant",
+          text: null,
+          status: "failed",
+          // A refusal (the daily AI limit, a rate limit) says why in its own words.
+          error: error instanceof ApiError ? error.message : String(error),
+          citations: [],
+        },
       ]);
     }
   }, [api, busy, ensureConversation, speech, text]);

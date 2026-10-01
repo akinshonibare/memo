@@ -11,6 +11,7 @@ from sqlalchemy import select, text
 from memo.db import bind_system, bind_user
 from memo.ids import uuid7
 from memo.models import Capture, LLMCallRow, Person, Recording, User
+from memo.services.budget import budget_for
 from memo.services.derivation_index import reembed_derivation, refresh_stale_chunks
 from memo.services.habits import unread_for_habits
 from memo.services.lately import mark_unwritten, refresh_lately, stale_people
@@ -356,6 +357,9 @@ async def _refresh_one(
 		user = await session.get(User, user_id)
 		if person is None or user is None:
 			return "missing"
+		if (await budget_for(session, user)).over:
+			# At their daily AI limit (ADR 0063): left stale, written after midnight.
+			return "over_budget"
 		try:
 			calls = await refresh_lately(session, person, user, ctx["lately"])
 		except RetryableError as exc:

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from functools import lru_cache
 from uuid import UUID
 
@@ -91,6 +92,10 @@ class Settings(BaseSettings):
 	rate_capture_per_minute: int = 60
 	rate_voice_per_minute: int = 90
 	rate_search_per_minute: int = 60
+	# Per user, per day of theirs (ADR 0063): the most memo spends on one person's AI.
+	# At it, notes still save and are read after their midnight; Ask and voice say so.
+	# 0 turns the limit off. A person's own `daily_ai_limit_usd` overrides it.
+	daily_ai_limit_usd: Decimal = Decimal("1.00")
 	# Cosine distance under which two notes count as related. A starting guess for
 	# voyage-4 (ADR 0028), not a measured one: calibrate on real notes.
 	related_max_distance: float = 0.45

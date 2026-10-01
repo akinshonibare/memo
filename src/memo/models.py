@@ -89,10 +89,18 @@ class User(Base):
 	tone: Mapped[str] = mapped_column(
 		String(16), default="plain", server_default="plain"
 	)
+	# The most memo spends on this person's AI in one of their days, in USD (ADR 0063).
+	# NULL: the operator's default (DAILY_AI_LIMIT_USD). 0: no limit. Only the operator
+	# sets it; no route writes it.
+	daily_ai_limit_usd: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 
 	__table_args__ = (
 		CheckConstraint(f"tone IN ({_in_list(TONES)})", name="ck_users_tone"),
+		CheckConstraint(
+			"daily_ai_limit_usd IS NULL OR daily_ai_limit_usd >= 0",
+			name="ck_users_daily_ai_limit",
+		),
 		CheckConstraint(
 			f"bible_translation IN ({_in_list(BIBLE_TRANSLATIONS)})",
 			name="ck_users_bible_translation",

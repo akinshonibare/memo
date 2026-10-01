@@ -10,7 +10,7 @@ from memo.db import DbSession
 from memo.ids import uuid7
 from memo.models import Conversation, Message
 from memo.pagination import decode_cursor, encode_cursor
-from memo.routers.limits import limit_ask
+from memo.routers.limits import limit_ask, within_daily_budget
 from memo.schemas.ask import (
 	CitationOut,
 	ConversationOut,
@@ -141,7 +141,7 @@ async def list_messages(
 	"/{conversation_id}/messages",
 	status_code=status.HTTP_201_CREATED,
 	response_model=MessageAccepted,
-	dependencies=[Depends(limit_ask)],
+	dependencies=[Depends(limit_ask), Depends(within_daily_budget)],
 )
 async def create_message(
 	conversation_id: uuid.UUID,
