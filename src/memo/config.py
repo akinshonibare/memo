@@ -62,6 +62,9 @@ class Settings(BaseSettings):
 	tts_model: str = "aura-2-thalia-en"
 	# Shown on the public privacy page; unset shows TestFlight feedback instead.
 	support_email: str | None = None
+	# The operator's password for the live cost page, /admin/costs (ADR 0064): HTTP
+	# Basic, any username. Unset, the page doesn't exist (404). Set it in Railway only.
+	operator_token: SecretStr | None = None
 	# Voyage trains on API inputs unless the account opts out, which is a toggle in
 	# Voyage's dashboard, not a request parameter. Set true only once it is flipped:
 	# the privacy page claims no-training for Voyage exactly when this is true.

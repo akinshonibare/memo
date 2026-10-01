@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>memo AI Costs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #EDF0EA;
+  --surface: #FFFFFF;
+  --surface-2: #E3E8E1;
+  --line: #CFD7CE;
+  --text: #13211A;
+  --muted: #5B6B62;
+  --forest: #1F5A40;
+  --bar: #9DB5A6;
+  --accent: #B06A12;
+  --good: #3F7A4C;
+  --warn: #B06A12;
+  --bad: #B23B2F;
+  --warn-bg: #F6E7D2;
+  --bad-bg: #F5DCD8;
+  --good-bg: #DDEBDF;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0B1410; --surface: #15221C; --surface-2: #1E2F27; --line: #26382F;
+    --text: #F1ECDF; --muted: #9FAEA4; --forest: #8FBF96; --bar: #3E5E4C;
+    --accent: #E2A04A; --good: #8FBF96; --warn: #E2A04A; --bad: #E2766A;
+    --warn-bg: #3A2E1A; --bad-bg: #3B201D; --good-bg: #1E3326;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0B1410; --surface: #15221C; --surface-2: #1E2F27; --line: #26382F;
+  --text: #F1ECDF; --muted: #9FAEA4; --forest: #8FBF96; --bar: #3E5E4C;
+  --accent: #E2A04A; --good: #8FBF96; --warn: #E2A04A; --bad: #E2766A;
+  --warn-bg: #3A2E1A; --bad-bg: #3B201D; --good-bg: #1E3326;
+}
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.5 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding-inline: 16px; padding-block: 28px 48px;
+  font-variant-numeric: tabular-nums;
+}
+main { max-width: 860px; margin: 0 auto; display: grid; gap: 28px; }
+h1 { font: 400 44px/1.05 "Instrument Serif", Georgia, serif; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font: 400 26px/1.1 "Instrument Serif", Georgia, serif; margin: 0 0 12px; }
+.meta { color: var(--muted); font-size: 13px; }
+header { display: grid; gap: 6px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 4px; }
+.tile .label { color: var(--muted); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+.tile .value { font: 400 36px/1.1 "Instrument Serif", Georgia, serif; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+.chart { width: 100%; height: auto; display: block; }
+.chart text { fill: var(--muted); font: 11px "IBM Plex Sans", system-ui, sans-serif; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 520px; }
+th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; padding: 0 8px 8px; }
+td { padding: 10px 8px; border-top: 1px solid var(--line); vertical-align: middle; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.meter { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; margin-top: 6px; min-width: 120px; }
+.meter > span { display: block; height: 100%; border-radius: 3px; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.good { background: var(--good-bg); color: var(--good); }
+.stagebar { height: 8px; border-radius: 4px; background: var(--bar); }
+footer { color: var(--muted); font-size: 13px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<main>
+  <header>
+    <h1>memo AI costs</h1>
+    <div class="meta" id="generated"></div>
+  </header>
+
+  <section class="tiles" aria-label="Summary">
+    <div class="tile"><span class="label">Today, all users</span><span class="value" id="today"></span><span class="meta" id="today-note"></span></div>
+    <div class="tile"><span class="label">Last 30 days</span><span class="value" id="month"></span><span class="meta" id="pace"></span></div>
+    <div class="tile"><span class="label">Near or at the limit</span><span class="value" id="near"></span><span class="meta" id="near-note"></span></div>
+  </section>
+
+  <section class="panel" aria-label="Daily spend">
+    <h2>Spend by day</h2>
+    <div class="meta" style="margin-bottom:8px">All users, UTC days. Today is the last bar.</div>
+    <svg class="chart" id="chart" role="img" aria-label="Daily AI spend bar chart"></svg>
+  </section>
+
+  <section class="panel" aria-label="Users">
+    <h2>Users today</h2>
+    <div class="meta" style="margin-bottom:12px">Each person's own day, against their daily limit. Amber from 80%; at the limit, their notes wait until their midnight.</div>
+    <div class="scroll"><table>
+      <thead><tr><th>Who</th><th>Today</th><th class="num" id="window-head"></th><th class="num">Calls</th><th>State</th></tr></thead>
+      <tbody id="users"></tbody>
+    </table></div>
+  </section>
+
+  <section class="panel" aria-label="By stage">
+    <h2>Where it goes</h2>
+    <div class="meta" style="margin-bottom:12px" id="stage-note"></div>
+    <div class="scroll"><table>
+      <thead><tr><th>Stage</th><th>Provider</th><th class="num">Calls</th><th class="num">Spend</th><th style="width:35%"></th></tr></thead>
+      <tbody id="stages"></tbody>
+    </table></div>
+  </section>
+
+  <footer>Live from memo's cost log (<code>llm_calls</code>); this page reloads itself every minute while it's open. Anthropic calls and Deepgram voice are counted; Voyage embeddings (thousandths of a cent a note) are not. Daily limits: ADR 0063.</footer>
+</main>
+
+<script>
+const DATA = __DATA__;
+
+const usd = (s) => "$" + Number(s).toFixed(2);
+// Names are typed by users: never let one become markup.
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const STAGE_NAMES = {
+  answer: "Ask answers", rewrite: "Ask query rewrite", extract: "Reading notes",
+  people: "People", habits: "Habits", mood: "Mood", faith: "Prayers", reconcile: "Follow-ups",
+  describe: "Photo descriptions", lately: "Lately lines", transcribe: "Voice notes",
+  live_stt: "Live words", speak: "Spoken answers",
+};
+function state(u) {
+  if (u.limit_usd === null) return { cls: "good", text: "No limit", pct: 0 };
+  const pct = Number(u.today_usd) / Number(u.limit_usd);
+  if (u.over || pct >= 1) return { cls: "bad", text: "At the limit", pct };
+  if (pct >= 0.8) return { cls: "warn", text: "Close", pct };
+  return { cls: "good", text: "Fine", pct };
+}
+function render(d) {
+  const gen = new Date(d.generated_at);
+  document.getElementById("generated").textContent =
+    "Live · as of " + gen.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) +
+    " · " + d.users.length + (d.users.length === 1 ? " user" : " users");
+  const today = d.users.reduce((a, u) => a + Number(u.today_usd), 0);
+  document.getElementById("today").textContent = usd(today);
+  document.getElementById("today-note").textContent = "Each user's own day so far";
+  const last30 = d.daily.slice(-30).reduce((a, x) => a + Number(x.usd), 0);
+  const last7 = d.daily.slice(-7).reduce((a, x) => a + Number(x.usd), 0);
+  document.getElementById("month").textContent = usd(last30);
+  document.getElementById("pace").textContent = "About " + usd(last7 / 7 * 30) + " a month at the last 7 days' rate";
+  const states = d.users.map(state);
+  const at = states.filter((s) => s.cls === "bad").length, close = states.filter((s) => s.cls === "warn").length;
+  document.getElementById("near").textContent = String(at + close);
+  document.getElementById("near-note").textContent = at + " at the limit, " + close + " close";
+
+  // Chart, drawn to one scale.
+  const days = d.daily.slice(-30);
+  const W = 640, H = 180, L = 40, B = 24, T = 10;
+  const max = Math.max(0.01, ...days.map((x) => Number(x.usd)));
+  const step = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50].find((s) => max / s <= 4) || 100;
+  const top = Math.ceil(max / step) * step;
+  const y = (v) => T + (H - T - B) * (1 - v / top);
+  const bw = (W - L - 4) / days.length;
+  let svg = "";
+  for (let v = 0; v <= top + 1e-9; v += step) {
+    svg += `<line x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/>`;
+    svg += `<text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">$${v.toFixed(v < 1 ? 2 : 0)}</text>`;
+  }
+  days.forEach((x, i) => {
+    const v = Number(x.usd), last = i === days.length - 1;
+    const h = Math.max(v > 0 ? 1.5 : 0, y(0) - y(v));
+    svg += `<rect x="${L + 2 + i * bw + bw * 0.15}" y="${y(0) - h}" width="${bw * 0.7}" height="${h}" rx="2" fill="${last ? "var(--accent)" : "var(--bar)"}"><title>${x.date}: ${usd(x.usd)}</title></rect>`;
+    if (i % Math.ceil(days.length / 6) === 0 || last) {
+      const lbl = new Date(x.date + "T00:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+      svg += `<text x="${L + 2 + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${lbl}</text>`;
+    }
+  });
+  const chart = document.getElementById("chart");
+  chart.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  chart.innerHTML = svg;
+
+  // Users.
+  document.getElementById("window-head").textContent = "Last " + d.window_days + " days";
+  document.getElementById("users").innerHTML = d.users.map((u, i) => {
+    const s = states[i];
+    const width = Math.min(100, Math.round(s.pct * 100));
+    const color = s.cls === "bad" ? "var(--bad)" : s.cls === "warn" ? "var(--warn)" : "var(--good)";
+    const limit = u.limit_usd === null ? "no limit" : "of " + usd(u.limit_usd);
+    return `<tr><td>${esc(u.who)}</td>
+      <td>${usd(u.today_usd)} <span class="meta">${limit}</span>
+        ${u.limit_usd === null ? "" : `<div class="meter" aria-hidden="true"><span style="width:${width}%;background:${color}"></span></div>`}</td>
+      <td class="num">${usd(u.window_usd)}</td><td class="num">${u.calls}</td>
+      <td><span class="pill ${s.cls}">${s.text}</span></td></tr>`;
+  }).join("");
+
+  // Stages.
+  const smax = Math.max(0.0001, ...d.stages.map((s) => Number(s.usd)));
+  const stotal = d.stages.reduce((a, s) => a + Number(s.usd), 0);
+  document.getElementById("stage-note").textContent = "All users, the last " + d.window_days + " days: " + usd(stotal) + " in total.";
+  document.getElementById("stages").innerHTML = d.stages.map((s) => `<tr>
+      <td>${STAGE_NAMES[s.stage] || s.stage}</td><td class="meta">${s.provider}</td>
+      <td class="num">${s.calls}</td><td class="num">${usd(s.usd)}</td>
+      <td><div class="stagebar" style="width:${Math.max(2, Number(s.usd) / smax * 100)}%"></div></td></tr>`).join("");
+}
+render(DATA);
+// Live: reload every minute while the page is in front; a hidden tab waits.
+setInterval(() => { if (document.visibilityState === "visible") location.reload(); }, 60000);
+</script>
+</body>
+</html>

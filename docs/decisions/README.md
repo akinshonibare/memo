@@ -114,6 +114,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0061](0061-tone-and-no-em-dashes.md) | A tone per person (plain, warm, brief, playful) for answers, summaries and photo descriptions; no em dashes in anything memo writes | active |
 | [0062](0062-lately-on-each-person.md) | Lately: a line on each person, written ahead from their six newest notes, rewritten when those notes or your tone change | active |
 | [0063](0063-daily-ai-limit.md) | A daily AI limit per person ($1 default): notes save and wait for midnight, Ask and voice say when they're back; Deepgram now priced in the cost log | active |
+| [0064](0064-live-cost-page.md) | A live cost page at /admin/costs behind an operator password (HTTP Basic, OPERATOR_TOKEN), off unless set | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes
