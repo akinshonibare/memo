@@ -48,7 +48,12 @@ from memo.services.morning import tz_or_utc
 from memo.services.people import load_people, named_in
 from memo.services.prose import DashFilter
 from memo.services.retrieval import Hit, search
-from memo.services.retry import RetryableError, TerminalError
+from memo.services.retry import (
+	ProviderUnavailable,
+	RetryableError,
+	TerminalError,
+	classify_anthropic,
+)
 
 log = structlog.get_logger("memo.ask")
 
@@ -77,14 +82,8 @@ class AnswerProvider(Protocol):
 
 
 def _map_error(exc: Exception) -> Exception:
-	if isinstance(exc, anthropic.RateLimitError):
-		return RetryableError(f"anthropic 429: {exc.message}")
-	if isinstance(exc, anthropic.APIStatusError):
-		if exc.status_code >= 500:
-			return RetryableError(f"anthropic {exc.status_code}")
-		return TerminalError(f"anthropic {exc.status_code}: {exc.message}")
-	if isinstance(exc, anthropic.APIConnectionError):
-		return RetryableError(f"anthropic unreachable: {exc!r}")
+	if isinstance(exc, anthropic.APIError):
+		return classify_anthropic(exc)
 	return exc
 
 
@@ -625,6 +624,8 @@ RATE_LIMITED = "An AI provider is rate-limiting memo right now. Try again in a m
 def _for_the_user(exc: RetryableError | TerminalError) -> str:
 	"""What the app shows. A provider's own 429 text - quotas, billing pages - is for
 	the logs, not for the person asking; other reasons are kept, they say what to do."""
+	if isinstance(exc, ProviderUnavailable):
+		return exc.for_users
 	# Two spellings: "HTTP 429" from an HTTP provider (classify_status, e.g. the
 	# embedder), "anthropic 429" from the Claude SDK (_map_error).
 	if isinstance(exc, RetryableError) and re.match(

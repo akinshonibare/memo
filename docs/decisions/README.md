@@ -116,6 +116,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0063](0063-daily-ai-limit.md) | A daily AI limit per person ($1 default): notes save and wait for midnight, Ask and voice say when they're back; Deepgram now priced in the cost log | active |
 | [0064](0064-live-cost-page.md) | A live cost page at /admin/costs behind an operator password (HTTP Basic, OPERATOR_TOKEN), off unless set | active |
 | [0065](0065-sonnet-for-four-readers.md) | Sonnet 5 for people, habits, faith and reconcile; Opus 5 stays for extraction, mood and Lately (a setting per reader) | active |
+| [0066](0066-wait-out-an-unavailable-provider.md) | A provider refusing our account (no credit, key refused) is waited out without spending attempts; users never see its text | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

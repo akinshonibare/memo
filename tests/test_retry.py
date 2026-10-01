@@ -2,6 +2,7 @@ import httpx
 import pytest
 
 from memo.services.retry import (
+	ProviderUnavailable,
 	RetryableError,
 	TerminalError,
 	backoff_delay,
@@ -31,7 +32,12 @@ def test_backoff_rejects_zero_attempt() -> None:
 @pytest.mark.parametrize(
 	("status", "kind"),
 	[(429, RetryableError), (500, RetryableError), (503, RetryableError)]
-	+ [(400, TerminalError), (401, TerminalError), (413, TerminalError)],
+	+ [
+		(401, ProviderUnavailable),
+		(402, ProviderUnavailable),
+		(403, ProviderUnavailable),
+	]
+	+ [(400, TerminalError), (404, TerminalError), (413, TerminalError)],
 )
 def test_http_status_classification(status: int, kind: type[Exception]) -> None:
 	assert isinstance(classify_status(status), kind)

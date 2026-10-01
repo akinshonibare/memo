@@ -27,9 +27,19 @@ from memo.services.pipeline import (
 )
 from memo.services.push import check_receipts, send_due_mornings
 from memo.services.queue import PROCESS_CAPTURE
-from memo.services.retry import RetryableError, TerminalError, backoff_delay
+from memo.services.retry import (
+	RetryableError,
+	TerminalError,
+	backoff_delay,
+	provider_wait,
+)
 
 log = structlog.get_logger("memo.jobs")
+
+# arq's own cap on tries for a job. The pipeline's attempt_count is the real limit for
+# failures (ADR 0012); this one bounds how long a note waits on an unavailable
+# provider (ADR 0066): at least 22 hours, about a day and a half on average.
+ARQ_MAX_TRIES = 50
 
 
 async def process_capture_task(
@@ -41,6 +51,7 @@ async def process_capture_task(
 		job_id=ctx.get("job_id"),
 		job_try=ctx.get("job_try"),
 	)
+	tries = int(ctx.get("job_try") or 1)
 	async with ctx["session_factory"]() as session:
 		pipeline = PipelineContext(
 			session=session,
@@ -55,10 +66,13 @@ async def process_capture_task(
 			habits=ctx["habits"],
 			mood=ctx["mood"],
 			reconciler=ctx["reconciler"],
+			may_wait=tries < ARQ_MAX_TRIES,
 		)
 		outcome = await process_capture(
 			pipeline, uuid.UUID(capture_id), uuid.UUID(user_id)
 		)
+	if outcome.waiting_on_provider:
+		raise Retry(defer=provider_wait(tries))
 	if outcome.retry_after is not None:
 		raise Retry(defer=outcome.retry_after)
 	return outcome.status

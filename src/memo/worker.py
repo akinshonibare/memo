@@ -13,6 +13,7 @@ from arq.connections import RedisSettings
 from memo.config import get_settings
 from memo.db import make_engine, make_session_factory
 from memo.jobs import (
+	ARQ_MAX_TRIES,
 	build_morning_views_task,
 	check_push_receipts_task,
 	embed_derivation_task,
@@ -114,9 +115,10 @@ class WorkerSettings:
 	on_shutdown = shutdown
 	redis_settings = RedisSettings.from_dsn(_settings.redis_url)
 	queue_name = _settings.arq_queue_name
-	# The pipeline's attempt_count cap is the real limit (ADR 0012); arq's must be
-	# high enough never to be the thing that gives up first.
-	max_tries = 50
+	# The pipeline's attempt_count cap is the real limit for failures (ADR 0012);
+	# arq's bounds a wait on an unavailable provider, and the pipeline fails the note
+	# visibly on the last try rather than let arq drop it (ADR 0066).
+	max_tries = ARQ_MAX_TRIES
 	job_timeout = 600
 	# Results are never read from Redis, and keeping them would block re-enqueueing
 	# the same deterministic job id after a user-triggered retry.
