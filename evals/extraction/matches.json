@@ -1,7 +1,7 @@
 {
   "examples": {
     "g01": {
-      "fingerprint": "dc37bac20991e540",
+      "fingerprint": "801954f7b57678d9",
       "pairs": {
         "event": [],
         "idea": [],
@@ -35,7 +35,7 @@
       }
     },
     "g04": {
-      "fingerprint": "b95056c693e3033b",
+      "fingerprint": "1ca2e6a529a2114f",
       "pairs": {
         "event": [],
         "idea": [],
@@ -48,7 +48,7 @@
       }
     },
     "g05": {
-      "fingerprint": "66b6be905dd3daa9",
+      "fingerprint": "58e6ca02db83abd0",
       "pairs": {
         "event": [],
         "idea": [
@@ -163,7 +163,7 @@
       }
     },
     "g14": {
-      "fingerprint": "e222b45909169694",
+      "fingerprint": "2fe64197eb6812cf",
       "pairs": {
         "event": [],
         "idea": [
@@ -223,7 +223,7 @@
       }
     },
     "g19": {
-      "fingerprint": "c86fb52d9791bdb8",
+      "fingerprint": "12d0f691fee46e79",
       "pairs": {
         "event": [],
         "idea": [
@@ -236,7 +236,7 @@
       }
     },
     "g20": {
-      "fingerprint": "8c3f2df231982fed",
+      "fingerprint": "42bbdbd6879c09c0",
       "pairs": {
         "event": [],
         "idea": [],
@@ -265,7 +265,7 @@
       }
     },
     "g22": {
-      "fingerprint": "ae4e2c0fc83aef78",
+      "fingerprint": "fae2cc8b9bae4fa6",
       "pairs": {
         "event": [
           [
@@ -278,7 +278,7 @@
       }
     },
     "g23": {
-      "fingerprint": "0b726ab655f516b4",
+      "fingerprint": "d9d6b4ec38a3aa91",
       "pairs": {
         "event": [],
         "idea": [
@@ -291,7 +291,7 @@
       }
     },
     "g24": {
-      "fingerprint": "a5a615af2563d6d4",
+      "fingerprint": "f32c3cd64f2675a9",
       "pairs": {
         "event": [],
         "idea": [],
@@ -325,7 +325,7 @@
       }
     },
     "g27": {
-      "fingerprint": "471a5a2bda61b2ba",
+      "fingerprint": "7fb37345cacf5d75",
       "pairs": {
         "event": [],
         "idea": [],
@@ -338,7 +338,7 @@
       }
     },
     "g28": {
-      "fingerprint": "28ad36772f20e1e9",
+      "fingerprint": "573226e7d293c35a",
       "pairs": {
         "event": [],
         "idea": [
@@ -351,7 +351,7 @@
       }
     },
     "g29": {
-      "fingerprint": "21574b1e348dd7b4",
+      "fingerprint": "f8b6e660b2d4efb8",
       "pairs": {
         "event": [],
         "idea": [],
@@ -381,15 +381,10 @@
       }
     },
     "g31": {
-      "fingerprint": "b7a4e9cc9c5a7a74",
+      "fingerprint": "86c1750506aea6df",
       "pairs": {
         "event": [],
-        "idea": [
-          [
-            0,
-            0
-          ]
-        ],
+        "idea": [],
         "todo": []
       }
     },
@@ -420,7 +415,7 @@
       }
     },
     "g34": {
-      "fingerprint": "48dbb7529d2a379e",
+      "fingerprint": "55b6db44b54ed548",
       "pairs": {
         "event": [],
         "idea": [],
@@ -433,7 +428,7 @@
       }
     },
     "g35": {
-      "fingerprint": "bdf07076c910b73e",
+      "fingerprint": "66de58c2966aeb26",
       "pairs": {
         "event": [],
         "idea": [
@@ -446,7 +441,7 @@
       }
     },
     "g36": {
-      "fingerprint": "90e6bc86fb65a988",
+      "fingerprint": "8292e3b97e6e4fa4",
       "pairs": {
         "event": [],
         "idea": [],
@@ -459,7 +454,7 @@
       }
     },
     "g37": {
-      "fingerprint": "90674a1d0161a243",
+      "fingerprint": "83797f91ed3207b6",
       "pairs": {
         "event": [],
         "idea": [
@@ -472,7 +467,7 @@
       }
     },
     "g38": {
-      "fingerprint": "6d47dba5dbfcb436",
+      "fingerprint": "5dfea877a6377489",
       "pairs": {
         "event": [],
         "idea": [],
@@ -485,7 +480,7 @@
       }
     },
     "g39": {
-      "fingerprint": "f312a9052e90dc0d",
+      "fingerprint": "c62dc9dd170c0484",
       "pairs": {
         "event": [
           [
@@ -503,7 +498,7 @@
       }
     },
     "g40": {
-      "fingerprint": "2728497305971d55",
+      "fingerprint": "dd3a5185f2589c0f",
       "pairs": {
         "event": [],
         "idea": [],
@@ -521,6 +516,134 @@
             2
           ]
         ]
+      }
+    },
+    "g41": {
+      "fingerprint": "914e0501c5e4ac21",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g42": {
+      "fingerprint": "7477b00311b92c21",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g43": {
+      "fingerprint": "b51fdda48031e700",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g44": {
+      "fingerprint": "90723d9b67cebf04",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g45": {
+      "fingerprint": "c93fd15d3b4a8278",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g46": {
+      "fingerprint": "1f5ea3262e493265",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g47": {
+      "fingerprint": "1f5ea3262e493265",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": []
+      }
+    },
+    "g48": {
+      "fingerprint": "92533aaf4c9951f6",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g49": {
+      "fingerprint": "f9e6711edf4f0411",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": [
+          [
+            0,
+            0
+          ]
+        ]
+      }
+    },
+    "g50": {
+      "fingerprint": "fb735f762c4ed4ef",
+      "pairs": {
+        "event": [],
+        "idea": [
+          [
+            0,
+            0
+          ]
+        ],
+        "todo": []
+      }
+    },
+    "g51": {
+      "fingerprint": "1f5ea3262e493265",
+      "pairs": {
+        "event": [],
+        "idea": [],
+        "todo": []
       }
     }
   },

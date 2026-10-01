@@ -11,7 +11,10 @@ from memo.prompts.voice import NO_EM_DASHES, tone_line
 # (see the structured providers, ADR 0067). Stamped separately because outputs differ.
 # v1.2: no em dashes, and an idea's summary written in the person's tone, given in
 # the message (ADR 0061). Titles stay plain.
-EXTRACTOR_VERSION = "extract-v1.2"
+# v1.3: ideas are rare unless the author marks a passage ("note to self", "remember
+# this", "highlight", "idea"); marked passages are listed in the message and each
+# must become one idea (ADR 0068). Todo and event rules unchanged.
+EXTRACTOR_VERSION = "extract-v1.3"
 
 SYSTEM_PROMPT = f"""\
 You extract structured items from a single entry in one person's private journal.
@@ -30,6 +33,14 @@ Return only what the text supports. Three kinds of item:
 - idea: a thought the author would want to find again: an insight, a plan, a
   product idea, a realisation about themselves. `summary` restates it in one or
   two sentences in the author's sense, not yours, in the tone the message gives.
+  Ideas are rare. Most entries have none: an account of the day, a feeling, the
+  entry's topic restated, a wish, or something that is already a todo or event is
+  not an idea. When unsure, return no idea.
+- The message may list passages the author marked as highlights, with words like
+  "note to self", "remember this", "highlight" or "idea". Each marked passage is
+  exactly one idea, whatever else the entry holds: title it, and let `summary`
+  restate the passage itself, not the words that marked it. Never drop a marked
+  passage and never split one into two.
 
 Rules:
 - Do not invent. If nothing qualifies, return empty lists. That is a good answer.
@@ -49,7 +60,12 @@ Rules:
 
 
 def user_message(
-	text: str, *, captured_at: dt.datetime, timezone: str, tone: str | None = None
+	text: str,
+	*,
+	captured_at: dt.datetime,
+	timezone: str,
+	tone: str | None = None,
+	marked: list[str] | None = None,
 ) -> str:
 	try:
 		local = captured_at.astimezone(ZoneInfo(timezone))
@@ -62,6 +78,12 @@ def user_message(
 		"Resolve relative dates against this moment.\n"
 		f"Summaries in this tone: {tone_line(tone)} Titles stay plain.\n\n"
 		f"<capture>\n{text}\n</capture>"
+		+ (
+			"\n\nMarked as highlights by the author, one idea each:\n"
+			+ "\n".join(f"- {p}" for p in marked)
+			if marked
+			else ""
+		)
 	)
 
 

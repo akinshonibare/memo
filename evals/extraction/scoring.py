@@ -13,7 +13,8 @@ from memo.schemas.derivations import KINDS, Extraction
 THRESHOLDS: dict[str, dict[str, float]] = {
 	"todo": {"recall": 0.90, "precision": 0.80},
 	"event": {"recall": 0.85, "precision": 0.80},
-	"idea": {"recall": 0.70, "precision": 0.70},
+	# Raised from 0.70/0.70 in ADR 0068: a false highlight is the error people see.
+	"idea": {"recall": 0.80, "precision": 0.90},
 }
 
 _WORD = re.compile(r"[a-z0-9']+")

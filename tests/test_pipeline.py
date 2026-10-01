@@ -512,3 +512,26 @@ async def test_a_capture_with_no_words_is_ready_and_costs_nothing(
 	# No model call; the audio itself was transcribed, and Deepgram bills for that
 	# (priced into the daily budget, ADR 0063).
 	assert [(r[0], r[1]) for r in costed] == [("deepgram", "transcribe")]
+
+
+async def test_a_marked_highlight_is_kept_at_once(
+	client: AsyncClient,
+	admin_engine: AsyncEngine,
+	session: AsyncSession,
+	store: FakeObjectStore,
+) -> None:
+	# ADR 0068: the author's mark is the review. Unmarked items still wait.
+	capture_id = await _text_capture(
+		client,
+		"note to self: ration resurfacing. call Tunde about pricing",
+		"tok-ext-mark",
+	)
+	extractor = FakeExtractor(_extraction(), marked=frozenset({0}))
+	outcome = await process_capture(
+		_ctx(session, store, extractor=extractor), capture_id, SEED_USER_ID
+	)
+	assert outcome.status == "ready"
+	assert await _derivations(admin_engine, capture_id) == [
+		("todo", "pending_review", "Call Tunde about pricing"),
+		("idea", "accepted", "Ration resurfacing"),
+	]

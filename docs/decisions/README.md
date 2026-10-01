@@ -118,6 +118,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0065](0065-sonnet-for-four-readers.md) | Sonnet 5 for people, habits, faith and reconcile; Opus 5 stays for extraction, mood and Lately (a setting per reader) | active |
 | [0066](0066-wait-out-an-unavailable-provider.md) | A provider refusing our account (no credit, key refused) is waited out without spending attempts; users never see its text | active |
 | [0067](0067-gemini-behind-the-same-seam.md) | A model setting names its provider; Gemini behind the same seam over plain HTTP, measured per reader; the free tier never reads real notes | active |
+| [0068](0068-highlights-are-what-you-marked-or-kept.md) | Highlights show what you marked or kept; "note to self", "remember this", "highlight" or "idea" in a note marks one, in code; unmarked ideas are rare and gated at 0.90 precision | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

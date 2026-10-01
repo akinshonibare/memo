@@ -13,7 +13,14 @@ lift straight in. The thresholds in `scoring.py` are the merge gate; keep them h
 Run: `uv run python -m evals.extraction.run` (live) or `--replay <file>` (offline).
 Record a live run with `--record out.json` to produce an offline replay file for CI.
 
-## Recorded run (2026-09-30, `extract-v1.2/claude-opus-5`, tone plain)
+## Recorded run (2026-10-01, `extract-v1.3/claude-opus-5`, tone plain)
+
+51 cases after ADR 0068 (five marked highlights, one unmarked realisation, five
+negatives). Judged: todo 0.96/0.96, event 1.00/1.00, idea 1.00/0.93 against the raised
+idea bars (precision 0.90, recall 0.80). Misses: g31 (an unmarked resolution the stricter
+rule reads as a wish), g36 (as before), g39 (one extra todo).
+
+## Earlier run (2026-09-30, `extract-v1.2/claude-opus-5`, tone plain)
 
 `recorded.json` arms the CI gate; `matches.json` holds a model's judgement of which
 predicted item is which expected one (`matching.py`, `match-v1`), so paraphrases score as

@@ -28,6 +28,13 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   `GEMINI_PAID_TIER=true` and `<READER>_MODEL`, then a commit that moves the default
   and re-records the eval. No free credits apply.
 
+- **Highlights (2026-10-01, ADR 0068)**: the screen shows confirmed, user-added and
+  accepted ideas only; a phrase in the note ("note to self", "remember this",
+  "highlight", "idea") marks a passage in code (`services/highlights.py`), the
+  extractor (`extract-v1.3`) words it, and the passage stands in if it doesn't; marked
+  ideas are stored `accepted`. Idea gate raised to 0.90 precision / 0.80 recall with
+  eleven new golden cases. Still to do: harvest Akin's export into real idea cases.
+
 ## Not done, in the order it should happen
 
 1. **The learning pass.** _Deferred to the end of the build (Akin, 2026-09-28), together
