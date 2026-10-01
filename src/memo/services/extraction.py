@@ -28,7 +28,7 @@ from memo.prompts.extract_v1 import (
 )
 from memo.schemas.derivations import Extraction
 from memo.services.llm import LLMCall
-from memo.services.retry import RetryableError, TerminalError
+from memo.services.retry import TerminalError, classify_anthropic
 
 log = structlog.get_logger("memo.extraction")
 
@@ -91,14 +91,8 @@ class AnthropicExtractionProvider:
 				messages=messages,
 				output_config=self._output_config,
 			)
-		except anthropic.RateLimitError as exc:
-			raise RetryableError(f"anthropic 429: {exc.message}") from exc
-		except anthropic.APIStatusError as exc:
-			if exc.status_code >= 500:
-				raise RetryableError(f"anthropic {exc.status_code}") from exc
-			raise TerminalError(f"anthropic {exc.status_code}: {exc.message}") from exc
-		except anthropic.APIConnectionError as exc:
-			raise RetryableError(f"anthropic unreachable: {exc!r}") from exc
+		except (anthropic.APIStatusError, anthropic.APIConnectionError) as exc:
+			raise classify_anthropic(exc) from exc
 
 		if response.stop_reason == "refusal":
 			raise TerminalError("model refused the extraction request")

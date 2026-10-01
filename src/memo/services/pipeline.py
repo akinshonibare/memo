@@ -69,7 +69,12 @@ from memo.services.reconcile import (
 	apply_changes,
 )
 from memo.services.reconcile import candidates as reconcile_candidates
-from memo.services.retry import RetryableError, TerminalError, backoff_delay
+from memo.services.retry import (
+	ProviderUnavailable,
+	RetryableError,
+	TerminalError,
+	backoff_delay,
+)
 from memo.services.storage import ObjectStore
 from memo.services.transcription import Transcriber
 from memo.services.vision import Describer, UnconfiguredDescriber
@@ -113,12 +118,18 @@ class PipelineContext:
 	# Reconcile (ADR 0048), defaulted: it runs only when a note has something to be
 	# compared with, and an unconfigured reader fails the (optional) stage visibly.
 	reconciler: ReconcilerLike = field(default_factory=UnconfiguredReconciler)
+	# False on the queue's last try. A provider that refuses our account (ADR 0066)
+	# is waited out, but not past the point where the queue stops retrying: there the
+	# note fails visibly instead of sitting mid-pipeline with no job behind it.
+	may_wait: bool = True
 
 
 @dataclass(frozen=True)
 class Outcome:
 	status: str
 	retry_after: float | None = None
+	# The provider refused our account; the job decides how long to wait (ADR 0066).
+	waiting_on_provider: bool = False
 
 
 StageFn = Callable[[PipelineContext, Capture], Awaitable[None]]
@@ -787,6 +798,31 @@ async def process_capture(
 					error=repr(exc),
 				)
 				continue
+		except ProviderUnavailable as exc:
+			if ctx.may_wait:
+				# Our account, not this note: out of credit, or the key refused (ADR
+				# 0066). Not an attempt and not a failure, like the daily limit: the
+				# claim is let go, and the note waits as long as the operator takes.
+				await _forget_run(session, run_id)
+				await commit_and_rebind(session, user_id)
+				log.error(
+					"stage.provider_unavailable",
+					capture_id=str(capture.id),
+					stage=stage.name,
+					error=repr(exc),
+				)
+				return Outcome(status=capture.status, waiting_on_provider=True)
+			await _finish_run(session, run_id, "failed", repr(exc))
+			reason = f"{stage.name}: the AI provider was unavailable for too long"
+			transition(capture, CaptureStatus.FAILED, failure_reason=reason)
+			await commit_and_rebind(session, user_id)
+			log.error(
+				"capture.failed",
+				capture_id=str(capture.id),
+				reason=reason,
+				error=repr(exc),
+			)
+			return Outcome(status=capture.status)
 		except RetryableError as exc:
 			await _finish_run(session, run_id, "failed", repr(exc))
 			capture.attempt_count += 1

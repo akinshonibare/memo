@@ -36,7 +36,7 @@ from memo.services.budget import (
 from memo.services.live_stt import LiveTranscriber, minute_cost, relay
 from memo.services.people import keyterms
 from memo.services.ratelimit import check
-from memo.services.retry import RetryableError, TerminalError
+from memo.services.retry import ProviderUnavailable, RetryableError, TerminalError
 from memo.services.speech import MAX_CHARS, VOICES, Speaker
 from memo.services.transcription import Transcriber
 
@@ -81,7 +81,8 @@ def _upstream(exc: RetryableError | TerminalError) -> HTTPException:
 		if isinstance(exc, RetryableError)
 		else status.HTTP_422_UNPROCESSABLE_CONTENT
 	)
-	return HTTPException(code, str(exc))
+	detail = exc.for_users if isinstance(exc, ProviderUnavailable) else str(exc)
+	return HTTPException(code, detail)
 
 
 @router.post(
