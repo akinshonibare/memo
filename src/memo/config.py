@@ -123,8 +123,10 @@ class Settings(BaseSettings):
 	rate_search_per_minute: int = 60
 	# Per user, per day of theirs (ADR 0063): the most memo spends on one person's AI.
 	# At it, notes still save and are read after their midnight; Ask and voice say so.
-	# 0 turns the limit off. A person's own `daily_ai_limit_usd` overrides it.
-	daily_ai_limit_usd: Decimal = Decimal("1.00")
+	# 0 turns the limit off. A person's own `daily_ai_limit_usd` overrides it. $0.50
+	# since 2026-10-01 (was $1): five users, and a day of one person's notes on the
+	# current routing is about $0.40, so this is a ceiling against a runaway day.
+	daily_ai_limit_usd: Decimal = Decimal("0.50")
 	# Cosine distance under which two notes count as related. A starting guess for
 	# voyage-4 (ADR 0028), not a measured one: calibrate on real notes.
 	related_max_distance: float = 0.45
