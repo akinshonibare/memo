@@ -12,6 +12,7 @@ it. Nothing is written.
 import argparse
 import asyncio
 import datetime as dt
+import json
 import sys
 import uuid
 from dataclasses import dataclass
@@ -74,7 +75,9 @@ async def user_costs(
 		rows.append(
 			UserCosts(
 				user_id=user.id,
-				who=user.display_name or user.email or "-",
+				# A name if they gave one, else a short id: never an email, since
+				# the report is pasted into a snapshot page (--json).
+				who=user.display_name or f"user {str(user.id)[:8]}",
 				today=budget.spent,
 				limit=budget.limit,
 				over=budget.over,
@@ -145,15 +148,92 @@ def render(
 	return "\n".join(lines)
 
 
-async def _main(days: int, with_stages: bool) -> str:
+async def daily_totals(
+	session: AsyncSession, *, days: int, now: dt.datetime | None = None
+) -> list[tuple[dt.date, Decimal]]:
+	"""All users' spend per UTC day, the last `days` days, oldest first, zeros kept."""
+	now = now or dt.datetime.now(dt.UTC)
+	first = now.date() - dt.timedelta(days=days - 1)
+	day = func.date(func.timezone("UTC", LLMCallRow.created_at))
+	rows = {
+		r[0]: Decimal(r[1])
+		for r in (
+			await session.execute(
+				select(day, func.coalesce(func.sum(LLMCallRow.cost_usd), 0))
+				.where(
+					LLMCallRow.created_at
+					>= dt.datetime.combine(first, dt.time(), tzinfo=dt.UTC)
+				)
+				.group_by(day)
+			)
+		).all()
+	}
+	return [
+		(d, rows.get(d, Decimal(0)))
+		for d in (first + dt.timedelta(days=n) for n in range(days))
+	]
+
+
+def as_json(
+	users: list[UserCosts],
+	stages: list[StageCosts],
+	daily: list[tuple[dt.date, Decimal]],
+	*,
+	days: int,
+	now: dt.datetime,
+) -> str:
+	"""Everything the snapshot page shows, as JSON. Amounts are strings of dollars."""
+	month = sum((v for d, v in daily if d.month == now.month), Decimal(0))
+	return json.dumps(
+		{
+			"generated_at": now.isoformat(),
+			"window_days": days,
+			"month_to_date_usd": str(month.quantize(CENT)),
+			"users": [
+				{
+					"who": u.who,
+					"today_usd": str(u.today.quantize(CENT)),
+					"limit_usd": str(u.limit) if u.limit is not None else None,
+					"over": u.over,
+					"window_usd": str(u.window.quantize(CENT)),
+					"calls": u.calls,
+				}
+				for u in users
+			],
+			"stages": [
+				{
+					"stage": st.stage,
+					"provider": st.provider,
+					"calls": st.calls,
+					"usd": str(st.cost.quantize(CENT)),
+				}
+				for st in stages
+			],
+			"daily": [
+				{"date": d.isoformat(), "usd": str(v.quantize(CENT))} for d, v in daily
+			],
+		},
+		indent=1,
+	)
+
+
+async def _main(days: int, with_stages: bool, *, as_data: bool = False) -> str:
 	settings = get_settings()
 	engine = make_engine(settings.database_admin_url)
+	now = dt.datetime.now(dt.UTC)
 	try:
 		async with make_session_factory(engine)() as session:
 			await bind_system(session)
-			users = await user_costs(session, days=days)
-			stages = await stage_costs(session, days=days) if with_stages else None
-		return render(users, stages, days=days)
+			users = await user_costs(session, days=days, now=now)
+			if as_data:
+				stages = await stage_costs(session, days=days, now=now)
+				# The month so far and the chart: at least this month's days.
+				daily = await daily_totals(session, days=max(days, now.day), now=now)
+				return as_json(users, stages, daily, days=days, now=now)
+			stages_or_none = (
+				await stage_costs(session, days=days, now=now) if with_stages else None
+			)
+		return render(users, stages_or_none, days=days)
 	finally:
 		await engine.dispose()
 
@@ -165,11 +245,14 @@ def main(argv: list[str] | None = None) -> int:
 	)
 	parser.add_argument("--days", type=int, default=7, help="the window, in days")
 	parser.add_argument("--stages", action="store_true", help="add a by-stage table")
+	parser.add_argument(
+		"--json", action="store_true", help="everything, as JSON, for a snapshot page"
+	)
 	args = parser.parse_args(argv)
 	if not 1 <= args.days <= 365:
 		print("--days must be 1 to 365", file=sys.stderr)
 		return 2
-	print(asyncio.run(_main(args.days, args.stages)))
+	print(asyncio.run(_main(args.days, args.stages, as_data=args.json)))
 	return 0
 
 
