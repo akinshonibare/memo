@@ -27,6 +27,7 @@ from memo.prompts.extract_v1 import (
 	user_message,
 )
 from memo.schemas.derivations import Extraction
+from memo.services.highlights import ensure_marked, marked_passages
 from memo.services.llm import LLMCall
 from memo.services.retry import TerminalError, classify_anthropic
 
@@ -121,6 +122,9 @@ class ExtractResult:
 	extraction: Extraction
 	raw: str
 	calls: list[LLMCall]
+	# Indexes into `extraction.ideas` of the ones the author marked as highlights
+	# (ADR 0068): kept at once rather than waiting for a look.
+	marked_ideas: frozenset[int] = frozenset()
 
 
 class ExtractionFailed(TerminalError):
@@ -161,18 +165,28 @@ class Extractor:
 		timezone: str,
 		tone: str | None = None,
 	) -> ExtractResult:
+		# What the author marked as a highlight is decided here, not by the model
+		# (ADR 0068): the model words it, and the passage stands in if it doesn't.
+		marks = marked_passages(text)
 		extraction, raw, calls = await complete_validated(
 			self._provider,
 			system=SYSTEM_PROMPT,
 			first=user_message(
-				text, captured_at=captured_at, timezone=timezone, tone=tone
+				text,
+				captured_at=captured_at,
+				timezone=timezone,
+				tone=tone,
+				marked=marks or None,
 			),
 			parse=Extraction.model_validate_json,
 			repair=repair_message,
 			stage=STAGE,
 			max_repairs=self._max_repairs,
 		)
-		return ExtractResult(extraction=extraction, raw=raw, calls=calls)
+		extraction, marked = ensure_marked(extraction, marks)
+		return ExtractResult(
+			extraction=extraction, raw=raw, calls=calls, marked_ideas=marked
+		)
 
 
 async def complete_validated[T](

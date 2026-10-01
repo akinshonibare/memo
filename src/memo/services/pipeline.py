@@ -309,11 +309,17 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 			Derivation.status.in_(UNREVIEWED),
 		)
 	)
+	idea_index = 0
 	for kind, item in result.extraction.items():
-		if kind == "idea" and capture.space == "faith":
-			# A reflection is full of thoughts, and Home's Ideas shouldn't fill with
-			# them (ADR 0042). Its todos and events still count: they're commitments.
-			continue
+		marked = False
+		if kind == "idea":
+			marked = idea_index in result.marked_ideas
+			idea_index += 1
+			if capture.space == "faith" and not marked:
+				# A reflection is full of thoughts, and Highlights shouldn't fill with
+				# them (ADR 0042). Its todos and events still count: they're
+				# commitments. A passage the author marked is kept anyway (ADR 0068).
+				continue
 		ctx.session.add(
 			Derivation(
 				id=uuid7(),
@@ -322,7 +328,10 @@ async def _extract(ctx: PipelineContext, capture: Capture) -> None:
 				kind=kind,
 				# No em dashes in what memo writes (ADR 0061), whatever the model did.
 				payload=_undashed(item.model_dump(mode="json", exclude={"confidence"})),
-				status=status,
+				# A marked highlight is the author's own act, so it is kept at once.
+				# 'accepted' rather than 'confirmed': the replacement above touches
+				# unreviewed rows only, so a re-run replaces it instead of doubling it.
+				status="accepted" if marked else status,
 				extractor_version=version,
 				confidence=item.confidence,
 			)

@@ -86,4 +86,72 @@ async def test_provider_transient_errors_propagate_as_retryable() -> None:
 
 
 def test_version_stamps_prompt_and_model() -> None:
-	assert Extractor(ScriptedProvider([])).version == "extract-v1.2/claude-test"
+	assert Extractor(ScriptedProvider([])).version == "extract-v1.3/claude-test"
+
+
+# --- marked highlights (ADR 0068) ---------------------------------------------------
+
+MARKED = (
+	"note to self: the owner role bypasses RLS so tests can pass for the wrong reason"
+)
+EMPTY = '{"todos": [], "events": [], "ideas": []}'
+
+
+async def test_a_marked_passage_always_becomes_an_idea() -> None:
+	# The model ignored the mark: the passage stands in, titled from its first words.
+	provider = ScriptedProvider([EMPTY])
+	result = await Extractor(provider).extract(MARKED, captured_at=NOW, timezone="UTC")
+	first = provider.requests[0][0]["content"]
+	assert isinstance(first, str)
+	assert "Marked as highlights by the author" in first
+	assert "- The owner role bypasses RLS" in first
+	[idea] = result.extraction.ideas
+	assert idea.summary.startswith("The owner role bypasses RLS")
+	assert (
+		idea.title
+		== "The owner role bypasses RLS so tests can pass for the wrong reason"
+	)
+	assert idea.confidence == 1.0
+	assert result.marked_ideas == frozenset({0})
+
+
+async def test_the_models_idea_for_a_mark_is_kept_not_doubled() -> None:
+	written = (
+		'{"todos": [], "events": [], "ideas": [{"title": "Owner bypasses RLS", '
+		'"summary": "The table owner bypasses RLS, so tests can pass for the wrong '
+		'reason.", "confidence": 0.9}]}'
+	)
+	result = await Extractor(ScriptedProvider([written])).extract(
+		MARKED, captured_at=NOW, timezone="UTC"
+	)
+	assert [i.title for i in result.extraction.ideas] == ["Owner bypasses RLS"]
+	assert result.marked_ideas == frozenset({0})
+
+
+async def test_a_second_mark_the_model_skipped_is_added_beside_the_first() -> None:
+	text = (
+		"Insight: I only write when I'm anxious. "
+		"Remember this: Ife starts school in September."
+	)
+	written = (
+		'{"todos": [], "events": [], "ideas": [{"title": "Writing and anxiety", '
+		'"summary": "I only write when I am anxious.", "confidence": 0.8}]}'
+	)
+	result = await Extractor(ScriptedProvider([written])).extract(
+		text, captured_at=NOW, timezone="UTC"
+	)
+	assert [i.title for i in result.extraction.ideas] == [
+		"Writing and anxiety",
+		"Ife starts school in September",
+	]
+	assert result.marked_ideas == frozenset({0, 1})
+
+
+async def test_an_unmarked_note_sends_no_marks_and_marks_nothing() -> None:
+	provider = ScriptedProvider([EMPTY])
+	result = await Extractor(provider).extract(
+		"had a long day, back to back meetings", captured_at=NOW, timezone="UTC"
+	)
+	first = provider.requests[0][0]["content"]
+	assert isinstance(first, str) and "Marked as highlights" not in first
+	assert result.extraction.ideas == [] and result.marked_ideas == frozenset()

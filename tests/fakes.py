@@ -158,9 +158,11 @@ class FakeExtractor:
 		extraction: Extraction | None = None,
 		*,
 		fail_with: Exception | None = None,
+		marked: frozenset[int] = frozenset(),
 	) -> None:
 		self.extraction = extraction or Extraction()
 		self.fail_with = fail_with
+		self.marked = marked
 		self.calls = 0
 		self.seen: list[tuple[str, dt.datetime, str]] = []
 		self.tones: list[str | None] = []
@@ -182,6 +184,7 @@ class FakeExtractor:
 			extraction=self.extraction,
 			raw=self.extraction.model_dump_json(),
 			calls=[fake_llm_call()],
+			marked_ideas=self.marked,
 		)
 
 

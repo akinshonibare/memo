@@ -43,7 +43,9 @@ export function IdeasScreen({
         api.listUpdates({ status: "pending", kind: "idea" }).catch(() => []),
         api.listUpdates({ status: "confirmed", kind: "idea" }).catch(() => []),
       ]);
-      setIdeas(all.filter((d) => d.kind === "idea" && d.status !== "rejected"));
+      // What you marked or kept (ADR 0068). A highlight the reader guessed waits on
+      // its note for a look; it isn't a highlight until you say so.
+      setIdeas(all.filter((d) => d.kind === "idea" && d.status !== "rejected" && d.status !== "pending_review"));
       setAsking(waiting);
       setThreads(said);
       setError(null);
@@ -106,13 +108,16 @@ export function IdeasScreen({
                 day: "numeric",
                 year: "numeric",
               })}
-              {item.status === "pending_review" ? " · to review" : ""}
             </Text>
             <IdeaThread updates={threads.filter((u) => u.target.id === item.id)} onOpenNote={onOpenCapture} />
           </Pressable>
         )}
         ListEmptyComponent={
-          ideas ? <Text style={[ui.empty, { marginTop: 48 }]}>No highlights yet.</Text> : null
+          ideas ? (
+            <Text style={[ui.empty, { marginTop: 48 }]}>
+              {"No highlights yet. Say \u201chighlight\u201d, \u201cremember this\u201d or \u201cidea\u201d in a note, or keep one memo suggests on the note."}
+            </Text>
+          ) : null
         }
       />
       {sheet && (
