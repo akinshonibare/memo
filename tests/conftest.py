@@ -70,6 +70,9 @@ def migrated_database(
 	asyncio.run(_ensure_database(settings.database_admin_url))
 	monkeypatch_session.setenv("DATABASE_ADMIN_URL", settings.database_admin_url)
 	monkeypatch_session.setenv("DATABASE_URL", settings.database_url)
+	# No daily AI limit unless a test sets one on a user (ADR 0063): corpus-heavy tests
+	# would otherwise find their notes waiting for midnight.
+	monkeypatch_session.setenv("DAILY_AI_LIMIT_USD", "0")
 	from memo.config import get_settings
 
 	get_settings.cache_clear()
@@ -158,7 +161,7 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 				"display_name = NULL, voice = NULL, auto_accept = false, "
 				"faith_enabled = false, bible_translation = 'NIV', "
 				"bible_reading = NULL, habits_enabled = false, "
-				"morning_push_at = NULL "
+				"morning_push_at = NULL, tone = 'plain', daily_ai_limit_usd = NULL "
 				"WHERE id = :seed"
 			),
 			{"seed": str(SEED_USER_ID)},

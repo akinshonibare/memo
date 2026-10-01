@@ -397,6 +397,9 @@ export type Update = {
 
 export type Usage = { window_days: number; total_cost_usd: string };
 
+// Today's AI spend against the daily limit (ADR 0063). limit_usd null: no limit.
+export type UsageToday = { spent_usd: string; limit_usd: string | null; over: boolean; resets_at: string };
+
 export type SearchHit = { snippet: string; capture: Capture | null; derivation: Derivation | null };
 
 export type Week = {
@@ -546,6 +549,10 @@ export class Api {
 
   getUsage(days: number) {
     return this.request<Usage>(`/v1/usage?days=${days}`);
+  }
+
+  getUsageToday() {
+    return this.request<UsageToday>("/v1/usage/today");
   }
 
   logoutEverywhere() {

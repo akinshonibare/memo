@@ -33,6 +33,7 @@ from memo.models import (
 )
 from memo.prompts.describe_v1 import with_caption
 from memo.schemas.derivations import ACTIVITY, FAITH_KINDS, MOOD_KINDS, UNREVIEWED
+from memo.services.budget import budget_for, transcribe_call
 from memo.services.chunking import CHUNKER_VERSION, chunk_text
 from memo.services.derivation_index import derivation_text, reembed_derivation
 from memo.services.embeddings import Embedder
@@ -141,6 +142,9 @@ class Stage:
 	# and the note goes on to `ready`. People, faith, habits and scripture are optional:
 	# what else a note says is secondary to the note being saved and searchable.
 	optional: bool = False
+	# Costs money (a model or Deepgram), so it waits when its owner has reached their
+	# daily AI limit (ADR 0063). Scripture is code; embedding is a fraction of a cent.
+	paid: bool = True
 
 
 async def _transcribe(ctx: PipelineContext, capture: Capture) -> None:
@@ -165,6 +169,11 @@ async def _transcribe(ctx: PipelineContext, capture: Capture) -> None:
 	capture.words = [list(w) for w in transcript.words]
 	if recording.duration_ms is None:
 		recording.duration_ms = transcript.duration_ms
+	# Deepgram, priced by the minute (ADR 0063): it counts towards the daily limit.
+	audio_ms = transcript.duration_ms or recording.duration_ms or 0
+	await _record_calls(
+		ctx, capture, [transcribe_call(transcript.model, audio_ms / 1000)]
+	)
 	log.info(
 		"stage.transcribe",
 		capture_id=str(capture.id),
@@ -231,6 +240,18 @@ async def _record_calls(
 				request_id=str(request_id)[:64] if request_id else None,
 			)
 		)
+
+
+async def _over_budget(session: AsyncSession, capture: Capture) -> float | None:
+	"""Seconds until its owner's midnight if they're at their daily AI limit, plus up
+	to five minutes so everyone's waiting notes don't start in the same second."""
+	user = await session.get(User, capture.user_id)
+	if user is None:
+		return None
+	budget = await budget_for(session, user)
+	if not budget.over:
+		return None
+	return float(budget.seconds_left_today() + capture.id.int % 300)
 
 
 def _skip(stage: str, capture: Capture) -> None:
@@ -609,6 +630,7 @@ STAGES: tuple[Stage, ...] = (
 		run=_scripture,
 		applies=lambda c: True,
 		optional=True,
+		paid=False,
 	),
 	Stage(
 		name="embed",
@@ -616,6 +638,7 @@ STAGES: tuple[Stage, ...] = (
 		version=lambda ctx: f"{CHUNKER_VERSION}/{ctx.embedder.model}",
 		run=_embed,
 		applies=lambda c: True,
+		paid=False,
 	),
 	Stage(
 		name="reconcile",
@@ -730,6 +753,20 @@ async def process_capture(
 		if run_id is None:
 			log.info("stage.skip", capture_id=str(capture.id), stage=stage.name)
 			continue
+		if stage.paid:
+			waiting = await _over_budget(session, capture)
+			if waiting is not None:
+				# The note is saved; what costs money waits for their midnight
+				# (ADR 0063). Not an attempt, not a failure: the claim is let go.
+				await _forget_run(session, run_id)
+				await commit_and_rebind(session, user_id)
+				log.info(
+					"stage.over_budget",
+					capture_id=str(capture.id),
+					stage=stage.name,
+					retry_after=waiting,
+				)
+				return Outcome(status=capture.status, retry_after=waiting)
 
 		try:
 			try:
@@ -804,7 +841,8 @@ async def read_people_in_old_note(
 	counted as a failed attempt rather than aborting the batch. The note itself is
 	untouched: it stays ready and searchable whatever happens here.
 
-	Returns what happened: missing | done | read | failed | retry_later."""
+	Returns what happened: missing | done | over_budget | read | failed |
+	retry_later."""
 	session = ctx.session
 	await bind_user(session, user_id)
 	capture = await session.scalar(
@@ -817,6 +855,10 @@ async def read_people_in_old_note(
 	await commit_and_rebind(session, user_id)
 	if run_id is None:
 		return "done"
+	if await _over_budget(session, capture) is not None:
+		await _forget_run(session, run_id)
+		await commit_and_rebind(session, user_id)
+		return "over_budget"
 	try:
 		await _people(ctx, capture)
 	except (RetryableError, TerminalError) as exc:
@@ -870,7 +912,7 @@ async def read_habits_in_old_note(
 	"""Run the habits stage over a note written before Habits was turned on (ADR
 	0043), so a habit accepted today comes with the days memo already knew about.
 
-	Returns: missing | off | done | read | failed | retry_later."""
+	Returns: missing | off | done | over_budget | read | failed | retry_later."""
 	return await _read_old_note(ctx, capture_id, user_id, "habits")
 
 
@@ -880,7 +922,7 @@ async def read_mood_in_old_note(
 	"""Run the mood stage over a note written before Within was turned on (ADR 0058),
 	so the Within screen shows the month memo already has, not an empty week.
 
-	Returns: missing | off | done | read | failed | retry_later."""
+	Returns: missing | off | done | over_budget | read | failed | retry_later."""
 	return await _read_old_note(ctx, capture_id, user_id, "mood")
 
 
@@ -903,6 +945,10 @@ async def _read_old_note(
 	await commit_and_rebind(session, user_id)
 	if run_id is None:
 		return "done"
+	if stage.paid and await _over_budget(session, capture) is not None:
+		await _forget_run(session, run_id)
+		await commit_and_rebind(session, user_id)
+		return "over_budget"
 	try:
 		await stage.run(ctx, capture)
 	except StageOff:  # turned off since the sweep picked the note
