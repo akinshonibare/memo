@@ -171,6 +171,8 @@ async def test_audio_capture_becomes_text_and_ready(
 		# Faith (ADR 0042) is off: both stages record a skip, and cost nothing. Habits
 		# (ADR 0043) is off too and leaves no row, so turning it on reads the note then.
 		("faith", "succeeded", 1),
+		# Lists (ADR 0069): no list-ish word, so the reader isn't called; recorded.
+		("lists", "succeeded", 1),
 		("scripture", "succeeded", 1),
 		("embed", "succeeded", 1),
 		# Nothing earlier to compare with (ADR 0048): recorded, and no model call.
@@ -219,7 +221,7 @@ async def test_running_twice_transcribes_and_extracts_once(
 	assert transcriber.calls == 1
 	assert extractor.calls == 1
 	# transcribe, extract, people, faith, scripture, embed, reconcile: once each.
-	assert len(await _runs(admin_engine, capture_id)) == 7
+	assert len(await _runs(admin_engine, capture_id)) == 8
 
 
 async def test_retryable_failure_schedules_a_retry_and_keeps_the_stage(
@@ -331,6 +333,7 @@ async def test_text_capture_never_calls_the_transcriber(
 		"extract",
 		"people",
 		"faith",
+		"lists",
 		"scripture",
 		"embed",
 		"reconcile",

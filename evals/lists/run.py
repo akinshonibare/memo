@@ -1,0 +1,116 @@
+"""Run the lists-reader eval over the golden set and gate on the thresholds.
+
+	uv run python -m evals.lists.run                 # live; needs the model's key
+	uv run python -m evals.lists.run --record evals/lists/recorded.json
+	uv run python -m evals.lists.run --replay evals/lists/recorded.json   # CI
+
+Each case is a note and the lists the author already keeps. Exit code 1 when any metric
+is below its bar: the merge gate, as for the other readers.
+"""
+
+import argparse
+import asyncio
+import datetime as dt
+import json
+import sys
+from pathlib import Path
+
+from pydantic import BaseModel, ValidationError
+
+from evals.lists.scoring import Expected, Report, score_example
+from evals.live import live_provider
+from memo.config import get_settings
+from memo.schemas.lists import ListsExtraction
+from memo.services.extraction import ExtractionFailed
+from memo.services.lists import ListsReader, ListsReaderLike
+from memo.services.retry import TerminalError
+
+GOLDEN = Path(__file__).with_name("golden.jsonl")
+# Every case is read as written on this Monday evening in London.
+CAPTURED_AT = dt.datetime.fromisoformat("2026-09-28T19:00:00+01:00")
+TIMEZONE = "Europe/London"
+
+
+class GoldenExample(BaseModel):
+	id: str
+	text: str
+	lists: list[str] = []
+	expected: list[Expected]
+	note: str | None = None
+
+
+def load_golden(path: Path = GOLDEN) -> list[GoldenExample]:
+	return [
+		GoldenExample.model_validate_json(line)
+		for line in path.read_text().splitlines()
+		if line.strip()
+	]
+
+
+async def run(
+	examples: list[GoldenExample],
+	reader: ListsReaderLike | None,
+	replay: dict[str, str] | None,
+	record_to: Path | None,
+) -> Report:
+	report = Report()
+	recorded: dict[str, str] = {}
+	for example in examples:
+		if replay is not None:
+			raw = replay.get(example.id)
+			try:
+				predicted = ListsExtraction.model_validate_json(raw or "{}")
+			except ValidationError:
+				predicted = ListsExtraction()
+		else:
+			assert reader is not None
+			try:
+				result = await reader.read(
+					example.text,
+					captured_at=CAPTURED_AT,
+					timezone=TIMEZONE,
+					lists=example.lists,
+				)
+				predicted, recorded[example.id] = result.extraction, result.raw
+			except ExtractionFailed as exc:
+				predicted, recorded[example.id] = ListsExtraction(), exc.raw
+			except TerminalError as exc:
+				print(f"{example.id}: {exc}", file=sys.stderr)
+				predicted, recorded[example.id] = ListsExtraction(), ""
+		report.add(example.id, score_example(example.expected, predicted))
+	if record_to is not None:
+		record_to.write_text(json.dumps(recorded, indent=2) + "\n")
+	return report
+
+
+def main(argv: list[str] | None = None) -> int:
+	parser = argparse.ArgumentParser()
+	parser.add_argument("--replay", type=Path, help="JSON of {id: raw output}")
+	parser.add_argument("--record", type=Path, help="write raw outputs here")
+	parser.add_argument("--model", default=None)
+	args = parser.parse_args(argv)
+
+	examples = load_golden()
+	replay = json.loads(args.replay.read_text()) if args.replay else None
+	reader: ListsReaderLike | None = None
+	if replay is None:
+		settings = get_settings()
+		provider = live_provider(args.model or settings.lists_model, ListsExtraction)
+		if provider is None:
+			return 2
+		reader = ListsReader(provider)
+	report = asyncio.run(run(examples, reader, replay, args.record))
+	print(f"{report.examples} examples")
+	print(report.table())
+	for miss in report.misses:
+		print("  miss:", miss)
+	failures = report.failures()
+	if failures:
+		print("BELOW THRESHOLD:", "; ".join(failures))
+		return 1
+	print("all thresholds met")
+	return 0
+
+
+if __name__ == "__main__":
+	sys.exit(main())

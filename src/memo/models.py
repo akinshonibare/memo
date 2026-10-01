@@ -307,6 +307,39 @@ class Person(Base):
 Index("ix_people_user", Person.user_id)
 
 
+class UserList(Base):
+	"""A named list you keep (ADR 0069): groceries, books, a trip. Like a person, an
+	entity outside the capture -> derivation shape: it outlives any one note, and
+	`list_item` derivations point at it. The lists stage creates one the first time a
+	note names it; you rename, archive or delete from there."""
+
+	__tablename__ = "lists"
+	__mapper_args__ = {"eager_defaults": True}
+
+	id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+	user_id: Mapped[uuid.UUID] = mapped_column(
+		ForeignKey("users.id", ondelete="CASCADE")
+	)
+	name: Mapped[str] = mapped_column(String(80))
+	# The name as matched (services/lists.list_key): "the shopping list", "grocery"
+	# and "groceries" are one key, so a note never makes a second list by spelling.
+	key: Mapped[str] = mapped_column(String(80))
+	archived_at: Mapped[dt.datetime | None]
+	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
+	updated_at: Mapped[dt.datetime] = mapped_column(
+		server_default=func.now(), onupdate=func.now()
+	)
+
+	__table_args__ = (
+		UniqueConstraint("id", "user_id", name="uq_lists_id_user"),
+		UniqueConstraint("user_id", "key", name="uq_lists_user_key"),
+		CheckConstraint("length(btrim(name)) > 0", name="ck_lists_name"),
+	)
+
+
+Index("ix_lists_user", UserList.user_id)
+
+
 class Derivation(Base):
 	"""A typed extraction pointing back at its capture (ADR 0008). Polymorphic on
 	`kind`; the payload's shape is enforced by the Pydantic model for that kind."""
@@ -334,6 +367,8 @@ class Derivation(Base):
 	# Updates only (ADR 0048): the earlier item a note would change. A suggestion goes
 	# with its item: deleting the prayer or idea deletes what pointed at it.
 	target_id: Mapped[uuid.UUID | None]
+	# List items only (ADR 0069): the list this is on. Items go with their list.
+	list_id: Mapped[uuid.UUID | None]
 	created_at: Mapped[dt.datetime] = mapped_column(server_default=func.now())
 	updated_at: Mapped[dt.datetime] = mapped_column(
 		server_default=func.now(), onupdate=func.now()
@@ -374,6 +409,16 @@ class Derivation(Base):
 			"(target_id IS NULL) = (kind <> 'update')",
 			name="ck_derivations_target_update",
 		),
+		ForeignKeyConstraint(
+			["list_id", "user_id"],
+			["lists.id", "lists.user_id"],
+			name="fk_derivations_list_same_user",
+			ondelete="CASCADE",
+		),
+		CheckConstraint(
+			"(list_id IS NULL) = (kind <> 'list_item')",
+			name="ck_derivations_list_only_on_items",
+		),
 		# Mood (ADR 0058): a read is always of a note; your word for a day never is.
 		CheckConstraint(
 			"(kind <> 'mood' OR capture_id IS NOT NULL)"
@@ -388,6 +433,12 @@ Index(
 	Derivation.user_id,
 	Derivation.person_id,
 	postgresql_where=text("person_id IS NOT NULL"),
+)
+Index(
+	"ix_derivations_user_list",
+	Derivation.user_id,
+	Derivation.list_id,
+	postgresql_where=text("list_id IS NOT NULL"),
 )
 Index(
 	"ix_derivations_user_kind_status",

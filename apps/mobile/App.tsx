@@ -32,6 +32,8 @@ import { DetailScreen } from "./src/screens/DetailScreen";
 import { FaithScreen } from "./src/screens/FaithScreen";
 import { HabitScreen } from "./src/screens/HabitScreen";
 import { HabitsScreen } from "./src/screens/HabitsScreen";
+import { ListScreen } from "./src/screens/ListScreen";
+import { ListsScreen } from "./src/screens/ListsScreen";
 import { HomeScreen } from "./src/screens/HomeScreen";
 import { IdeasScreen } from "./src/screens/IdeasScreen";
 import { PlannerScreen } from "./src/screens/PlannerScreen";
@@ -80,6 +82,8 @@ export type Routes = {
   Faith: undefined;
   Habits: undefined;
   Habit: { id: string };
+  Lists: undefined;
+  List: { id: string };
 };
 const Stack = createNativeStackNavigator<Routes>();
 const nav = createNavigationContainerRef<Routes>();
@@ -409,6 +413,7 @@ function Root() {
                   onMomentSeen={() => setMoment(null)}
                   onFaith={me?.faith_enabled ? () => navigation.navigate("Faith") : undefined}
                   onHabits={() => navigation.navigate("Habits")}
+                  onLists={() => navigation.navigate("Lists")}
                   onOpenHabit={(id) => navigation.navigate("Habit", { id })}
                 />
               )}
@@ -491,6 +496,28 @@ function Root() {
                     setSpace("faith");
                     setRecord(true);
                   }}
+                  onChanged={bump}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="Lists">
+              {({ navigation }) => (
+                <ListsScreen
+                  api={api}
+                  refreshKey={refreshKey}
+                  onBack={() => navigation.goBack()}
+                  onOpenList={(id) => navigation.navigate("List", { id })}
+                />
+              )}
+            </Stack.Screen>
+            <Stack.Screen name="List">
+              {({ navigation, route }) => (
+                <ListScreen
+                  api={api}
+                  id={route.params.id}
+                  refreshKey={refreshKey}
+                  onBack={() => navigation.goBack()}
+                  onOpenCapture={openNote}
                   onChanged={bump}
                 />
               )}

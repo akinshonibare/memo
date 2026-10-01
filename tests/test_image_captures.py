@@ -121,6 +121,7 @@ async def test_a_photo_is_described_then_extracted_like_any_note(
 		"embed",
 		"extract",
 		"faith",
+		"lists",
 		"people",
 		"reconcile",
 		"scripture",

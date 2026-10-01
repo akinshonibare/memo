@@ -122,6 +122,8 @@ async def _fill(conn: Any, user: uuid.UUID, n: int) -> None:
 		"'extract', 'anthropic', 'claude-opus-5', 400, 60, 900, 0.01)",
 		"INSERT INTO pushes (id, user_id, kind, local_date, status) "
 		"VALUES (gen_random_uuid(), :u, 'morning', current_date, 'sent')",
+		"INSERT INTO lists (id, user_id, name, key) "
+		"VALUES (gen_random_uuid(), :u, 'groceries', 'groceries')",
 		"INSERT INTO sessions (id, user_id, token_hash, expires_at) "
 		"VALUES (:ses, :u, :hash, now() + interval '90 days')",
 		"INSERT INTO push_tokens (id, user_id, session_id, token) "

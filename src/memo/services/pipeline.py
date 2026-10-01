@@ -54,6 +54,13 @@ from memo.services.habits import (
 	habits_on,
 	own_keys,
 )
+from memo.services.lists import (
+	ListsReaderLike,
+	UnconfiguredListsReader,
+	apply_list_items,
+	list_names,
+	might_list,
+)
 from memo.services.llm import LLMCall
 from memo.services.mood import (
 	MoodReaderLike,
@@ -115,6 +122,9 @@ class PipelineContext:
 	habits: HabitsReaderLike = field(default_factory=UnconfiguredHabitsReader)
 	# Mood (ADR 0058), defaulted like faith: only ever read with Within (Faith) on.
 	mood: MoodReaderLike = field(default_factory=UnconfiguredMoodReader)
+	# Lists (ADR 0069), defaulted: it runs only on notes that sound like a list, and
+	# an unconfigured reader fails the (optional) stage visibly.
+	lists: ListsReaderLike = field(default_factory=UnconfiguredListsReader)
 	# Reconcile (ADR 0048), defaulted: it runs only when a note has something to be
 	# compared with, and an unconfigured reader fails the (optional) stage visibly.
 	reconciler: ReconcilerLike = field(default_factory=UnconfiguredReconciler)
@@ -415,6 +425,32 @@ async def _faith(ctx: PipelineContext, capture: Capture) -> None:
 	)
 
 
+async def _lists(ctx: PipelineContext, capture: Capture) -> None:
+	"""What a note puts on one of your lists (ADR 0069). Only when the note has a
+	list-ish word in it, so most notes cost nothing here."""
+	if not might_list(capture.text):
+		_skip("lists", capture)
+		return
+	user = await ctx.session.get(User, capture.user_id)
+	result = await ctx.lists.read(
+		capture.text or "",
+		captured_at=capture.created_at,
+		timezone=user.timezone if user is not None else "UTC",
+		lists=await list_names(ctx.session, capture.user_id),
+	)
+	await _record_calls(ctx, capture, result.calls)
+	made = await apply_list_items(
+		ctx.session, capture, result.extraction, version=ctx.lists.version
+	)
+	log.info(
+		"stage.lists",
+		capture_id=str(capture.id),
+		version=ctx.lists.version,
+		items=len(made),
+		lists=len({d.list_id for d in made}),
+	)
+
+
 async def _habits(ctx: PipelineContext, capture: Capture) -> None:
 	"""What a note says you did (ADR 0043), counted towards habits. Only for someone
 	with Habits on; every note of theirs, since an activity can be anything."""
@@ -640,6 +676,14 @@ STAGES: tuple[Stage, ...] = (
 		status=CaptureStatus.EXTRACTING,
 		version=lambda ctx: ctx.mood.version,
 		run=_mood,
+		applies=lambda c: True,
+		optional=True,
+	),
+	Stage(
+		name="lists",
+		status=CaptureStatus.EXTRACTING,
+		version=lambda ctx: ctx.lists.version,
+		run=_lists,
 		applies=lambda c: True,
 		optional=True,
 	),

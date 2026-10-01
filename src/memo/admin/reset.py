@@ -53,6 +53,7 @@ WIPE = (
 	"conversations",
 	"derivations",
 	"habits",
+	"lists",
 	"job_runs",
 	"llm_calls",
 	"message_citations",

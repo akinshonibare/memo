@@ -1,0 +1,24 @@
+{"id": "l01", "text": "add milk and eggs to the shopping list", "lists": [], "expected": [{"match": "milk", "list": "groceries"}, {"match": "eggs", "list": "groceries"}], "note": "two items, one list"}
+{"id": "l02", "text": "we're out of coffee", "lists": ["groceries"], "expected": [{"match": "coffee", "list": "groceries"}], "note": "'out of' is a shopping item with no list named"}
+{"id": "l03", "text": "Kemi says I should read Piranesi", "lists": ["groceries", "books"], "expected": [{"match": "piranesi", "list": "books"}], "note": "a recommendation to read goes on books"}
+{"id": "l04", "text": "want to watch Severance, everyone keeps mentioning it", "lists": [], "expected": [{"match": "severance", "list": "films"}], "note": "series go on films"}
+{"id": "l05", "text": "gift idea for Mum: that blue scarf from the market", "lists": [], "expected": [{"match": "scarf", "list": "gifts for mum"}], "note": "a named gifts list"}
+{"id": "l06", "text": "need to get a birthday card for Dad on the way home", "lists": [], "expected": [{"match": "card", "list": "groceries"}], "note": "'on the way home' is still a shopping item, not a todo with a time"}
+{"id": "l07", "text": "pack the charger, the adapter and the blue shirt for Lagos", "lists": ["packing"], "expected": [{"match": "charger", "list": "packing"}, {"match": "adapter", "list": "packing"}, {"match": "shirt", "list": "packing"}], "note": "packing"}
+{"id": "l08", "text": "bought milk and bread, finally", "lists": [], "expected": [], "note": "already bought: nothing"}
+{"id": "l09", "text": "finished Piranesi last night, loved it", "lists": ["books"], "expected": [], "note": "already read: nothing"}
+{"id": "l10", "text": "call Tunde about the pricing before Thursday", "lists": [], "expected": [], "note": "a todo, not a list item"}
+{"id": "l11", "text": "dentist at 2:30 tomorrow", "lists": [], "expected": [], "note": "an event"}
+{"id": "l12", "text": "Kemi needs to buy a new laptop before term starts", "lists": [], "expected": [], "note": "someone else's shopping"}
+{"id": "l13", "text": "actually don't need eggs after all, take them off the list", "lists": ["groceries"], "expected": [], "note": "a negation removes, never adds"}
+{"id": "l14", "text": "put the dentist and the bank on the Lagos list", "lists": ["lagos trip"], "expected": [{"match": "dentist", "list": "lagos trip"}, {"match": "bank", "list": "lagos trip"}], "note": "the author's own named list"}
+{"id": "l15", "text": "2 litres of milk, a dozen eggs and some bread", "lists": ["groceries"], "expected": [{"match": "milk", "list": "groceries"}, {"match": "eggs", "list": "groceries"}, {"match": "bread", "list": "groceries"}], "note": "quantities, no verb at all"}
+{"id": "l16", "text": "Tunde recommended a book called The Unaccountability Machine", "lists": ["books"], "expected": [{"match": "unaccountability", "list": "books"}], "note": "a recommendation with the title inside a sentence"}
+{"id": "l17", "text": "so many meetings today, back to back, and then the gym", "lists": [], "expected": [], "note": "an account of the day"}
+{"id": "l18", "text": "remind me to buy stamps", "lists": [], "expected": [{"match": "stamps", "list": "groceries"}], "note": "'remind me to buy' is an item"}
+{"id": "l19", "text": "films to watch this weekend: Past Lives and Aftersun", "lists": ["films"], "expected": [{"match": "past lives", "list": "films"}, {"match": "aftersun", "list": "films"}], "note": "two titles"}
+{"id": "l20", "text": "I should really read more this year", "lists": [], "expected": [], "note": "a wish about reading, no title"}
+{"id": "l21", "text": "need some new running shoes before the 10k", "lists": [], "expected": [{"match": "running shoes", "list": "groceries"}], "note": "'need some' is a shopping item"}
+{"id": "l22", "text": "add the Kehinde Wiley exhibition to the London list", "lists": ["london", "groceries"], "expected": [{"match": "wiley", "list": "london"}], "note": "an existing named list"}
+{"id": "l23", "text": "ok shopping: tomatoes onions rice and the small chilli peppers", "lists": ["groceries"], "expected": [{"match": "tomatoes", "list": "groceries"}, {"match": "onions", "list": "groceries"}, {"match": "rice", "list": "groceries"}, {"match": "chilli", "list": "groceries"}], "note": "voice, no punctuation, four items"}
+{"id": "l24", "text": "the shopping list app idea is interesting but not for now", "lists": [], "expected": [], "note": "'list' as a topic, nothing to add"}

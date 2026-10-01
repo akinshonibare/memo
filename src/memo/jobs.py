@@ -65,6 +65,7 @@ async def process_capture_task(
 			faith=ctx["faith"],
 			habits=ctx["habits"],
 			mood=ctx["mood"],
+			lists=ctx["lists"],
 			reconciler=ctx["reconciler"],
 			may_wait=tries < ARQ_MAX_TRIES,
 		)

@@ -384,6 +384,28 @@ async def test_every_route_survives_every_kind_of_row(
 	events = await _stream(client, asked["stream_url"])
 	assert events[-1][0] == "done", events[-1]
 
+	# Lists (ADR 0069): a list you named with an item you typed, and one memo filed
+	# from the last note, as the lists stage leaves it.
+	groceries = (await client.post("/v1/lists", json={"name": "groceries"})).json()
+	typed = (
+		await client.post(f"/v1/lists/{groceries['id']}/items", json={"title": "milk"})
+	).json()
+	async with admin_engine.begin() as conn:
+		await conn.execute(
+			text(
+				"INSERT INTO derivations (id, user_id, capture_id, kind, payload, "
+				"status, extractor_version, confidence, list_id) VALUES (:id, :u, :c, "
+				"'list_item', CAST(:p AS jsonb), 'accepted', 'lists-v1/test', 0.9, :l)"
+			),
+			{
+				"id": uuid.uuid4(),
+				"u": SEED_USER_ID,
+				"c": corpus.captures[-1],
+				"p": json.dumps({"title": "eggs", "quantity": "a dozen"}),
+				"l": groceries["id"],
+			},
+		)
+
 	async with admin_engine.connect() as conn:
 		derivation_ids = [
 			str(r[0])
@@ -394,6 +416,8 @@ async def test_every_route_survives_every_kind_of_row(
 	assert derivation_ids
 	values: dict[str, list[str]] = {
 		"capture_id": [*corpus.captures, doomed],
+		"list_id": [groceries["id"], str(uuid.uuid4())],
+		"item_id": [typed["id"], str(uuid.uuid4())],
 		"person_id": list(people.values()),
 		"conversation_id": [conversation],
 		"message_id": [asked["message_id"]],
@@ -413,6 +437,7 @@ async def test_every_route_survives_every_kind_of_row(
 		+ [""],
 		"/v1/review/week": ["?weeks_ago=0", "?weeks_ago=1"],
 		"/v1/captures": ["", "?space=faith", "?space=main"],
+		"/v1/lists": ["", "?archived=true"],
 		# The map (ADR 0049), every kind of centre against every kind of id: a
 		# mismatch is a 404, never a 500.
 		"/v1/map": [

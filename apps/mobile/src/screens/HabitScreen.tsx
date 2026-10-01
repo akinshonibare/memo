@@ -89,6 +89,19 @@ export function HabitScreen({
   const removeDay = (date: string) =>
     confirmDelete(`Remove ${formatDay(date)}?`, () => void run(`day:${date}`, () => api.removeHabitDay(id, date)));
 
+  // A dot in this week's row: an empty past day is logged ("did it yesterday, forgot
+  // to say"), a filled one is offered for removal. The server refuses a future day;
+  // the row never offers one.
+  const tapDay = (index: number) => {
+    if (!habit) return;
+    const date = new Date();
+    date.setDate(date.getDate() - (todayIndex() - index));
+    const iso = toIsoDate(date);
+    if (habit.week_days[index]) return removeDay(iso);
+    haptic.done();
+    void run(`day:${iso}`, () => api.logHabit(id, iso));
+  };
+
   const rename = async () => {
     if (!habit) return;
     const name = await ask({ title: "Name", initial: habit.name });
@@ -132,7 +145,7 @@ export function HabitScreen({
             <View style={styles.card}>
               <Text style={styles.big}>{rhythm(habit)}</Text>
               <View style={{ marginTop: 14 }}>
-                <WeekDots days={habit.week_days} />
+                <WeekDots days={habit.week_days} onDay={tapDay} />
               </View>
               <View style={styles.actions} ref={logButton} collapsable={false}>
                 <Pill

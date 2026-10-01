@@ -82,6 +82,7 @@ export function HomeScreen({
   onMomentSeen,
   onFaith,
   onHabits,
+  onLists,
   onOpenHabit,
 }: {
   api: Api;
@@ -91,6 +92,7 @@ export function HomeScreen({
   onFaith?: () => void;
   // Habits (ADR 0043): the same, while Habits is on.
   onHabits: () => void;
+  onLists: () => void;
   onOpenHabit?: (habitId: string) => void;
   onPlanner: () => void;
   onReview: () => void;
@@ -418,6 +420,7 @@ export function HomeScreen({
           { key: "review", icon: "reader-outline", label: "Review", onPress: onReview, fresh: fresh.has("review") },
           { key: "people", icon: "people-outline", label: "People", onPress: onPeople, fresh: fresh.has("people") },
           { key: "habits", icon: "leaf-outline", label: "Habits", onPress: onHabits, fresh: fresh.has("habits") },
+          { key: "lists", icon: "list-outline", label: "Lists", onPress: onLists },
           ...(onFaith
             ? [{ key: "faith", icon: "book-outline" as const, label: "Within", onPress: onFaith, fresh: fresh.has("faith") }]
             : []),

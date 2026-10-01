@@ -99,6 +99,9 @@ class Settings(BaseSettings):
 	# pronoun, each in one run of several; both are 1.00 gates.
 	mood_model: str = "claude-opus-5"
 	lately_model: str = "claude-opus-5"
+	# Lists (ADR 0069): what goes on a named list. Sonnet to start; measured by
+	# evals/lists before any move.
+	lists_model: str = "claude-sonnet-5"
 
 	# Embeddings (ADR 0016). Changing the model or dim is a full re-embed.
 	voyage_api_key: SecretStr | None = None

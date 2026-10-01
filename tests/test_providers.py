@@ -28,6 +28,7 @@ from memo.services.faith import make_faith_reader
 from memo.services.gemini import GeminiAnswerProvider, GeminiCompletionProvider
 from memo.services.habits import make_habits_reader
 from memo.services.lately import make_lately_writer
+from memo.services.lists import make_lists_reader
 from memo.services.llm import cost_usd
 from memo.services.mood import make_mood_reader
 from memo.services.people import make_people_reader
@@ -45,6 +46,7 @@ READERS: dict[str, Callable[[Settings], Any]] = {
 	"reconcile_model": make_reconciler,
 	"mood_model": make_mood_reader,
 	"lately_model": make_lately_writer,
+	"lists_model": make_lists_reader,
 }
 
 

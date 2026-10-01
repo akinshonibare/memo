@@ -33,6 +33,7 @@ from memo.services.extraction import make_extractor
 from memo.services.faith import make_faith_reader
 from memo.services.habits import make_habits_reader
 from memo.services.lately import make_lately_writer
+from memo.services.lists import make_lists_reader
 from memo.services.mood import make_mood_reader
 from memo.services.people import make_people_reader
 from memo.services.push import make_push_sender
@@ -61,6 +62,7 @@ async def startup(ctx: dict[str, Any]) -> None:
 		faith=make_faith_reader(settings),
 		habits=make_habits_reader(settings),
 		mood=make_mood_reader(settings),
+		lists=make_lists_reader(settings),
 		lately=make_lately_writer(settings),
 		describer=make_describer(settings),
 		embedder=make_embedder(settings, http),
