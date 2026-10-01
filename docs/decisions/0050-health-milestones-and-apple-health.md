@@ -128,3 +128,12 @@ is an invented number, because it produces a false record that no one notices. S
 device data idempotently (a replaced window plus a unique index is simpler than a
 change feed until volume says otherwise), and compute derived facts on read so they
 follow every correction for free.
+
+## Note (2026-10-01): the write purpose string is required anyway
+
+Build 19 was rejected on upload (ITMS-90683): Info.plist had no
+`NSHealthUpdateUsageDescription`, which `app.json` had set to `false` because memo only
+reads Health. Apple requires the string whenever the HealthKit library can write, used
+or not. It now says plainly that memo never saves anything to Health; the app still
+asks only to read (`toRead`), so no one is ever shown it. Lesson for any SDK with a
+capability memo doesn't use: the purpose strings follow the SDK, not the app's usage.

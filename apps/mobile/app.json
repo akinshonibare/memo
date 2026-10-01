@@ -50,7 +50,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "memo reads the photos you choose so it can describe them and pull out todos, events and ideas.",
+          "photosPermission": "memo reads the photos you choose so it can describe them and pull out todos, events and highlights.",
           "cameraPermission": "memo takes photos you choose to capture as notes."
         }
       ],
@@ -138,7 +138,7 @@
         "@kingstinct/react-native-healthkit",
         {
           "NSHealthShareUsageDescription": "memo reads your workouts so they count towards your habits and it can notice milestones, like a first 10k. It never writes to Health.",
-          "NSHealthUpdateUsageDescription": false,
+          "NSHealthUpdateUsageDescription": "memo never saves anything to Apple Health. It only reads your workouts, so they count towards your habits.",
           "background": false
         }
       ]
