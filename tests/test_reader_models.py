@@ -10,6 +10,7 @@ from memo.config import Settings
 from memo.services.faith import make_faith_reader
 from memo.services.habits import make_habits_reader
 from memo.services.lately import make_lately_writer
+from memo.services.lists import make_lists_reader
 from memo.services.mood import make_mood_reader
 from memo.services.people import make_people_reader
 from memo.services.reconcile import make_reconciler
@@ -21,6 +22,7 @@ READERS: dict[str, Callable[[Settings], Any]] = {
 	"reconcile_model": make_reconciler,
 	"mood_model": make_mood_reader,
 	"lately_model": make_lately_writer,
+	"lists_model": make_lists_reader,
 }
 
 
@@ -34,6 +36,7 @@ def test_the_defaults_are_the_measured_split() -> None:
 		"reconcile_model": "claude-sonnet-5",
 		"mood_model": "claude-opus-5",
 		"lately_model": "claude-opus-5",
+		"lists_model": "claude-sonnet-5",
 	}
 	assert Settings.model_fields["extraction_model"].default == "claude-opus-5"
 

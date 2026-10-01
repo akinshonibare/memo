@@ -203,6 +203,30 @@ export type MoodRead = {
 
 export type MoodDayDetail = { day: MoodDay; reads: MoodRead[] };
 
+// --- Lists (ADR 0069) ---------------------------------------------------------------
+
+export type ListSummary = {
+  id: string;
+  name: string;
+  open_count: number;
+  done_count: number;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ListItem = {
+  id: string;
+  title: string;
+  quantity: string | null;
+  done_at: string | null;
+  capture_id: string | null; // the note it came from; null when typed in
+  added_by_hand: boolean;
+  created_at: string;
+};
+
+export type ListDetail = ListSummary & { items: ListItem[] };
+
 // --- Habits (ADR 0043) --------------------------------------------------------------
 
 export type Habit = {
@@ -731,6 +755,40 @@ export class Api {
 
   undoReading(id: string) {
     return this.request<ReadingState>(`/v1/faith/readings/${id}`, { method: "DELETE" });
+  }
+
+  // --- Lists (ADR 0069) ----------------------------------------------------------
+
+  getLists(archived = false) {
+    return this.request<{ lists: ListSummary[] }>(`/v1/lists${archived ? "?archived=true" : ""}`);
+  }
+
+  createList(name: string) {
+    return this.request<ListSummary>("/v1/lists", { method: "POST", body: JSON.stringify({ name }) });
+  }
+
+  getList(id: string) {
+    return this.request<ListDetail>(`/v1/lists/${id}`);
+  }
+
+  updateList(id: string, patch: { name?: string; archived?: boolean }) {
+    return this.request<ListSummary>(`/v1/lists/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  deleteList(id: string) {
+    return this.request<void>(`/v1/lists/${id}`, { method: "DELETE" });
+  }
+
+  addListItem(listId: string, body: { title: string; quantity?: string | null }) {
+    return this.request<ListItem>(`/v1/lists/${listId}/items`, { method: "POST", body: JSON.stringify(body) });
+  }
+
+  updateListItem(listId: string, itemId: string, patch: { title?: string; quantity?: string | null; done?: boolean }) {
+    return this.request<ListItem>(`/v1/lists/${listId}/items/${itemId}`, { method: "PATCH", body: JSON.stringify(patch) });
+  }
+
+  removeListItem(listId: string, itemId: string) {
+    return this.request<void>(`/v1/lists/${listId}/items/${itemId}`, { method: "DELETE" });
   }
 
   // --- Habits (ADR 0043) --------------------------------------------------------

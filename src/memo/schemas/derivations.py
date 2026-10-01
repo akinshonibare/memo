@@ -46,9 +46,20 @@ UPDATE = "update"
 MOOD = "mood"
 MOOD_DAY = "mood_day"
 MOOD_KINDS: tuple[str, ...] = (MOOD, MOOD_DAY)
+# Something to put on one of your lists (ADR 0069): "add milk to the shopping list",
+# "want to read Piranesi". Points at a `lists` row through `list_id`, lives under
+# /v1/lists, and like mentions is never an item on the note or in the Planner.
+LIST_ITEM = "list_item"
 # Rows that are not items: the generic item routes, the Planner and the phone never see
 # them, and they are not embedded for Ask.
-NOT_ITEMS: tuple[str, ...] = (MENTION, *FAITH_KINDS, ACTIVITY, UPDATE, *MOOD_KINDS)
+NOT_ITEMS: tuple[str, ...] = (
+	MENTION,
+	*FAITH_KINDS,
+	ACTIVITY,
+	UPDATE,
+	*MOOD_KINDS,
+	LIST_ITEM,
+)
 ALL_KINDS: tuple[str, ...] = (
 	*KINDS,
 	MENTION,
@@ -56,6 +67,7 @@ ALL_KINDS: tuple[str, ...] = (
 	ACTIVITY,
 	UPDATE,
 	*MOOD_KINDS,
+	LIST_ITEM,
 )
 # pending_review: extracted, waiting for a look. confirmed: a person checked it.
 # rejected: a person said no. user_created: a person added it. accepted: kept without

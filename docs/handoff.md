@@ -35,6 +35,11 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   ideas are stored `accepted`. Idea gate raised to 0.90 precision / 0.80 recall with
   eleven new golden cases. Still to do: harvest Akin's export into real idea cases.
 
+- **Lists (2026-10-01, ADR 0069)**: `lists` table + `list_item` derivations (migration
+  0030), a gated `lists-v1` reader (`LISTS_MODEL`, Sonnet), `/v1/lists`, a Lists place
+  in the app with one-list screens; `evals/lists` gate (24 cases). "Shopping list",
+  "grocery" and "groceries" are one list by key. Ask does not know lists yet.
+
 ## Not done, in the order it should happen
 
 1. **The learning pass.** _Deferred to the end of the build (Akin, 2026-09-28), together

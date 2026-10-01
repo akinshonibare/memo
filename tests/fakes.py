@@ -14,6 +14,7 @@ from memo.prompts.reconcile_v1 import Listed
 from memo.schemas.derivations import Extraction
 from memo.schemas.faith import FaithExtraction
 from memo.schemas.habits import HabitsExtraction
+from memo.schemas.lists import ListsExtraction
 from memo.schemas.mood import MoodRead
 from memo.schemas.people import LatelyWrite, PeopleExtraction
 from memo.schemas.reconcile import Change, Reconciliation
@@ -23,6 +24,7 @@ from memo.services.extraction import ExtractResult, RawCompletion
 from memo.services.faith import FaithResult
 from memo.services.habits import HabitsResult
 from memo.services.lately import LatelyResult
+from memo.services.lists import ListsResult
 from memo.services.llm import LLMCall
 from memo.services.mood import MoodResult
 from memo.services.people import PeopleResult
@@ -563,4 +565,41 @@ class FakeReconciler:
 		]
 		return ReconcileResult(
 			result=Reconciliation(changes=changes), raw="{}", calls=[]
+		)
+
+
+class FakeListsReader:
+	"""Scripted lists (ADR 0069): a fixed answer, counting calls and the lists it
+	saw."""
+
+	model = "fake"
+	version = "lists-v1/fake"
+
+	def __init__(
+		self,
+		extraction: ListsExtraction | None = None,
+		*,
+		fail_with: Exception | None = None,
+	) -> None:
+		self.extraction = extraction or ListsExtraction()
+		self.fail_with = fail_with
+		self.calls = 0
+		self.seen_lists: list[list[str]] = []
+
+	async def read(
+		self,
+		text: str,
+		*,
+		captured_at: dt.datetime,
+		timezone: str,
+		lists: list[str],
+	) -> ListsResult:
+		self.calls += 1
+		self.seen_lists.append(list(lists))
+		if self.fail_with is not None:
+			raise self.fail_with
+		return ListsResult(
+			extraction=self.extraction,
+			raw=self.extraction.model_dump_json(),
+			calls=[fake_llm_call("lists")],
 		)

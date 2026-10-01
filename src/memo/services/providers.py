@@ -47,6 +47,7 @@ MODEL_SETTINGS: dict[str, str] = {
 	"mood_model": "mood",
 	"reconcile_model": "which earlier item a later note answers or carries on",
 	"lately_model": "the line on each person",
+	"lists_model": "what goes on your lists",
 	"answer_model": "answering your questions",
 	"rewrite_model": "rephrasing a follow-up question for search",
 }
