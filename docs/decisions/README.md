@@ -120,6 +120,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0067](0067-gemini-behind-the-same-seam.md) | A model setting names its provider; Gemini behind the same seam over plain HTTP, measured per reader; the free tier never reads real notes | active |
 | [0068](0068-highlights-are-what-you-marked-or-kept.md) | Highlights show what you marked or kept; "note to self", "remember this", "highlight" or "idea" in a note marks one, in code; unmarked ideas are rare and gated at 0.90 precision | active |
 | [0069](0069-lists-you-keep-filled-from-notes.md) | Lists you keep, filled from notes: a `lists` table plus `list_item` derivations with a composite FK, a gated reader of its own, one normalised name per list | active |
+| [0070](0070-three-notifications-each-a-switch-in-one-place.md) | Three notifications (morning summary, Sunday's week in numbers, before an event), each off by default, each a switch in one Settings group that promises there are no others; the week's push through 0047's ledger as a second kind | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

@@ -1,5 +1,7 @@
 """The morning push (ADR 0047): today's events and the todos due today, at a time the
-user chose, only on a day that has something in it.
+user chose, only on a day that has something in it. And the weekly push (ADR 0070):
+the week in numbers, Sunday at a time the user chose, only for a week that had
+something in it. Same ledger, same phones, same rules.
 
 Three rules carry the design:
 
@@ -27,14 +29,14 @@ from typing import Any, Protocol
 
 import httpx
 import structlog
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from memo.config import Settings
 from memo.db import bind_system, bind_user
 from memo.ids import uuid7
-from memo.models import Push, PushToken, Session, User
+from memo.models import Capture, Derivation, Push, PushToken, Session, User
 from memo.services.morning import (
 	MorningViewOut,
 	build_morning_view,
@@ -48,8 +50,10 @@ log = structlog.get_logger("memo.push")
 
 EXPO_SEND_URL = "https://exp.host/--/api/v2/push/send"
 EXPO_RECEIPTS_URL = "https://exp.host/--/api/v2/push/getReceipts"
-# The app registers this category with 👍 and 👎 buttons (src/push.ts).
+# The app registers these categories with 👍 and 👎 buttons (src/push.ts). Each kind
+# of push has its own, so a tap can open the right place.
 MORNING_CATEGORY = "morning"
+WEEK_CATEGORY = "week"
 # A push due at 07:30 and still unsent at 09:30 (the worker was down) is skipped: a
 # morning summary at lunchtime is the wrong message.
 LATE_BY = dt.timedelta(hours=2)
@@ -66,6 +70,7 @@ SHOWN_ITEMS = 4
 class Message:
 	title: str
 	body: str
+	category: str = MORNING_CATEGORY
 
 
 def clock(moment: dt.datetime) -> str:
@@ -95,6 +100,31 @@ def morning_message(view: MorningViewOut, today: dt.date) -> Message | None:
 	more = len(rest) - len(shown)
 	body = " · ".join(shown) + (f" · {more} more" if more else "")
 	return Message(f"Today: {first}", body)
+
+
+@dataclass(frozen=True)
+class WeekFacts:
+	notes: int
+	done: int
+	highlights: int
+
+
+def _count(n: int, noun: str) -> str:
+	return f"{n} {noun}{'' if n == 1 else 's'}"
+
+
+def week_message(facts: WeekFacts) -> Message | None:
+	"""The week in numbers: notes kept, todos done, highlights. None when nothing was
+	captured and nothing done: a quiet week is no reason to interrupt Sunday."""
+	if not (facts.notes or facts.done or facts.highlights):
+		return None
+	title = f"Your week: {_count(facts.notes, 'note')}" if facts.notes else "Your week"
+	parts = []
+	if facts.done:
+		parts.append(f"{_count(facts.done, 'todo')} done")
+	if facts.highlights:
+		parts.append(_count(facts.highlights, "highlight"))
+	return Message(title, " · ".join(parts) or "Tap to look back.", WEEK_CATEGORY)
 
 
 # --- sending --------------------------------------------------------------------------
@@ -156,7 +186,7 @@ class ExpoPushSender:
 				"body": message.body,
 				"data": data,
 				"sound": "default",
-				"categoryId": MORNING_CATEGORY,
+				"categoryId": message.category,
 			}
 			for o in to
 		]
@@ -262,7 +292,7 @@ async def _disable(session: AsyncSession, token_ids: Sequence[uuid.UUID]) -> Non
 		)
 
 
-# --- the morning ----------------------------------------------------------------------
+# --- the morning, and the week --------------------------------------------------------
 
 
 def is_due(now: dt.datetime, timezone: str, at: dt.time) -> tuple[bool, dt.date]:
@@ -273,22 +303,81 @@ def is_due(now: dt.datetime, timezone: str, at: dt.time) -> tuple[bool, dt.date]
 	return due <= local < due + LATE_BY, local.date()
 
 
+SUNDAY = 6
+
+
+def is_week_due(now: dt.datetime, timezone: str, at: dt.time) -> tuple[bool, dt.date]:
+	"""The same window, on Sunday only: the week is done, and Monday morning has the
+	morning push."""
+	due, today = is_due(now, timezone, at)
+	return due and today.weekday() == SUNDAY, today
+
+
 async def _claim(
-	session: AsyncSession, user_id: uuid.UUID, today: dt.date
+	session: AsyncSession, user_id: uuid.UUID, kind: str, today: dt.date
 ) -> uuid.UUID | None:
-	"""Today's row, or None when another run already has it."""
+	"""Today's row of this kind, or None when another run already has it."""
 	return await session.scalar(
 		insert(Push)
 		.values(
 			id=uuid7(),
 			user_id=user_id,
-			kind="morning",
+			kind=kind,
 			local_date=today,
 			status="sending",
 		)
 		.on_conflict_do_nothing(constraint="uq_pushes_user_day")
 		.returning(Push.id)
 	)
+
+
+async def _deliver(
+	session: AsyncSession,
+	sender: PushSender,
+	push: Push,
+	message: Message | None,
+	*,
+	nothing: str,
+) -> str:
+	"""Send a claimed push to the user's signed-in phones, or record why not. Returns
+	what happened, for the sweep's log."""
+	to = await live_tokens(session, push.user_id)
+	if message is None or not to:
+		push.status = "skipped"
+		push.reason = nothing if message is None else "no phone"
+		await session.commit()
+		return push.status
+	push.title, push.body = message.title, message.body
+	try:
+		tickets = await sender.send(
+			to, message, {"kind": push.kind, "push_id": str(push.id)}
+		)
+	except (RetryableError, TerminalError) as exc:
+		# Not retried: a push that arrives an hour late is a different message. The
+		# row says what went wrong.
+		push.status, push.reason = "failed", str(exc)[:500]
+		await session.commit()
+		log.warning("push.failed", push_id=str(push.id), kind=push.kind, error=str(exc))
+		return "failed"
+	push.tickets = [
+		{"token_id": str(t.token_id), "ticket": t.ticket, "error": t.error}
+		for t in tickets
+	]
+	gone = [t.token_id for t in tickets if t.error == "DeviceNotRegistered"]
+	await _disable(session, gone)
+	delivered = any(t.ticket for t in tickets)
+	push.status = "sent" if delivered else "failed"
+	push.reason = None if delivered else "; ".join(str(t.error) for t in tickets)
+	push.sent_at = dt.datetime.now(dt.UTC)
+	await session.commit()
+	log.info(
+		"push.sent",
+		push_id=str(push.id),
+		kind=push.kind,
+		phones=len(to),
+		status=push.status,
+	)
+	return push.status
 
 
 async def send_morning(
@@ -299,10 +388,10 @@ async def send_morning(
 	now: dt.datetime,
 	today: dt.date,
 ) -> str:
-	"""Claim, compose, send, record. Returns what happened, for the sweep's log."""
+	"""Claim, compose, send, record."""
 	async with factory() as session:
 		await bind_user(session, user_id)
-		push_id = await _claim(session, user_id, today)
+		push_id = await _claim(session, user_id, "morning", today)
 		await session.commit()
 	if push_id is None:
 		return "already"
@@ -314,38 +403,88 @@ async def send_morning(
 		view = await todays_view(session, user_id, now=now)
 		if view is None:  # the 04:00 build hasn't run (a new user, a missed hour)
 			view = await build_morning_view(session, user_id, now=now)
-		message = morning_message(view, today)
-		to = await live_tokens(session, user_id)
-		if message is None or not to:
-			push.status = "skipped"
-			push.reason = "nothing today" if message is None else "no phone"
-			await session.commit()
-			return push.status
-		push.title, push.body = message.title, message.body
-		try:
-			tickets = await sender.send(
-				to, message, {"kind": "morning", "push_id": str(push_id)}
-			)
-		except (RetryableError, TerminalError) as exc:
-			# Not retried: a morning push that arrives an hour late is a different
-			# message. The row says what went wrong.
-			push.status, push.reason = "failed", str(exc)[:500]
-			await session.commit()
-			log.warning("push.failed", push_id=str(push_id), error=str(exc))
-			return "failed"
-		push.tickets = [
-			{"token_id": str(t.token_id), "ticket": t.ticket, "error": t.error}
-			for t in tickets
-		]
-		gone = [t.token_id for t in tickets if t.error == "DeviceNotRegistered"]
-		await _disable(session, gone)
-		delivered = any(t.ticket for t in tickets)
-		push.status = "sent" if delivered else "failed"
-		push.reason = None if delivered else "; ".join(str(t.error) for t in tickets)
-		push.sent_at = dt.datetime.now(dt.UTC)
+		return await _deliver(
+			session, sender, push, morning_message(view, today), nothing="nothing today"
+		)
+
+
+async def week_facts(
+	session: AsyncSession, user_id: uuid.UUID, *, sunday: dt.date, timezone: str
+) -> WeekFacts:
+	"""Monday to this Sunday in the user's zone, counted the way the weekly review
+	lists them (routers/review.py): notes captured, todos done, new highlights."""
+	zone = tz_or_utc(timezone)
+	since = dt.datetime.combine(sunday - dt.timedelta(days=SUNDAY), dt.time.min, zone)
+	until = since + dt.timedelta(days=7)
+	notes = await session.scalar(
+		select(func.count())
+		.select_from(Capture)
+		.where(
+			Capture.user_id == user_id,
+			Capture.created_at >= since,
+			Capture.created_at < until,
+		)
+	)
+	live = (
+		select(func.count())
+		.select_from(Derivation)
+		.where(Derivation.user_id == user_id, Derivation.status != "rejected")
+	)
+	done = await session.scalar(
+		live.where(
+			Derivation.kind == "todo",
+			Derivation.completed_at >= since,
+			Derivation.completed_at < until,
+		)
+	)
+	highlights = await session.scalar(
+		live.where(
+			Derivation.kind == "idea",
+			Derivation.created_at >= since,
+			Derivation.created_at < until,
+		)
+	)
+	return WeekFacts(notes or 0, done or 0, highlights or 0)
+
+
+async def send_week(
+	factory: async_sessionmaker[AsyncSession],
+	sender: PushSender,
+	user_id: uuid.UUID,
+	*,
+	today: dt.date,
+) -> str:
+	"""Sunday's push: claim, count the week, send, record."""
+	async with factory() as session:
+		await bind_user(session, user_id)
+		push_id = await _claim(session, user_id, "week", today)
 		await session.commit()
-	log.info("push.sent", push_id=str(push_id), phones=len(to), status=push.status)
-	return push.status
+	if push_id is None:
+		return "already"
+
+	async with factory() as session:
+		await bind_user(session, user_id)
+		push = await session.get(Push, push_id)
+		assert push is not None
+		user = await session.get(User, user_id)
+		timezone = user.timezone if user is not None else "UTC"
+		facts = await week_facts(session, user_id, sunday=today, timezone=timezone)
+		return await _deliver(
+			session, sender, push, week_message(facts), nothing="nothing this week"
+		)
+
+
+async def _users_with(
+	factory: async_sessionmaker[AsyncSession], column: Any
+) -> list[tuple[uuid.UUID, str, dt.time]]:
+	async with factory() as session:
+		await bind_system(session)
+		rows = (
+			await session.execute(
+				select(User.id, User.timezone, column).where(column.is_not(None))
+			)
+		).all()
+	return [(user_id, timezone, at) for user_id, timezone, at in rows if at]
 
 
 async def send_due_mornings(
@@ -355,23 +494,29 @@ async def send_due_mornings(
 	now: dt.datetime | None = None,
 ) -> dict[str, int]:
 	now = now or dt.datetime.now(dt.UTC)
-	async with factory() as session:
-		await bind_system(session)
-		users = (
-			await session.execute(
-				select(User.id, User.timezone, User.morning_push_at).where(
-					User.morning_push_at.is_not(None)
-				)
-			)
-		).all()
 	outcomes: dict[str, int] = {}
-	for user_id, timezone, at in users:
-		if at is None:
-			continue
+	for user_id, timezone, at in await _users_with(factory, User.morning_push_at):
 		due, today = is_due(now, timezone, at)
 		if not due:
 			continue
 		outcome = await send_morning(factory, sender, user_id, now=now, today=today)
+		outcomes[outcome] = outcomes.get(outcome, 0) + 1
+	return outcomes
+
+
+async def send_due_weeks(
+	factory: async_sessionmaker[AsyncSession],
+	sender: PushSender,
+	*,
+	now: dt.datetime | None = None,
+) -> dict[str, int]:
+	now = now or dt.datetime.now(dt.UTC)
+	outcomes: dict[str, int] = {}
+	for user_id, timezone, at in await _users_with(factory, User.weekly_push_at):
+		due, today = is_week_due(now, timezone, at)
+		if not due:
+			continue
+		outcome = await send_week(factory, sender, user_id, today=today)
 		outcomes[outcome] = outcomes.get(outcome, 0) + 1
 	return outcomes
 

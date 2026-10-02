@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, ApiError } from "../api";
+import { Credit } from "../components";
 import { Wordmark } from "../motion";
 import { type Config, saveSession } from "../config";
 import { useUi } from "../ui";
@@ -83,13 +84,12 @@ export function LoginScreen({
         onPress={busy ? () => {} : signIn}
       />
       {/* Where the app points is a developer concern; production builds don't show it. */}
-      {__DEV__ ? (
+      {__DEV__ && (
         <Pressable onPress={onChangeServer} hitSlop={8} style={styles.server}>
           <Text style={styles.serverText}>{host}</Text>
         </Pressable>
-      ) : (
-        <View style={styles.server} />
       )}
+      <Credit memo style={styles.credit} />
     </View>
   );
 }
@@ -107,6 +107,7 @@ const useStyles = makeStyles((colors) => ({
   tagline: { color: colors.muted, fontSize: 16, textAlign: "center", marginTop: 4 },
   error: { textAlign: "center", marginBottom: 16 },
   apple: { height: 56, width: "100%" },
-  server: { alignSelf: "center", marginTop: 20, padding: 8 },
+  server: { alignSelf: "center", marginTop: 16, padding: 4 },
+  credit: { alignSelf: "center", marginTop: 12 },
   serverText: { color: colors.faint, fontSize: 13 },
 }));

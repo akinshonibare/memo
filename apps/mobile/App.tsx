@@ -20,7 +20,7 @@ import { Api, type Me, type Space } from "./src/api";
 import { type Config, clearSession, loadConfig, loadOnboarded, saveOnboarded } from "./src/config";
 import { LockCover, LockProvider, useLock } from "./src/lock";
 import { FirefliesHost } from "./src/motion";
-import { refreshPushToken, registerMorningCategory, useMorningPushTaps } from "./src/push";
+import { type PushKind, refreshPushToken, registerPushCategories, usePushTaps } from "./src/push";
 import { useReminderTaps } from "./src/reminders";
 import { forgetHealthOnThisPhone, useHealthSync } from "./src/health";
 import { Dialogs } from "./src/dialogs";
@@ -177,7 +177,7 @@ function Root() {
   const openPerson = (id: string) => {
     if (nav.isReady()) nav.dispatch(StackActions.push("Person", { id }));
   };
-  const goHome = (then?: "Planner" | "Ideas") => {
+  const goHome = (then?: "Planner" | "Ideas" | "Review") => {
     if (!nav.isReady()) return;
     nav.reset({ index: then ? 1 : 0, routes: then ? [{ name: "Home" }, { name: then }] : [{ name: "Home" }] });
   };
@@ -240,16 +240,17 @@ function Root() {
   // coming back to memo, at most every quarter hour.
   useHealthSync(api, bump);
   useReminderTaps(ready, (captureId) => (captureId ? openNote(captureId) : goHome("Planner")));
-  // The morning push (ADR 0047): a tap opens Today, a 👍 or 👎 is recorded.
-  const openToday = useCallback(() => goHome(), []);
-  useMorningPushTaps(ready, api, openToday);
+  // A push (ADRs 0047, 0070): a tap on the morning's opens Today, on the week's opens
+  // the review; a 👍 or 👎 is recorded.
+  const openPush = useCallback((kind: PushKind) => goHome(kind === "week" ? "Review" : undefined), []);
+  usePushTaps(ready, api, openPush);
 
-  // The Record widget needs one snapshot from the app before it can render. The morning
-  // push's 👍/👎 buttons are registered on every launch, so they exist on the first push
-  // after an install, whatever state the setting is in (ADR 0047).
+  // The Record widget needs one snapshot from the app before it can render. The pushes'
+  // 👍/👎 buttons are registered on every launch, so they exist on the first push after
+  // an install, whatever state the settings are in (ADR 0047).
   useEffect(() => {
     publishRecord();
-    void registerMorningCategory();
+    void registerPushCategories();
   }, []);
   useEffect(() => {
     if (!ready || !pending) return;
@@ -276,15 +277,15 @@ function Root() {
   }, [ready, pending]);
 
   // Who is signed in, for the avatar on Home; refreshed from Profile on every change.
-  // While the morning push is on, this phone registers again: a token can change, and a
-  // new sign-in is a new session for the server to send through.
+  // While a push is on, this phone registers again: a token can change, and a new
+  // sign-in is a new session for the server to send through.
   useEffect(() => {
     if (!api) return;
     api
       .getMe()
       .then((fresh) => {
         setMe(fresh);
-        void refreshPushToken(api, !!fresh.morning_push_at);
+        void refreshPushToken(api, !!fresh.morning_push_at || !!fresh.weekly_push_at);
       })
       .catch(() => setMe(null))
       .finally(() => setMeReady(true));

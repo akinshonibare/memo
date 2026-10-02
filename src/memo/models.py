@@ -84,6 +84,8 @@ class User(Base):
 	habits_enabled: Mapped[bool] = mapped_column(default=True, server_default=true())
 	# The morning push (ADR 0047): the local time it arrives, or NULL for none.
 	morning_push_at: Mapped[dt.time | None] = mapped_column(Time())
+	# The weekly push (ADR 0070): the local time it arrives on Sunday, or NULL for none.
+	weekly_push_at: Mapped[dt.time | None] = mapped_column(Time())
 	# How memo writes for this person (ADR 0061): Ask's answers, highlight summaries,
 	# photo descriptions. Titles stay plain whatever it is.
 	tone: Mapped[str] = mapped_column(
@@ -744,7 +746,7 @@ class Habit(Base):
 	)
 
 
-PUSH_KINDS = ("morning",)
+PUSH_KINDS = ("morning", "week")
 PUSH_STATUSES = ("sending", "sent", "skipped", "failed")
 PUSH_FEEDBACK = ("up", "down")
 

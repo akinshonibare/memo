@@ -40,6 +40,20 @@ V1 is built, merged to `main`, deployed, and installed on Akin's iPhone.
   in the app with one-list screens; `evals/lists` gate (24 cases). "Shopping list",
   "grocery" and "groceries" are one list by key. Ask does not know lists yet.
 
+- **Notifications (2026-10-02, ADR 0070)**: three and no more, each off until turned
+  on, all in Settings → Notifications: the morning summary (0047), **Your week** (new:
+  Sunday at 5pm to 9pm, the week in numbers from the review's own queries, a tap opens
+  the review; `users.weekly_push_at`, migration 0031, `pushes.kind = 'week'` through
+  the same ledger, `send_weekly_pushes_task`), and Before events (0036, moved here
+  from "On this phone"). The ADR's table lists every moment considered and why the
+  rest were refused. App side is JavaScript only (an OTA to build 20).
+
+- **Credit (2026-10-02)**: "memo by coraki.dev" at the foot of the sign-in screen and
+  under the version in Settings (`Credit` in `src/components`; docs/brand.md). The
+  native splash is unchanged: baking the credit into `splash-icon.png` changes the
+  native fingerprint, so it waits for the next native build and Akin's say-so (a
+  preview was shown on 2026-10-02).
+
 ## Not done, in the order it should happen
 
 1. **The learning pass.** _Deferred to the end of the build (Akin, 2026-09-28), together

@@ -392,6 +392,7 @@ export type Me = {
   bible_translation?: string; // what Bible links open in; NIV by default
   habits_enabled?: boolean; // always true since ADR 0054, unless an operator turned it off
   morning_push_at?: string | null; // "07:30:00", or null for no morning push (ADR 0047)
+  weekly_push_at?: string | null; // "18:00:00" on Sundays, or null for no weekly push (ADR 0070)
   tone?: Tone; // how memo writes for you (ADR 0061); absent from an older server
 };
 
@@ -505,6 +506,7 @@ export class Api {
     faith_enabled?: boolean;
     bible_translation?: string;
     morning_push_at?: string | null;
+    weekly_push_at?: string | null;
     tone?: Tone;
   }) {
     return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });
