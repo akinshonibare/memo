@@ -6,13 +6,13 @@ import { type ComponentProps, useCallback, useEffect, useRef, useState } from "r
 import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 import { Api, type Me, type Tone, type Voice } from "../api";
 import { asTranslation, TRANSLATIONS, translationName } from "../bible";
-import { Avatar, IconCircle, Pill, SheetHandle } from "../components";
+import { Avatar, Credit, IconCircle, Pill, SheetHandle } from "../components";
 import { type Config, saveBaseUrl } from "../config";
 import { ask, choose, confirm, Dialogs, tell } from "../dialogs";
 import { fonts, useUi } from "../ui";
 import { makeStyles, useTheme } from "../theme";
 import { disableLock, enableLock, LockCover } from "../lock";
-import { DEFAULT_MORNING, forgetPushToken, setMorningPush } from "../push";
+import { DEFAULT_MORNING, DEFAULT_WEEKLY, forgetPushToken, type PushKind, setPush } from "../push";
 import { enableReminders, LEAD_CHOICES, remindersPref } from "../reminders";
 import { healthAvailable, healthPref, setHealthSync } from "../health";
 import { setCalendarSync, setRemindersSync, syncPref } from "../sync";
@@ -38,6 +38,7 @@ type Busy =
   | "translation"
   | "health"
   | "morning"
+  | "weekly"
   | "tone";
 
 // How memo writes for you (ADR 0061): answers, highlight summaries, photo descriptions.
@@ -176,13 +177,14 @@ export function ProfileSheet({
     });
 
 
-  // The morning push (ADR 0047). On the account: the server sends it, at this time, only
-  // on a day with something in it. Turning it on registers this phone first.
+  // The pushes (ADRs 0047, 0070). On the account: the server sends them, at these
+  // times, only when there's something to say. Turning one on registers this phone first.
   const morningAt = me?.morning_push_at ? me.morning_push_at.slice(0, 5) : null;
-  const setMorning = (time: string | null) =>
-    run("morning", async () => {
+  const weeklyAt = me?.weekly_push_at ? me.weekly_push_at.slice(0, 5) : null;
+  const setPushAt = (kind: PushKind, time: string | null) =>
+    run(kind === "morning" ? "morning" : "weekly", async () => {
       const client = api();
-      const problem = await setMorningPush(client, time);
+      const problem = await setPush(client, kind, time);
       if (problem) {
         explain(problem);
         return;
@@ -196,7 +198,14 @@ export function ProfileSheet({
     const i = await choose({ title: "Morning summary at", options: labels.map((label) => ({ label })) });
     if (i === null) return;
     const chosen = MORNING_CHOICES[i];
-    if (chosen && chosen !== morningAt) void setMorning(chosen);
+    if (chosen && chosen !== morningAt) void setPushAt("morning", chosen);
+  };
+  const pickWeekly = async () => {
+    const labels = WEEKLY_CHOICES.map((t) => `${t === weeklyAt ? "✓ " : ""}Sunday ${morningLabel(t)}`);
+    const i = await choose({ title: "Your week, on Sunday at", options: labels.map((label) => ({ label })) });
+    if (i === null) return;
+    const chosen = WEEKLY_CHOICES[i];
+    if (chosen && chosen !== weeklyAt) void setPushAt("week", chosen);
   };
 
   const pickTranslation = async () => {
@@ -487,21 +496,51 @@ export function ProfileSheet({
                 </Group>
               )}
 
+              {/* Every notification memo can send, in one place, each off until you
+                  say so (ADR 0070). Three, and no more: a morning with something on, a
+                  Sunday look back at the week, and a nudge before an event. */}
               <Group
-                title="Morning"
-                footer="A notification with today's events and the todos due today, at the time you choose. Days with nothing on send nothing. Hold it down for 👍 or 👎: that's how memo learns whether it's worth the interruption."
+                title="Notifications"
+                footer="These are the only notifications memo sends, and each is off until you turn it on. A morning with nothing on, or a week with no notes, sends nothing. Hold a summary down for 👍 or 👎: that's how memo learns whether it was worth the interruption."
               >
                 <Row icon="sunny-outline" label="Morning summary" busy={busy === "morning"}>
                   <Switch
                     value={!!morningAt}
                     disabled={!me}
-                    onValueChange={(on) => void setMorning(on ? DEFAULT_MORNING : null)}
+                    onValueChange={(on) => void setPushAt("morning", on ? DEFAULT_MORNING : null)}
                     trackColor={{ true: colors.forest }}
                   />
                 </Row>
                 {morningAt && (
                   <Row icon="time-outline" label="Arrives at" onPress={pickMorning} chevron>
                     <Text style={styles.value}>{morningLabel(morningAt)}</Text>
+                  </Row>
+                )}
+                <Row icon="reader-outline" label="Your week" busy={busy === "weekly"}>
+                  <Switch
+                    value={!!weeklyAt}
+                    disabled={!me}
+                    onValueChange={(on) => void setPushAt("week", on ? DEFAULT_WEEKLY : null)}
+                    trackColor={{ true: colors.forest }}
+                  />
+                </Row>
+                {weeklyAt && (
+                  <Row icon="time-outline" label="Arrives" onPress={pickWeekly} chevron>
+                    <Text style={styles.value}>Sunday {morningLabel(weeklyAt)}</Text>
+                  </Row>
+                )}
+                <Row icon="notifications-outline" label="Before events" busy={busy === "notify"}>
+                  <Switch
+                    value={notify.on}
+                    onValueChange={(on) => void flip("notify", () => enableReminders(on, notify.minutes))}
+                    trackColor={{ true: colors.forest }}
+                  />
+                </Row>
+                {notify.on && (
+                  <Row icon="time-outline" label="Notify me" onPress={pickLead} chevron>
+                    <Text style={styles.value}>
+                      {notify.minutes === 60 ? "1 hour before" : `${notify.minutes} min before`}
+                    </Text>
                   </Row>
                 )}
               </Group>
@@ -524,20 +563,6 @@ export function ProfileSheet({
                     trackColor={{ true: colors.forest }}
                   />
                 </Row>
-                <Row icon="notifications-outline" label="Remind me before events" busy={busy === "notify"}>
-                  <Switch
-                    value={notify.on}
-                    onValueChange={(on) => void flip("notify", () => enableReminders(on, notify.minutes))}
-                    trackColor={{ true: colors.forest }}
-                  />
-                </Row>
-                {notify.on && (
-                  <Row icon="time-outline" label="Notify me" onPress={pickLead} chevron>
-                    <Text style={styles.value}>
-                      {notify.minutes === 60 ? "1 hour before" : `${notify.minutes} min before`}
-                    </Text>
-                  </Row>
-                )}
               </Group>
 
               <Group
@@ -617,6 +642,7 @@ export function ProfileSheet({
             <Text style={styles.brand}>memo</Text>
             <Text style={ui.meta}>Version {version}</Text>
           </Pressable>
+          <Credit style={styles.credit} />
         </ScrollView>
         <Dialogs />
         <LockCover />
@@ -626,6 +652,8 @@ export function ProfileSheet({
 }
 
 const MORNING_CHOICES = ["06:00", "06:30", "07:00", "07:30", "08:00", "08:30", "09:00", "09:30"];
+// Sunday evening: the week is done, and Monday morning has its own summary.
+const WEEKLY_CHOICES = ["17:00", "18:00", "19:00", "20:00", "21:00"];
 
 // "07:30" -> "7:30am", the way the push itself writes times.
 function morningLabel(time: string): string {
@@ -669,5 +697,6 @@ const useStyles = makeStyles((colors) => ({
   },
   note: { marginTop: 20, textAlign: "center" },
   footer: { alignItems: "center", marginTop: 36, gap: 2 },
+  credit: { marginTop: 2 },
   brand: { fontFamily: fonts.serif, fontSize: 22, color: colors.muted },
 }));

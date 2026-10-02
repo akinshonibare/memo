@@ -25,7 +25,7 @@ from memo.services.pipeline import (
 	read_mood_in_old_note,
 	read_people_in_old_note,
 )
-from memo.services.push import check_receipts, send_due_mornings
+from memo.services.push import check_receipts, send_due_mornings, send_due_weeks
 from memo.services.queue import PROCESS_CAPTURE
 from memo.services.retry import (
 	RetryableError,
@@ -259,6 +259,17 @@ async def send_morning_pushes_task(ctx: dict[str, Any]) -> dict[str, int]:
 	outcomes = await send_due_mornings(ctx["session_factory"], ctx["push_sender"])
 	if outcomes:
 		log.info("sweep.morning_pushes", **outcomes)
+	return outcomes
+
+
+async def send_weekly_pushes_task(ctx: dict[str, Any]) -> dict[str, int]:
+	"""Every five minutes: on Sunday, the week's summary to everyone whose time has
+	come (ADR 0070). Once a week each, claimed before sending like the morning."""
+	structlog.contextvars.clear_contextvars()
+	structlog.contextvars.bind_contextvars(job_id=ctx.get("job_id"))
+	outcomes = await send_due_weeks(ctx["session_factory"], ctx["push_sender"])
+	if outcomes:
+		log.info("sweep.weekly_pushes", **outcomes)
 	return outcomes
 
 

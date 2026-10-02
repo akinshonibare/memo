@@ -1,5 +1,6 @@
 """The morning push (ADR 0047): what it says, when it goes, once a day, only to a
-signed-in phone, and what the phone says back."""
+signed-in phone, and what the phone says back. And the weekly push (ADR 0070): the
+week in numbers, Sunday only, through the same ledger."""
 
 import datetime as dt
 import uuid
@@ -14,11 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from memo.config import SEED_USER_ID
 from memo.services.morning import EventItem, MorningViewOut, TodoItem
 from memo.services.push import (
+	WeekFacts,
 	check_receipts,
 	clock,
 	is_due,
+	is_week_due,
 	morning_message,
 	send_due_mornings,
+	send_due_weeks,
+	week_message,
 )
 from memo.services.retry import RetryableError
 from tests.conftest import issue_session
@@ -116,6 +121,41 @@ def test_due_from_the_time_until_two_hours_later_in_local_time() -> None:
 	# After the clocks go back, the same 07:30 is 07:30 UTC.
 	after = dt.datetime(2026, 11, 2, 7, 31, tzinfo=dt.UTC)
 	assert is_due(after, "Europe/London", at)[0]
+
+
+# --- the week -----------------------------------------------------------------------
+
+
+def test_the_week_message_is_the_week_in_numbers() -> None:
+	full = week_message(WeekFacts(notes=14, done=6, highlights=3))
+	assert full is not None
+	assert (full.title, full.body) == (
+		"Your week: 14 notes",
+		"6 todos done · 3 highlights",
+	)
+	assert full.category == "week"
+	one = week_message(WeekFacts(notes=1, done=1, highlights=1))
+	assert one is not None
+	assert (one.title, one.body) == ("Your week: 1 note", "1 todo done · 1 highlight")
+	only_notes = week_message(WeekFacts(notes=2, done=0, highlights=0))
+	assert only_notes is not None and only_notes.body == "Tap to look back."
+	only_done = week_message(WeekFacts(notes=0, done=2, highlights=0))
+	assert only_done is not None and only_done.title == "Your week"
+
+
+def test_a_quiet_week_sends_nothing() -> None:
+	assert week_message(WeekFacts(notes=0, done=0, highlights=0)) is None
+
+
+def test_the_week_is_due_on_sunday_only() -> None:
+	at = dt.time(18, 0)
+	# 2026-10-04 is a Sunday; 17:00 UTC is 6pm in London (BST).
+	sunday = dt.datetime(2026, 10, 4, 17, 1, tzinfo=dt.UTC)
+	assert is_week_due(sunday, "Europe/London", at) == (True, dt.date(2026, 10, 4))
+	saturday = sunday - dt.timedelta(days=1)
+	assert is_week_due(saturday, "Europe/London", at) == (False, dt.date(2026, 10, 3))
+	# Two hours past the time, the moment has gone, like the morning's.
+	assert not is_week_due(sunday + dt.timedelta(hours=2), "Europe/London", at)[0]
 
 
 # --- the whole path, against Postgres -------------------------------------------------
@@ -378,3 +418,106 @@ async def test_only_expo_tokens_are_accepted(client: AsyncClient, token: str) ->
 	assert (
 		await client.put("/v1/push/token", json={"token": token})
 	).status_code == 422
+
+
+# --- the weekly push, against Postgres ----------------------------------------------
+
+
+def _this_sunday_at(time: str) -> dt.datetime:
+	"""This week's Sunday at `time` UTC (the seed user's zone in tests), so a note
+	kept now falls inside the week the push counts."""
+	today = dt.datetime.now(dt.UTC).date()
+	sunday = today + dt.timedelta(days=(6 - today.weekday()) % 7)
+	h, m = (int(x) for x in time.split(":"))
+	return dt.datetime.combine(sunday, dt.time(h, m), dt.UTC)
+
+
+async def _set_up_week(client: AsyncClient) -> None:
+	me = await client.patch("/v1/me", json={"weekly_push_at": "18:00"})
+	assert me.status_code == 200 and me.json()["weekly_push_at"] == "18:00:00"
+	assert (
+		await client.put("/v1/push/token", json={"token": PHONE})
+	).status_code == 204
+
+
+async def test_the_weekly_push_goes_once_on_sunday_with_the_week_in_it(
+	client: AsyncClient, app: FastAPI, admin_engine: AsyncEngine
+) -> None:
+	await _set_up_week(client)
+	kept = await client.post(
+		"/v1/captures", json={"text": "x", "client_token": "wk-note-0001"}
+	)
+	assert kept.status_code == 202, kept.text
+	done = (
+		await client.post(
+			"/v1/derivations", json={"kind": "todo", "payload": {"title": "Pay rent"}}
+		)
+	).json()
+	await client.patch(f"/v1/derivations/{done['id']}", json={"completed": True})
+	idea = await client.post(
+		"/v1/derivations",
+		json={"kind": "idea", "payload": {"title": "Seat pricing", "summary": "s"}},
+	)
+	assert idea.status_code == 201, idea.text
+	sender = FakePushSender()
+	factory = app.state.session_factory
+
+	saturday = _this_sunday_at("18:01") - dt.timedelta(days=1)
+	assert await send_due_weeks(factory, sender, now=saturday) == {}
+	assert await send_due_weeks(factory, sender, now=_this_sunday_at("17:59")) == {}
+	assert await send_due_weeks(factory, sender, now=_this_sunday_at("18:01")) == {
+		"sent": 1
+	}
+	assert await send_due_weeks(factory, sender, now=_this_sunday_at("18:06")) == {
+		"already": 1
+	}
+
+	assert len(sender.sent) == 1, "once a week, however often the sweep runs"
+	to, title, body, data = sender.sent[0]
+	assert to == [PHONE]
+	assert (title, body) == ("Your week: 1 note", "1 todo done · 1 highlight")
+	(push,) = await _pushes(admin_engine)
+	assert push["status"] == "sent"
+	assert data == {"kind": "week", "push_id": str(push["id"])}
+
+
+async def test_a_quiet_week_is_recorded_as_skipped(
+	client: AsyncClient, app: FastAPI, admin_engine: AsyncEngine
+) -> None:
+	await _set_up_week(client)
+	sender = FakePushSender()
+
+	outcome = await send_due_weeks(
+		app.state.session_factory, sender, now=_this_sunday_at("18:01")
+	)
+
+	assert outcome == {"skipped": 1} and sender.sent == []
+	(push,) = await _pushes(admin_engine)
+	assert (push["status"], push["reason"]) == ("skipped", "nothing this week")
+
+
+async def test_the_morning_and_the_week_are_separate_claims(
+	client: AsyncClient, app: FastAPI, admin_engine: AsyncEngine
+) -> None:
+	"""One of each kind a day at most: a Sunday with a morning summary still gets
+	its week, and neither blocks the other."""
+	await _set_up(client)
+	await _set_up_week(client)
+	await _day_with_an_event(client)
+	kept = await client.post(
+		"/v1/captures", json={"text": "x", "client_token": "wk-note-0002"}
+	)
+	assert kept.status_code == 202, kept.text
+	factory = app.state.session_factory
+	sender = FakePushSender()
+
+	# The event sits on today's date, which is Sunday only on a Sunday: the morning
+	# row is claimed either way (sent, or skipped as "nothing today").
+	morning = await send_due_mornings(factory, sender, now=_this_sunday_at("07:31"))
+	week = await send_due_weeks(factory, sender, now=_this_sunday_at("18:01"))
+
+	assert sum(morning.values()) == 1 and week == {"sent": 1}
+	async with admin_engine.connect() as conn:
+		result = await conn.execute(text("SELECT kind FROM pushes ORDER BY kind"))
+		kinds: list[str] = [str(row[0]) for row in result.all()]
+	assert kinds == ["morning", "week"]

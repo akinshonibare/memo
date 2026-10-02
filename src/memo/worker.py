@@ -25,6 +25,7 @@ from memo.jobs import (
 	refresh_lately_task,
 	requeue_stale_captures_task,
 	send_morning_pushes_task,
+	send_weekly_pushes_task,
 	sweep_unclaimed_recordings_task,
 )
 from memo.logging import configure_logging
@@ -92,6 +93,7 @@ class WorkerSettings:
 		refresh_derivation_chunks_task,
 		refresh_lately_task,
 		send_morning_pushes_task,
+		send_weekly_pushes_task,
 		check_push_receipts_task,
 	]
 	cron_jobs = [
@@ -111,6 +113,8 @@ class WorkerSettings:
 		cron(refresh_derivation_chunks_task, minute=29),
 		# The morning push, at the minute each user chose, give or take five (ADR 0047).
 		cron(send_morning_pushes_task, minute=set(range(0, 60, 5))),
+		# The week's summary, Sunday at the time each user chose (ADR 0070).
+		cron(send_weekly_pushes_task, minute=set(range(0, 60, 5))),
 		cron(check_push_receipts_task, minute={2, 17, 32, 47}),
 	]
 	on_startup = startup

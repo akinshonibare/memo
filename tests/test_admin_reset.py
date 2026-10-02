@@ -28,7 +28,8 @@ REDIS_TEST_DB = 13
 VECTOR = "[" + ",".join(["0"] * 1024) + "]"
 USER_COLUMNS = (
 	"id, email, apple_sub, timezone, display_name, voice, auto_accept, faith_enabled, "
-	"bible_translation, bible_reading, habits_enabled, morning_push_at"
+	"bible_translation, bible_reading, habits_enabled, morning_push_at, "
+	"weekly_push_at"
 )
 # Kept by the reset, whatever it finds there.
 OTHER_REDIS_KEYS = ("ratelimit:ask:someone:29000000", "memo:health-check")
@@ -59,7 +60,8 @@ async def two_users(admin_engine: AsyncEngine) -> list[uuid.UUID]:
 			text(
 				"UPDATE users SET timezone = 'Europe/London', faith_enabled = true, "
 				"display_name = 'Akin', bible_translation = 'ESV', voice = 'aura-2', "
-				"morning_push_at = '07:30', apple_sub = 'apple-seed', "
+				"morning_push_at = '07:30', weekly_push_at = '18:00', "
+				"apple_sub = 'apple-seed', "
 				"email = 'seed@example.com', "
 				'bible_reading = \'{"book": "John", "chapter": 3}\' '
 				"WHERE id = :id"

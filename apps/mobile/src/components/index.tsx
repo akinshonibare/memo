@@ -3,6 +3,7 @@ import { Children, Fragment, type ComponentProps, type ReactNode } from "react";
 import {
   ActivityIndicator,
   type GestureResponderEvent,
+  Linking,
   Pressable,
   StyleSheet,
   Text,
@@ -264,6 +265,27 @@ export function TickCircle({
   );
 }
 
+// Who made memo (docs/brand.md): "by coraki.dev", the studio's own mark, a small green
+// dot before its name as on coraki.dev. Faint on purpose: a credit, not a call to
+// action. Tapping it opens the site. `memo` in front where the wordmark isn't near.
+export function Credit({ memo, style }: { memo?: boolean; style?: object }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  return (
+    <Pressable
+      onPress={() => void Linking.openURL("https://coraki.dev").catch(() => undefined)}
+      hitSlop={10}
+      accessibilityRole="link"
+      accessibilityLabel="memo by coraki.dev. Opens coraki.dev"
+      style={({ pressed }) => [styles.credit, style, pressed && { opacity: 0.6 }]}
+    >
+      <Text style={styles.creditText}>{memo ? "memo by" : "by"}</Text>
+      <View style={[styles.creditDot, { backgroundColor: colors.green }]} />
+      <Text style={styles.creditName}>coraki.dev</Text>
+    </Pressable>
+  );
+}
+
 export function SheetHandle() {
   const styles = useStyles();
   return (
@@ -274,6 +296,10 @@ export function SheetHandle() {
 }
 
 const useStyles = makeStyles((colors) => ({
+  credit: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 6 },
+  creditText: { color: colors.faint, fontSize: 13 },
+  creditDot: { width: 5, height: 5, borderRadius: 3 },
+  creditName: { color: colors.muted, fontSize: 13 },
   circle: {
     backgroundColor: colors.surface,
     alignItems: "center",

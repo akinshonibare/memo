@@ -162,7 +162,8 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 				"display_name = NULL, voice = NULL, auto_accept = false, "
 				"faith_enabled = false, bible_translation = 'NIV', "
 				"bible_reading = NULL, habits_enabled = false, "
-				"morning_push_at = NULL, tone = 'plain', daily_ai_limit_usd = NULL "
+				"morning_push_at = NULL, weekly_push_at = NULL, tone = 'plain', "
+				"daily_ai_limit_usd = NULL "
 				"WHERE id = :seed"
 			),
 			{"seed": str(SEED_USER_ID)},

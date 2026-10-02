@@ -29,6 +29,14 @@ surfaces `#EAE5D8` / `#DFD9CA`, ink `#14261D`, muted `#55665C`, and amber darken
 accent hue in OKLCH, with every text colour held to 4.5:1 and the accent to 3:1 against
 the surfaces it sits on. A theme can change the hues, never the rules below.
 
+**Credit:** memo is made by [coraki.dev](https://coraki.dev). The credit reads
+`by ● coraki.dev` in the system font at the meta size: "by" in faint, a small moss
+(`green`) dot, the name in muted, as the site's own nav writes it (a green dot, then
+`coraki.dev`, lowercase). It sits at the foot of the sign-in screen (as `memo by …`)
+and under the version in Settings, and tapping it opens the site. One component
+(`Credit` in `src/components`), never larger than meta text, never amber: a credit is
+not live.
+
 **Rules:** one accent, used sparingly. If everything is amber, nothing is live. No
 pure black or pure white anywhere, in any theme.
 
