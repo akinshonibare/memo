@@ -1,7 +1,7 @@
 import asyncio
 from logging.config import fileConfig
 
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -30,6 +30,14 @@ def run_migrations_offline() -> None:
 def _run_migrations(connection: Connection) -> None:
 	context.configure(connection=connection, target_metadata=target_metadata)
 	with context.begin_transaction():
+		# api and worker both migrate before they start (ADR 0046), and deploy at the
+		# same time. The second waits here, then reads the version the first committed
+		# and has nothing to do. Transaction-scoped: a migration that commits midway
+		# (autocommit_block) would release it, so none may, or this becomes a session
+		# lock.
+		connection.execute(
+			text("SELECT pg_advisory_xact_lock(hashtext('memo.alembic'))")
+		)
 		context.run_migrations()
 
 
