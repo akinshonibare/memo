@@ -331,7 +331,7 @@ export function HomeScreen({
         ListHeaderComponent={
           q ? null : (
             <>
-              <OutboxSection />
+              <OutboxSection api={api} />
               {morning && (
                 <TodaySection
                   view={morning}

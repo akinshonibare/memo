@@ -7,7 +7,7 @@ import {
 } from "expo-audio";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Api, ApiError, type Space } from "../api";
+import { Api, ApiError, newOnce, type Once, type Space } from "../api";
 import { confirmDiscard, IconCircle, Pill, SheetHandle } from "../components";
 import { formatClock } from "../format";
 import {
@@ -42,7 +42,8 @@ export function micBusy(error: unknown): boolean {
 const DROP_MS = 480;
 
 // Tap record → this sheet opens already recording. End uploads straight to the
-// bucket and attaches the recording to a capture; close discards. It keeps recording
+// bucket and attaches the recording to a capture; close discards - except a take the
+// server refused, which is kept on the phone (ADR 0071). It keeps recording
 // with the phone locked or another app open (ADR 0038), shown on the Lock Screen and
 // in the Dynamic Island. While it's open, your words appear as you say them (ADR 0051).
 export function RecordSheet({
@@ -63,13 +64,22 @@ export function RecordSheet({
   const recorder = useAudioRecorder(OPTIONS);
   const state = useAudioRecorderState(recorder, 100);
   // "waiting": the microphone is busy (a call), and the sheet starts as soon as it's free.
-  const [phase, setPhase] = useState<"starting" | "waiting" | "recording" | "paused" | "saving">("starting");
+  // "kept": End was refused for good; the take is safe on the phone and can be tried again.
+  const [phase, setPhase] = useState<"starting" | "waiting" | "recording" | "paused" | "saving" | "kept">(
+    "starting",
+  );
   const [error, setError] = useState<string | null>(null);
   const [onCall, setOnCall] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [drop, setDrop] = useState(false);
   const started = useRef(false);
   const activity = useRef<ReturnType<typeof startRecordingActivity>>(null);
+  // The take, fixed the moment End is first tapped: this file, this length, this
+  // identity. Trying again sends exactly that, so the server sees one capture however
+  // many times it's asked (its client_token is the same), and nothing is read back from
+  // a recorder that has already stopped - stopped, expo-audio reports a length of 0.
+  // State rather than a ref: the clock shows its length once the recorder has stopped.
+  const [take, setTake] = useState<{ uri: string; durationMs: number | undefined; once: Once } | null>(null);
   // What the Live Activity's clock counts from: moved on by each pause, so it shows
   // recorded time rather than time since the sheet opened.
   const clock = useRef<RecordingProps>({ startedAtMs: 0, pausedAtMs: null });
@@ -200,17 +210,26 @@ export function RecordSheet({
   };
 
   const end = async () => {
-    if (phase !== "recording" && phase !== "paused") return;
+    if (phase !== "recording" && phase !== "paused" && phase !== "kept") return;
     setPhase("saving");
     stopListening();
+    let fixed = take;
     try {
-      const durationMs = state.durationMillis;
-      await recorder.stop();
-      endRecordingActivity(activity.current);
-      activity.current = null;
-      const uri = recorder.uri;
-      if (!uri) throw new Error("No recording was produced.");
-      const id = await captureOrQueue(api, { kind: "audio", file: uri, mime: "audio/m4a", durationMs, space });
+      if (!fixed) {
+        const durationMs = state.durationMillis;
+        await recorder.stop();
+        endRecordingActivity(activity.current);
+        activity.current = null;
+        const uri = recorder.uri;
+        if (!uri) throw new Error("No recording was produced.");
+        // 0 is "unknown" (ended before the first status tick, or iOS stopped the
+        // recorder under us); the server fills the length in from the transcript.
+        fixed = { uri, durationMs: durationMs > 0 ? durationMs : undefined, once: newOnce() };
+        setTake(fixed);
+      }
+      const { uri, durationMs, once } = fixed;
+      const id = await captureOrQueue(api, { kind: "audio", file: uri, mime: "audio/m4a", durationMs, space }, once);
+      setError(null);
       haptic.done();
       // The thought becomes a dot: the orb falls toward the list, then the sheet goes.
       setDrop(true);
@@ -220,13 +239,18 @@ export function RecordSheet({
       }, DROP_MS);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
-      setPhase("paused");
+      // Refused for good: the outbox has a copy by now, so the take is safe whatever
+      // happens to this sheet. Failed before there was a take: back to the recorder.
+      setPhase(fixed ? "kept" : "paused");
     }
   };
 
   // A swipe down closes the sheet like the close button, except that a recording in
-  // progress is asked about first: a stray swipe shouldn't cost a take.
+  // progress is asked about first: a stray swipe shouldn't cost a take. A kept take
+  // costs nothing to close: it's in the outbox either way.
   const recordingNow = phase === "recording" || phase === "paused";
+  const kept = phase === "kept";
+  const clockMs = take?.durationMs ?? state.durationMillis;
   const requestClose = () => {
     if (phase === "saving") return;
     if (recordingNow) confirmDiscard("Discard this recording?", "Discard", () => void discard(), "Keep recording");
@@ -246,7 +270,7 @@ export function RecordSheet({
         <SheetHandle />
         <View style={styles.top}>
           <View style={{ flex: 1 }} />
-          <IconCircle name="close" onPress={discard} accessibilityLabel="Discard recording" />
+          <IconCircle name="close" onPress={discard} accessibilityLabel={kept ? "Close" : "Discard recording"} />
         </View>
         <Text style={[ui.h2, styles.title]}>{space === "faith" ? "New reflection" : "New voice note"}</Text>
         <Text style={ui.bodyMuted}>
@@ -262,9 +286,11 @@ export function RecordSheet({
                 ? drop
                   ? "Saved."
                   : "Uploading…"
-                : live
-                  ? "Listening. Tap the orb or End when you're done."
-                  : "Paused."}
+                : kept
+                  ? "Not saved yet. The take is kept on this phone: try again, or close and find it under On this phone."
+                  : live
+                    ? "Listening. Tap the orb or End when you're done."
+                    : "Paused."}
         </Text>
         {notice && phase === "paused" && <Text style={[ui.meta, { marginTop: 12 }]}>{notice}</Text>}
         {error && <Text style={[ui.danger, { marginTop: 16 }]}>{error}</Text>}
@@ -279,16 +305,16 @@ export function RecordSheet({
               like End. The target is the whole middle of the sheet, on a layer of its
               own above the orb: the orb's halos and body move with your voice, and a
               tap must never depend on where they happen to be. While starting, waiting
-              or saving it does nothing. */}
+              or saving it does nothing; on a kept take it tries again. */}
           <Pressable
             style={StyleSheet.absoluteFill}
             onPress={() => {
               haptic.tap();
               void end();
             }}
-            disabled={!recordingNow}
+            disabled={!recordingNow && !kept}
             accessibilityRole="button"
-            accessibilityLabel="End recording"
+            accessibilityLabel={kept ? "Try again" : "End recording"}
             accessibilityHint="Saves the voice note"
           />
         </View>
@@ -304,12 +330,18 @@ export function RecordSheet({
             <Pill
               label={phase === "paused" ? "Resume" : "Pause"}
               onPress={() => void togglePause()}
-              disabled={phase === "starting" || phase === "saving"}
+              disabled={phase === "starting" || phase === "saving" || kept}
             />
-            <Text style={styles.clock} accessibilityLabel={`Recorded ${formatClock(state.durationMillis)}`}>
-              {formatClock(state.durationMillis)}
+            <Text style={styles.clock} accessibilityLabel={`Recorded ${formatClock(clockMs)}`}>
+              {formatClock(clockMs)}
             </Text>
-            <Pill label="End" tone="light" onPress={end} busy={phase === "saving" && !drop} disabled={phase === "starting"} />
+            <Pill
+              label={kept ? "Try again" : "End"}
+              tone="light"
+              onPress={end}
+              busy={phase === "saving" && !drop}
+              disabled={phase === "starting"}
+            />
           </View>
         )}
         <Dialogs />
