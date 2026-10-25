@@ -181,3 +181,14 @@ Writing needs HealthKit's write permission (`NSHealthUpdateUsageDescription`), w
 native build, and Akin's rule is that memo writes to the phone only by a settings switch
 (Calendar, Reminders). Decide when someone asks to see memo's mood in Health, not before.
 
+
+### Q13 — Should the phone report a refused upload to the API?
+
+Raised with [ADR 0071](decisions/0071-a-refused-take-is-kept-and-a-retry-is-the-same-request.md).
+A voice note's bytes go straight to the bucket by a presigned `PUT`, so when the bucket
+refuses them the API never sees it: the only witness is the phone, and the reason now
+lives in the sheet's error text and the outbox item. That's enough while the operator
+and the one user are the same person. With a second user it isn't: a
+`POST /v1/recordings/{id}/failed` carrying the status and the bucket's `<Code>` would
+put the reason in the structured logs with a request id. Decide when there is a phone
+you can't pick up, not before.

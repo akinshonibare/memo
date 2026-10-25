@@ -113,6 +113,10 @@ only way to find that out is to ask when Akin isn't braced for it.
     and why does its dialog host have to be drawn inside every sheet (ADR 0052)?
 49. Deleting a note now deletes its items through `ON DELETE CASCADE` rather than in
     the route. Why the database? And what premise changed from ADR 0022 (ADR 0053)?
+50. A voice note's upload fails and the person taps End again; the server answers 422
+    to every retry. Why does a `client_token` not save you here, and what has to be
+    true of a retry for it to? Then: the error said "upload failed", nothing more.
+    Which change comes first and why (ADR 0071)?
 
 ---
 
