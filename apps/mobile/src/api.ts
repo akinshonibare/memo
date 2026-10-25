@@ -369,6 +369,18 @@ export function newOnce(): Once {
   return { clientToken: Crypto.randomUUID(), capturedAt: new Date().toISOString() };
 }
 
+// What the bucket said when it refused an upload. The API never sees that request, so
+// this sentence is the only record of why a take didn't save: it is shown in the sheet
+// and kept with the item in the outbox. An S3-compatible store answers with a small XML
+// document whose <Code> names the reason (SignatureDoesNotMatch, RequestTimeout, ...);
+// anything else is quoted briefly, tags stripped, in case it's an HTML error page.
+export function storageRefusal(status: number, body: string | undefined): string {
+  const code = /<Code>([^<]{1,60})<\/Code>/.exec(body ?? "")?.[1];
+  const quoted = (body ?? "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+  const detail = code ?? quoted;
+  return `The upload was refused by storage (${status}${detail ? `: ${detail}` : ""}).`;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -661,7 +673,7 @@ export class Api {
       headers: { "Content-Type": mime },
     });
     if (upload.status < 200 || upload.status >= 300) {
-      throw new ApiError(upload.status, "upload to storage failed");
+      throw new ApiError(upload.status, storageRefusal(upload.status, upload.body));
     }
     return this.request<Capture>("/v1/captures", {
       method: "POST",
