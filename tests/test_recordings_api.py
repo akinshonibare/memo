@@ -4,8 +4,11 @@ import uuid
 from collections.abc import Callable
 
 import httpx
+import pytest
 from httpx import AsyncClient
+from pydantic import ValidationError
 
+from memo.schemas.recordings import RecordingCreate
 from tests.fakes import FakeQueue
 
 
@@ -51,6 +54,23 @@ async def test_unsupported_mime_is_a_422(client: AsyncClient) -> None:
 	assert (
 		await client.post("/v1/recordings", json={"mime": "video/mp4"})
 	).status_code == 422
+
+
+def test_unknown_duration_is_none_not_a_refusal() -> None:
+	"""A stopped recorder reports a length of 0 (expo-audio); the transcript fills it
+	in later. Only a nonsense length is refused."""
+	assert RecordingCreate(mime="audio/m4a", duration_ms=0).duration_ms is None
+	assert RecordingCreate(mime="audio/m4a", duration_ms=1200).duration_ms == 1200
+	assert RecordingCreate(mime="audio/m4a").duration_ms is None
+	with pytest.raises(ValidationError):
+		RecordingCreate(mime="audio/m4a", duration_ms=-1)
+
+
+async def test_zero_duration_is_accepted(client: AsyncClient) -> None:
+	created = await client.post(
+		"/v1/recordings", json={"mime": "audio/m4a", "duration_ms": 0}
+	)
+	assert created.status_code == 201, created.text
 
 
 async def test_another_users_recording_is_a_404(

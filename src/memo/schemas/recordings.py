@@ -1,7 +1,7 @@
 import datetime as dt
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # mime -> object key extension. Kept narrow on purpose: anything else is a 422.
 ALLOWED_AUDIO_MIME: dict[str, str] = {
@@ -34,6 +34,15 @@ class RecordingCreate(BaseModel):
 	mime: str = Field(pattern=r"^(audio|image)/[A-Za-z0-9.+-]+$")
 	bytes: int | None = Field(default=None, ge=1, le=MAX_RECORDING_BYTES)
 	duration_ms: int | None = Field(default=None, ge=1)
+
+	@field_validator("duration_ms", mode="before")
+	@classmethod
+	def zero_is_unknown(cls, value: object) -> object:
+		# A hint, not a fact: the transcript is the source of truth, and the pipeline
+		# fills the length in when it's missing. A client that doesn't know it sends 0
+		# (a stopped recorder reports 0); refusing the capture over that would break the
+		# one rule about captures, that memo never refuses one for its own reasons.
+		return None if value == 0 else value
 
 
 class RecordingOut(BaseModel):
