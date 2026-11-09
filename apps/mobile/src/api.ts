@@ -524,7 +524,7 @@ export class Api {
     return this.request<Me>("/v1/me", { method: "PATCH", body: JSON.stringify(patch) });
   }
 
-  // --- what's new in each place (Home's Places button) --------------------------
+  // --- what's new in each place (the marks on the tab bar) ------------------------
 
   getNews() {
     return this.request<News>("/v1/news");

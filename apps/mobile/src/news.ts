@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { createContext, createElement, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
 import { AppState } from "react-native";
 import type { Api, News } from "./api";
 import { devicePref } from "./prefs";
 
-// What's new in each of memo's places, for the Places button on Home: the server says
-// when each last got something (GET /v1/news), this phone remembers when you last
-// looked, and a place with something newer is marked. No counts: a mark, not a tally.
+// What's new in each of memo's places, for the marks on the tab bar and on More: the
+// server says when each last got something (GET /v1/news), this phone remembers when
+// you last looked, and a place with something newer is marked. No counts: a mark, not
+// a tally.
 
 export type PlaceKey = keyof News;
 const PLACES: PlaceKey[] = ["planner", "review", "people", "faith", "habits"];
@@ -66,4 +67,17 @@ export function useNews(api: Api, refreshKey: number): Set<PlaceKey> {
     }
   }
   return fresh;
+}
+
+// One fetch for the whole app: the tab bar and the More screen both read the same set,
+// instead of each asking the server.
+const NewsContext = createContext<Set<PlaceKey>>(new Set());
+
+export function NewsProvider({ api, refreshKey, children }: { api: Api; refreshKey: number; children: ReactNode }) {
+  const fresh = useNews(api, refreshKey);
+  return createElement(NewsContext.Provider, { value: fresh }, children);
+}
+
+export function useFresh(): Set<PlaceKey> {
+  return useContext(NewsContext);
 }

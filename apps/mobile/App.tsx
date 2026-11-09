@@ -1,9 +1,11 @@
 import { InstrumentSerif_400Regular, useFonts } from "@expo-google-fonts/instrument-serif";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import {
   createNavigationContainerRef,
   DarkTheme,
   DefaultTheme,
   NavigationContainer,
+  type NavigatorScreenParams,
   StackActions,
 } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -24,7 +26,7 @@ import { type PushKind, refreshPushToken, registerPushCategories, usePushTaps } 
 import { useReminderTaps } from "./src/reminders";
 import { forgetHealthOnThisPhone, useHealthSync } from "./src/health";
 import { Dialogs } from "./src/dialogs";
-import { markSeen, ROUTE_PLACE } from "./src/news";
+import { markSeen, NewsProvider, ROUTE_PLACE } from "./src/news";
 import { clearPhone, usePhoneSync } from "./src/sync";
 import { AskSheet } from "./src/screens/AskScreen";
 import { ComposeSheet } from "./src/screens/ComposeSheet";
@@ -38,12 +40,14 @@ import { HomeScreen } from "./src/screens/HomeScreen";
 import { IdeasScreen } from "./src/screens/IdeasScreen";
 import { PlannerScreen } from "./src/screens/PlannerScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
+import { MoreScreen } from "./src/screens/MoreScreen";
 import { OnboardingScreen } from "./src/screens/OnboardingScreen";
 import { PeopleScreen } from "./src/screens/PeopleScreen";
 import { PersonScreen } from "./src/screens/PersonScreen";
 import { RecordSheet } from "./src/screens/RecordSheet";
 import { ProfileSheet } from "./src/screens/ProfileScreen";
 import { ReviewScreen } from "./src/screens/ReviewScreen";
+import { TabBar } from "./src/screens/TabBar";
 import { ThemeProvider, useTheme } from "./src/theme";
 import { captureOrQueue, flushOutbox, onNoteSaved, useOutbox } from "./src/outbox";
 import { birthdayToday, milestoneReached, type Moment } from "./src/delight";
@@ -68,15 +72,22 @@ function linkAction(url: string | null): LinkAction | null {
   return text ? `capture:${text}` : null;
 }
 
-// A native stack (ADR 0033): real iOS pushes and the edge swipe back. A note or a
-// person is pushed on top of wherever it was opened from, so back retraces the path:
-// a note -> the person in it -> another of their notes -> back, back.
-export type Routes = {
+// Four tabs with the record button between them (ADR 0072): Home, Planner, People and
+// More, each a root you can always get back to in one tap. Everything else is pushed on
+// a native stack above the tabs (ADR 0033), covering the bar: real iOS pushes and the
+// swipe back. A note or a person is pushed on top of wherever it was opened from, so
+// back retraces the path: a note -> the person in it -> another of their notes -> back,
+// back, and the tab you left is where you return to.
+export type TabRoutes = {
   Home: undefined;
   Planner: undefined;
+  People: undefined;
+  More: undefined;
+};
+export type Routes = {
+  Tabs: NavigatorScreenParams<TabRoutes> | undefined;
   Ideas: undefined;
   Review: undefined;
-  People: undefined;
   Person: { id: string };
   Detail: { id: string };
   Faith: undefined;
@@ -86,6 +97,7 @@ export type Routes = {
   List: { id: string };
 };
 const Stack = createNativeStackNavigator<Routes>();
+const Tab = createBottomTabNavigator<TabRoutes>();
 const nav = createNavigationContainerRef<Routes>();
 
 export default function App() {
@@ -177,9 +189,15 @@ function Root() {
   const openPerson = (id: string) => {
     if (nav.isReady()) nav.dispatch(StackActions.push("Person", { id }));
   };
+  // Back to the tabs with nothing pushed over them: on Home, or on Planner, with the
+  // ideas or the review pushed on top of it, since that is where they live.
   const goHome = (then?: "Planner" | "Ideas" | "Review") => {
     if (!nav.isReady()) return;
-    nav.reset({ index: then ? 1 : 0, routes: then ? [{ name: "Home" }, { name: then }] : [{ name: "Home" }] });
+    nav.reset({
+      index: 0,
+      routes: [{ name: "Tabs", state: { routes: [{ name: then ? "Planner" : "Home" }] } }],
+    });
+    if (then === "Ideas" || then === "Review") nav.dispatch(StackActions.push(then));
   };
 
   // Not while covered either: coming back from the background, a link or a notification
@@ -366,6 +384,7 @@ function Root() {
         />
       )}
       {showApp && (
+        <NewsProvider api={api} refreshKey={refreshKey}>
         <NavigationContainer
           ref={nav}
           theme={navTheme}
@@ -382,53 +401,81 @@ function Root() {
               contentStyle: { backgroundColor: colors.bg },
               gestureEnabled: true,
               // Swipe left to right anywhere to go back, not just from the edge (Akin,
-              // 2026-09-30). The Planner keeps the edge swipe: its rows swipe that way
-              // to tick a todo off.
+              // 2026-09-30). The tabs have no back; the Planner's rows swipe that way
+              // to tick a todo off, with nothing underneath to fight them.
               fullScreenGestureEnabled: true,
             }}
           >
-            <Stack.Screen name="Home">
-              {({ navigation }) => (
-                <HomeScreen
-                  api={api}
-                  refreshKey={refreshKey}
-                  onOpen={openNote}
-                  onPlanner={() => navigation.navigate("Planner")}
-                  onReview={() => navigation.navigate("Review")}
-                  onPeople={() => navigation.navigate("People")}
-                  onOpenPerson={openPerson}
-                  onChanged={bump}
-                  onAsk={() => setAsk(true)}
-                  onRecord={() => {
-                    setSpace("main");
-                    setRecord(true);
-                  }}
-                  onCompose={(photo) => {
-                    setSpace("main");
-                    setComposePhoto(photo);
-                    setCompose(true);
-                  }}
-                  onSettings={() => setSettings(true)}
-                  name={me?.name ?? null}
-                  moment={moment}
-                  onMomentSeen={() => setMoment(null)}
-                  onFaith={me?.faith_enabled ? () => navigation.navigate("Faith") : undefined}
-                  onHabits={() => navigation.navigate("Habits")}
-                  onLists={() => navigation.navigate("Lists")}
-                  onOpenHabit={(id) => navigation.navigate("Habit", { id })}
-                />
-              )}
-            </Stack.Screen>
-            <Stack.Screen name="Planner" options={{ fullScreenGestureEnabled: false }}>
-              {({ navigation }) => (
-                <PlannerScreen
-                  api={api}
-                  refreshKey={refreshKey}
-                  onBack={() => navigation.goBack()}
-                  onIdeas={() => navigation.navigate("Ideas")}
-                  onOpenCapture={openNote}
-                  onChanged={bump}
-                />
+            <Stack.Screen name="Tabs">
+              {() => (
+                <Tab.Navigator
+                  screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.bg } }}
+                  tabBar={(props) => (
+                    <TabBar
+                      {...props}
+                      onRecord={() => {
+                        setSpace("main");
+                        setRecord(true);
+                      }}
+                    />
+                  )}
+                >
+                  <Tab.Screen name="Home">
+                    {() => (
+                      <HomeScreen
+                        api={api}
+                        refreshKey={refreshKey}
+                        onOpen={openNote}
+                        onOpenPerson={openPerson}
+                        onChanged={bump}
+                        onAsk={() => setAsk(true)}
+                        onCompose={(photo) => {
+                          setSpace("main");
+                          setComposePhoto(photo);
+                          setCompose(true);
+                        }}
+                        onSettings={() => setSettings(true)}
+                        name={me?.name ?? null}
+                        moment={moment}
+                        onMomentSeen={() => setMoment(null)}
+                        onHabits={() => nav.navigate("Habits")}
+                        onOpenHabit={(id) => nav.navigate("Habit", { id })}
+                      />
+                    )}
+                  </Tab.Screen>
+                  <Tab.Screen name="Planner">
+                    {() => (
+                      <PlannerScreen
+                        api={api}
+                        refreshKey={refreshKey}
+                        onIdeas={() => nav.navigate("Ideas")}
+                        onReview={() => nav.navigate("Review")}
+                        onOpenCapture={openNote}
+                        onChanged={bump}
+                      />
+                    )}
+                  </Tab.Screen>
+                  <Tab.Screen name="People">
+                    {() => (
+                      <PeopleScreen
+                        api={api}
+                        refreshKey={refreshKey}
+                        onOpenPerson={openPerson}
+                        onOpenCapture={openNote}
+                        onChanged={bump}
+                      />
+                    )}
+                  </Tab.Screen>
+                  <Tab.Screen name="More">
+                    {() => (
+                      <MoreScreen
+                        onLists={() => nav.navigate("Lists")}
+                        onHabits={() => nav.navigate("Habits")}
+                        onFaith={me?.faith_enabled ? () => nav.navigate("Faith") : undefined}
+                      />
+                    )}
+                  </Tab.Screen>
+                </Tab.Navigator>
               )}
             </Stack.Screen>
             <Stack.Screen name="Review">
@@ -449,18 +496,6 @@ function Root() {
                   api={api}
                   refreshKey={refreshKey}
                   onBack={() => navigation.goBack()}
-                  onOpenCapture={openNote}
-                  onChanged={bump}
-                />
-              )}
-            </Stack.Screen>
-            <Stack.Screen name="People">
-              {({ navigation }) => (
-                <PeopleScreen
-                  api={api}
-                  refreshKey={refreshKey}
-                  onBack={() => navigation.goBack()}
-                  onOpenPerson={openPerson}
                   onOpenCapture={openNote}
                   onChanged={bump}
                 />
@@ -565,6 +600,7 @@ function Root() {
             </Stack.Screen>
           </Stack.Navigator>
         </NavigationContainer>
+        </NewsProvider>
       )}
       {showApp && <FirefliesHost />}
       {api && (

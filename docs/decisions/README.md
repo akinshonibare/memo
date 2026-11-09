@@ -102,7 +102,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0049](0049-a-map-of-one-thing.md) | A map of one thing (an ego-graph over existing links), not a map of everything | active on the server; out of the app (0052) |
 | [0050](0050-health-milestones-and-apple-health.md) | Health as milestones noticed from notes and Apple Health, never a training log | active |
 | [0051](0051-live-words-while-recording.md) | Live words while a voice note records: display only, over Ask's socket, with a patched expo-audio | active |
-| [0052](0052-memos-own-dialogs-and-the-places-circle.md) | memo's own dialogs, one Places circle with new-item marks, notes open once saved | active |
+| [0052](0052-memos-own-dialogs-and-the-places-circle.md) | memo's own dialogs, one Places circle with new-item marks, notes open once saved | active; the Places circle superseded by 0072 |
 | [0053](0053-deleting-a-note-deletes-what-came-from-it.md) | Deleting a note deletes everything taken from it, enforced by a cascade | active |
 | [0054](0054-habits-is-always-on.md) | Habits is always on; the column stays as an operator's switch | active |
 | [0055](0055-deleting-a-person.md) | Deleting a person forgets them and their mentions; notes and prayers stay | active |
@@ -122,6 +122,7 @@ the whole point of writing them down. Q8 already produced one of these on day on
 | [0069](0069-lists-you-keep-filled-from-notes.md) | Lists you keep, filled from notes: a `lists` table plus `list_item` derivations with a composite FK, a gated reader of its own, one normalised name per list | active |
 | [0070](0070-three-notifications-each-a-switch-in-one-place.md) | Three notifications (morning summary, Sunday's week in numbers, before an event), each off by default, each a switch in one Settings group that promises there are no others; the week's push through 0047's ledger as a second kind | active |
 | [0071](0071-a-refused-take-is-kept-and-a-retry-is-the-same-request.md) | A refused take is kept, and a retry is the same request | active |
+| [0072](0072-a-tab-bar-with-record-in-the-middle.md) | A tab bar with the record button in the middle: Home, Planner, People, More; everything else pushed above it (supersedes 0052's Places circle) | active |
 
 Only **0008** is genuinely hard to reverse. **0010** is the next-hardest — not because the
 DDL is expensive, but because reversing it means editing the retrieval path, where mistakes

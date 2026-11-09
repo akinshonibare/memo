@@ -67,13 +67,16 @@ export function PlannerScreen({
   refreshKey,
   onBack,
   onIdeas,
+  onReview,
   onOpenCapture,
   onChanged,
 }: {
   api: Api;
   refreshKey: number;
-  onBack: () => void;
+  // A tab now (ADR 0072): no back button unless it was pushed from somewhere.
+  onBack?: () => void;
   onIdeas: () => void;
+  onReview: () => void;
   onOpenCapture: (id: string) => void;
   onChanged: () => void;
 }) {
@@ -176,9 +179,10 @@ export function PlannerScreen({
   return (
     <View style={ui.screen}>
       <View style={[styles.topBar, ui.pad]}>
-        <IconCircle name="chevron-back" size={38} onPress={onBack} />
+        {onBack && <IconCircle name="chevron-back" size={38} onPress={onBack} />}
         <Text style={styles.title}>Planner</Text>
         <View style={{ flex: 1 }} />
+        <IconCircle name="reader-outline" size={38} onPress={onReview} />
         <IconCircle name="sparkles-outline" size={38} onPress={onIdeas} />
         <IconCircle name="add" size={38} tone="light" onPress={() => void add()} />
       </View>

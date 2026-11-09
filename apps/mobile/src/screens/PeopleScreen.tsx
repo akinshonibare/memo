@@ -25,7 +25,8 @@ export function PeopleScreen({
 }: {
   api: Api;
   refreshKey: number;
-  onBack: () => void;
+  // A tab now (ADR 0072): no back button unless it was pushed from somewhere.
+  onBack?: () => void;
   onOpenPerson: (id: string) => void;
   onOpenCapture: (id: string) => void;
   onChanged: () => void;
@@ -141,7 +142,7 @@ export function PeopleScreen({
   return (
     <View style={ui.screen}>
       <View style={[styles.topBar, ui.pad]}>
-        <IconCircle name="chevron-back" size={38} onPress={onBack} />
+        {onBack && <IconCircle name="chevron-back" size={38} onPress={onBack} />}
         <Text style={styles.title}>People</Text>
       </View>
       {error && <Text style={[ui.danger, ui.pad, { marginTop: 8 }]}>{error}</Text>}
