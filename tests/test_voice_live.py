@@ -159,6 +159,7 @@ async def test_a_socket_without_a_bearer_header_has_no_user(app: FastAPI) -> Non
 	assert await websocket_user(cast(Any, _WS({"authorization": "Basic x"}))) is None
 
 
+@pytest.mark.services
 def test_a_refused_socket_gets_a_close_code_the_app_can_read(
 	settings: Settings,
 ) -> None:

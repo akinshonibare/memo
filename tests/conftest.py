@@ -1,5 +1,6 @@
 import asyncio
 import datetime as dt
+import os
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
@@ -31,6 +32,27 @@ from tests.fakes import (
 )
 
 TEST_DB = "memo_test"
+
+# Set by the root conftest.py when nothing is configured.
+WITHOUT_SERVICES = os.environ.get("MEMO_TESTS_WITHOUT_SERVICES") == "1"
+# Every fixture that reaches a service depends on one of these.
+SERVICE_FIXTURES = frozenset({"app", "admin_engine"})
+
+
+def pytest_configure(config: pytest.Config) -> None:
+	config.addinivalue_line(
+		"markers", "services: needs Postgres, Redis or the object store"
+	)
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+	if not WITHOUT_SERVICES:
+		return
+	skip = pytest.mark.skip(reason="needs Postgres, Redis and the object store")
+	for item in items:
+		uses_service = SERVICE_FIXTURES.intersection(getattr(item, "fixturenames", []))
+		if uses_service or item.get_closest_marker("services"):
+			item.add_marker(skip)
 
 
 def _with_database(url: str, database: str) -> str:
@@ -67,6 +89,8 @@ async def _ensure_database(admin_url: str) -> None:
 def migrated_database(
 	settings: Settings, monkeypatch_session: pytest.MonkeyPatch
 ) -> None:
+	if WITHOUT_SERVICES:
+		return
 	asyncio.run(_ensure_database(settings.database_admin_url))
 	monkeypatch_session.setenv("DATABASE_ADMIN_URL", settings.database_admin_url)
 	monkeypatch_session.setenv("DATABASE_URL", settings.database_url)
@@ -129,8 +153,13 @@ def delete_keeping_items(admin_engine: AsyncEngine) -> Callable[..., Any]:
 
 
 @pytest.fixture(autouse=True)
-async def clean_tables(admin_engine: AsyncEngine) -> None:
-	async with admin_engine.begin() as conn:
+async def clean_tables(settings: Settings) -> None:
+	if WITHOUT_SERVICES:
+		return
+	# Its own engine, not admin_engine: as an autouse fixture, depending on that would
+	# put it in every test's fixture closure and hide which tests really need a service.
+	engine = create_async_engine(settings.database_admin_url)
+	async with engine.begin() as conn:
 		for table in (
 			"pushes",
 			"push_tokens",
@@ -168,6 +197,7 @@ async def clean_tables(admin_engine: AsyncEngine) -> None:
 			),
 			{"seed": str(SEED_USER_ID)},
 		)
+	await engine.dispose()
 
 
 @pytest.fixture

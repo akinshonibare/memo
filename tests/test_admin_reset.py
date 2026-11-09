@@ -465,6 +465,7 @@ def test_the_phrase_is_never_piped(
 	assert "typed at a terminal" in capsys.readouterr().err
 
 
+@pytest.mark.services
 def test_the_command_runs_a_dry_run_end_to_end(
 	settings: Settings, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -476,6 +477,7 @@ def test_the_command_runs_a_dry_run_end_to_end(
 	assert "APP_ENV=" in out and "memo_test on" in out and "Dry run" in out
 
 
+@pytest.mark.services
 async def test_the_bucket_is_listed_and_deleted_a_page_at_a_time(
 	settings: Settings,
 ) -> None:
@@ -514,6 +516,7 @@ class _NoBatchDelete:
 		return getattr(self._s3, name)
 
 
+@pytest.mark.services
 async def test_a_store_without_batch_delete_deletes_one_by_one(
 	settings: Settings, monkeypatch: pytest.MonkeyPatch
 ) -> None:
