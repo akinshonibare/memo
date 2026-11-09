@@ -52,8 +52,13 @@ above the tabs, covering the bar.**
   place it speaks for has something new: Planner for planner and review, People for
   people, More for habits and faith. A mark, not a count (ADR 0041). Looking at the
   place still clears it, however you got there.
-- **Home** keeps the notes, Today, the search field, and now Ask and + in its header
-  row beside the avatar. The compass, the bottom bar and its fade are gone.
+- **Home** keeps the notes, Today and the search field. Ask and + share one pill that
+  rides above the tab bar (Ask is the pill, + sits in its right end), clear of the
+  record button rising out of the bar, with the old fade under it so the list runs
+  beneath. The first cut (2026-11-08) had put them in the header row beside the
+  avatar; Akin's first reaction to the shipped build was that the header is the far end
+  of the phone from the thumb, which was the whole complaint about Places. Moved the
+  next day. The compass is gone.
 - **Planner** gains a Review button in its header beside Ideas: the review is about
   the week, so it lives with the days.
 - **More** (`screens/MoreScreen.tsx`) holds Lists, Habits and, with Faith on, Within:
@@ -77,8 +82,12 @@ stand.
 - **Four tabs means grouping.** Lists, Habits and Within share More, one tap further
   than the others. "More" is the honest name for a hub; if one of its rows becomes a
   daily visit, it should take a tab of its own and the grouping should be redone.
-- **Ask and + are header controls now**, at the top of Home, further from the thumb.
-  Record, the main act, is the one that stayed by it.
+- **Two bars at the bottom of Home**: the Ask pill and the tab bar, about 100pt
+  together, so Home's list is shorter than any other tab's. Ask is Home-only; from
+  Planner or People it is a tab away. The alternatives were hiding Write, Photo and
+  Ask behind a long-press on record (nothing on screen, nothing discoverable) or one
+  bottom field that searches as you type and asks on return (fewer inputs, but a
+  product change to make once the tab bar has been lived with).
 - **Sections are co-equal with capture in the layout.** The centre button is what
   keeps memo reading as a capture app; if it ever shrinks to a plain tab, the thesis
   has quietly changed.
@@ -101,6 +110,8 @@ stand.
   a fifth tab beside the record button.
 - The record button is used less than any tab: the product has become a reader rather
   than a recorder, and the layout should say so.
+- Akin switches to Home just to reach Ask: put Ask in the bar on every tab, or merge
+  search and Ask into one bottom field.
 
 ## Interview angle
 

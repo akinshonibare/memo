@@ -12,7 +12,7 @@ import {
 import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { FadeOut, interpolate, type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { Api, type Capture } from "../api";
-import { AskBar, Avatar, IconCircle, confirmDelete } from "../components";
+import { AskBar, Avatar, confirmDelete } from "../components";
 import { choose } from "../dialogs";
 import { ACTIVE_STATUSES, formatClock, formatStamp, headline, statusLabel, toIsoDate } from "../format";
 import { celebrate, InkText, PressableScale, rowEnter, Wordmark } from "../motion";
@@ -23,6 +23,7 @@ import { makeStyles, useTheme } from "../theme";
 import { useUi } from "../ui";
 import { usePullToRefresh } from "../refresh";
 import { OutboxSection } from "./OutboxSection";
+import { RECORD_LIFT } from "./TabBar";
 import { TodaySection, useMorning } from "./TodaySection";
 import { haptic } from "../haptics";
 import { useOutbox } from "../outbox";
@@ -32,6 +33,11 @@ const POLL_MS = 3000;
 const LEAVE_MS = 160;
 // "Not now" on a reach-out suggestion hides it for a week (PATCH snoozed_until).
 const SNOOZE_DAYS = 7;
+// The Ask pill above the tab bar: how tall the fade behind it is, the pill's own height,
+// and the gap between it and the record button rising out of the bar.
+const BAR_FADE = 28;
+const ASK_HEIGHT = 52;
+const ASK_GAP = RECORD_LIFT + 10;
 
 function inDays(n: number): Date {
   const d = new Date();
@@ -258,8 +264,6 @@ export function HomeScreen({
     <View style={ui.screen}>
       <View style={[styles.topBar, ui.pad]}>
         <Avatar name={name} size={44} onPress={onSettings} />
-        <AskBar onPress={onAsk} />
-        <IconCircle name="add" size={44} onPress={() => void add()} accessibilityLabel="Write a note or add a photo" />
       </View>
       <Wordmark live={anyActive || waiting} glow={!!moment} playful style={[ui.pad, styles.wordmark]} />
       <Text style={[ui.meta, ui.pad, styles.greeting]}>{greeting(name)}</Text>
@@ -310,7 +314,7 @@ export function HomeScreen({
         ItemSeparatorComponent={() => (
           <View style={[ui.hairline, { marginHorizontal: 20 }]} />
         )}
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: BAR_FADE + ASK_HEIGHT + ASK_GAP + 8 }}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           q ? null : (
@@ -369,6 +373,21 @@ export function HomeScreen({
           ) : null
         }
       />
+      {/* Ask and + ride above the tab bar, by the thumb, clear of the record button that
+          rises out of the bar (ADR 0072). The fade lets the list run under them. */}
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.bottomWrap,
+          {
+            experimental_backgroundImage: `linear-gradient(to bottom, ${colors.bg}00 0px, ${colors.bg} ${BAR_FADE}px, ${colors.bg} 100%)`,
+          },
+        ]}
+      >
+        <View style={styles.bottom}>
+          <AskBar onPress={onAsk} onAdd={() => void add()} />
+        </View>
+      </View>
     </View>
   );
 }
@@ -567,6 +586,8 @@ const useStyles = makeStyles((colors) => ({
     gap: 10,
     paddingTop: 4,
   },
+  bottomWrap: { position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: BAR_FADE },
+  bottom: { paddingHorizontal: 20, paddingBottom: ASK_GAP },
   search: {
     flexDirection: "row",
     alignItems: "center",
