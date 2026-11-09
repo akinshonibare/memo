@@ -210,17 +210,31 @@ export function SheetAction({
 }
 
 // The "Ask anything" bar that sits at the bottom of the home and detail screens.
-export function AskBar({ onPress }: { onPress: () => void }) {
+// The Ask pill. With `onAdd`, a + sits in its right end (ADR 0072): the two controls
+// that aren't record share one row above the tab bar, so neither needs a seat of its own.
+export function AskBar({ onPress, onAdd }: { onPress: () => void; onAdd?: () => void }) {
   const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <PressableScale
       onPress={onPress}
       scaleTo={0.98}
       accessibilityRole="button"
-      style={styles.askBar}
+      style={[styles.askBar, !!onAdd && styles.askBarWithAdd]}
       pressedStyle={styles.pressed}
     >
-      <Text style={styles.askText}>Ask anything</Text>
+      <Text style={[styles.askText, { flex: 1 }]}>Ask anything</Text>
+      {onAdd && (
+        <PressableScale
+          onPress={onAdd}
+          hitSlop={12}
+          scaleTo={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Write a note or add a photo"
+        >
+          <Ionicons name="add" size={28} color={colors.text} />
+        </PressableScale>
+      )}
     </PressableScale>
   );
 }
@@ -330,6 +344,7 @@ const useStyles = makeStyles((colors) => ({
     paddingHorizontal: 20,
     justifyContent: "center",
   },
+  askBarWithAdd: { flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingRight: 14 },
   askText: { color: colors.muted, fontSize: 16 },
   handleWrap: { alignItems: "center", paddingTop: 8 },
   sheetHeader: { flexDirection: "row", alignItems: "center", marginTop: 8 },

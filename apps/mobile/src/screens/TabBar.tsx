@@ -22,8 +22,9 @@ const TABS: Record<string, { icon: IconName; label: string; places: PlaceKey[] }
 };
 
 export const RECORD_SIZE = 64;
-// How far the record button rises above the bar's top edge.
-const RECORD_LIFT = 14;
+// How far the record button rises above the bar's top edge, into the screen above it.
+// Home keeps its Ask pill clear of it.
+export const RECORD_LIFT = 14;
 const BAR_HEIGHT = 56;
 
 export function TabBar({ state, navigation, onRecord }: BottomTabBarProps & { onRecord: () => void }) {
