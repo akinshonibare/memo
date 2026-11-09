@@ -1,6 +1,6 @@
 # 0052 — memo's own dialogs, and one Places circle instead of a row of header icons
 
-**Status:** active
+**Status:** active for the dialogs and the marks; the Places circle is superseded by 0072
 **Date:** 2026-09-29
 
 ## Problem

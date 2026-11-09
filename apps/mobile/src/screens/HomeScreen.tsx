@@ -11,12 +11,9 @@ import {
 } from "react-native";
 import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { FadeOut, interpolate, type SharedValue, useAnimatedStyle } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Api, type Capture } from "../api";
 import { AskBar, Avatar, IconCircle, confirmDelete } from "../components";
 import { choose } from "../dialogs";
-import { useNews } from "../news";
-import { Places, PLACES_SIZE } from "./Places";
 import { ACTIVE_STATUSES, formatClock, formatStamp, headline, statusLabel, toIsoDate } from "../format";
 import { celebrate, InkText, PressableScale, rowEnter, Wordmark } from "../motion";
 import { greeting, type Moment, momentText, particleForSearch } from "../delight";
@@ -33,9 +30,6 @@ import { useOutbox } from "../outbox";
 const POLL_MS = 3000;
 // How long a deleted row takes to fade before it leaves the list.
 const LEAVE_MS = 160;
-// How tall the fade above the bottom controls is.
-const BAR_FADE = 28;
-const RECORD_SIZE = 64;
 // "Not now" on a reach-out suggestion hides it for a week (PATCH snoozed_until).
 const SNOOZE_DAYS = 7;
 
@@ -64,43 +58,33 @@ function nextList(prev: ListState, items: Capture[]): ListState {
   return { items, fresh, inked, loaded: true };
 }
 
+// Home is your notes and the ways to add one: Ask and write up here, record on the
+// tab bar below. The other screens are tabs now (ADR 0072), so nothing here leads to
+// them except what Today surfaces (a habit).
 export function HomeScreen({
   api,
   refreshKey,
   onOpen,
-  onPlanner,
-  onReview,
   onAsk,
-  onRecord,
   onCompose,
   onSettings,
   name,
-  onPeople,
   onOpenPerson,
   onChanged,
   moment,
   onMomentSeen,
-  onFaith,
   onHabits,
-  onLists,
   onOpenHabit,
 }: {
   api: Api;
   refreshKey: number;
   onOpen: (id: string) => void;
-  // Faith (ADR 0042): its door on Home, only while it's turned on in Settings.
-  onFaith?: () => void;
-  // Habits (ADR 0043): the same, while Habits is on.
+  // Habits (ADR 0043): Today's habit strip leads to them.
   onHabits: () => void;
-  onLists: () => void;
   onOpenHabit?: (habitId: string) => void;
-  onPlanner: () => void;
-  onReview: () => void;
-  onPeople: () => void;
   onOpenPerson: (id: string) => void;
   onChanged: () => void;
   onAsk: () => void;
-  onRecord: () => void;
   onCompose: (photo?: string) => void; // with a photo already picked, to write beside it
   onSettings: () => void;
   name: string | null;
@@ -110,7 +94,6 @@ export function HomeScreen({
   const ui = useUi();
   const styles = useStyles();
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
   const focused = useIsFocused();
   const [list, setList] = useState<ListState>(EMPTY);
   const [query, setQuery] = useState("");
@@ -124,7 +107,6 @@ export function HomeScreen({
   const [deleted, setDeleted] = useState<ReadonlySet<string>>(new Set());
   const captures = list.items.filter((c) => !deleted.has(c.id));
   const { view: morning, reload: reloadMorning } = useMorning(api, refreshKey);
-  const fresh = useNews(api, refreshKey);
   // At the daily AI limit (ADR 0063): notes still save; say why they wait.
   const [atLimit, setAtLimit] = useState(false);
   useEffect(() => {
@@ -276,6 +258,8 @@ export function HomeScreen({
     <View style={ui.screen}>
       <View style={[styles.topBar, ui.pad]}>
         <Avatar name={name} size={44} onPress={onSettings} />
+        <AskBar onPress={onAsk} />
+        <IconCircle name="add" size={44} onPress={() => void add()} accessibilityLabel="Write a note or add a photo" />
       </View>
       <Wordmark live={anyActive || waiting} glow={!!moment} playful style={[ui.pad, styles.wordmark]} />
       <Text style={[ui.meta, ui.pad, styles.greeting]}>{greeting(name)}</Text>
@@ -326,7 +310,7 @@ export function HomeScreen({
         ItemSeparatorComponent={() => (
           <View style={[ui.hairline, { marginHorizontal: 20 }]} />
         )}
-        contentContainerStyle={{ paddingBottom: 140 + PLACES_SIZE + 12 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: 32 }}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           q ? null : (
@@ -384,47 +368,6 @@ export function HomeScreen({
             </Text>
           ) : null
         }
-      />
-      {/* The controls sit on the page rather than over the notes: the list fades out
-          above them, and nothing shows between the buttons. The fade lets touches
-          through to the list; the buttons' row does not. */}
-      <View
-        pointerEvents="box-none"
-        style={[
-          styles.bottomWrap,
-          {
-            experimental_backgroundImage: `linear-gradient(to bottom, ${colors.bg}00 0px, ${colors.bg} ${BAR_FADE}px, ${colors.bg} 100%)`,
-          },
-        ]}
-      >
-        <View style={[styles.bottom, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-        <AskBar onPress={onAsk} />
-        <IconCircle name="add" size={56} onPress={() => void add()} accessibilityLabel="Write a note or add a photo" />
-        <PressableScale
-          onPress={() => {
-            haptic.press();
-            onRecord();
-          }}
-          scaleTo={0.9}
-          style={styles.record}
-          accessibilityRole="button"
-          accessibilityLabel="Record a voice note"
-        />
-        </View>
-      </View>
-      <Places
-        right={20 + (RECORD_SIZE - PLACES_SIZE) / 2}
-        bottom={Math.max(insets.bottom, 16) + 6 + RECORD_SIZE + 12}
-        places={[
-          { key: "planner", icon: "calendar-outline", label: "Planner", onPress: onPlanner, fresh: fresh.has("planner") },
-          { key: "review", icon: "reader-outline", label: "Review", onPress: onReview, fresh: fresh.has("review") },
-          { key: "people", icon: "people-outline", label: "People", onPress: onPeople, fresh: fresh.has("people") },
-          { key: "habits", icon: "leaf-outline", label: "Habits", onPress: onHabits, fresh: fresh.has("habits") },
-          { key: "lists", icon: "list-outline", label: "Lists", onPress: onLists },
-          ...(onFaith
-            ? [{ key: "faith", icon: "book-outline" as const, label: "Within", onPress: onFaith, fresh: fresh.has("faith") }]
-            : []),
-        ]}
       />
     </View>
   );
@@ -665,20 +608,4 @@ const useStyles = makeStyles((colors) => ({
   },
   actionInner: { alignItems: "center", gap: 4 },
   actionText: { color: colors.danger, fontSize: 13, fontWeight: "600" },
-  bottomWrap: { position: "absolute", left: 0, right: 0, bottom: 0, paddingTop: BAR_FADE },
-  bottom: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    paddingHorizontal: 20,
-    paddingTop: 6,
-  },
-  record: {
-    width: RECORD_SIZE,
-    height: RECORD_SIZE,
-    borderRadius: RECORD_SIZE / 2,
-    backgroundColor: colors.record,
-    borderWidth: 6,
-    borderColor: colors.recordRing,
-  },
 }));
