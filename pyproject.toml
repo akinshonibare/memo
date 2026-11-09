@@ -3,7 +3,7 @@ name = "memo"
 version = "0.1.0"
 description = "memo — capture everything, extract structure, ask questions"
 authors = [
-    { name = "akinshonibare", email = "akinkunmishonibare@gmail.com" }
+    { name = "akinshonibare" }
 ]
 requires-python = ">=3.12,<3.13"
 dependencies = [
