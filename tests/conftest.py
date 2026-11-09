@@ -24,6 +24,7 @@ from tests.fakes import (
 	FakeAnswerProvider,
 	FakeEmbedder,
 	FakeIdentityVerifier,
+	FakeObjectStore,
 	FakeQueue,
 	FakeRedis,
 	FakeRewriteProvider,
@@ -35,23 +36,30 @@ TEST_DB = "memo_test"
 
 # Set by the root conftest.py when nothing is configured.
 WITHOUT_SERVICES = os.environ.get("MEMO_TESTS_WITHOUT_SERVICES") == "1"
+# Set by the root conftest.py when only Postgres is configured: the app starts on fakes
+# for Redis and the object store, and the tests that need the real ones are skipped.
+DATABASE_ONLY = os.environ.get("MEMO_TESTS_DATABASE_ONLY") == "1"
 # Every fixture that reaches a service depends on one of these.
 SERVICE_FIXTURES = frozenset({"app", "admin_engine"})
 
 
 def pytest_configure(config: pytest.Config) -> None:
 	config.addinivalue_line(
-		"markers", "services: needs Postgres, Redis or the object store"
+		"markers", "services: needs the real Redis or object store, not only Postgres"
 	)
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-	if not WITHOUT_SERVICES:
+	if WITHOUT_SERVICES:
+		reason = "needs Postgres, Redis and the object store"
+	elif DATABASE_ONLY:
+		reason = "needs the real Redis or object store"
+	else:
 		return
-	skip = pytest.mark.skip(reason="needs Postgres, Redis and the object store")
+	skip = pytest.mark.skip(reason=reason)
 	for item in items:
 		uses_service = SERVICE_FIXTURES.intersection(getattr(item, "fixturenames", []))
-		if uses_service or item.get_closest_marker("services"):
+		if item.get_closest_marker("services") or (WITHOUT_SERVICES and uses_service):
 			item.add_marker(skip)
 
 
@@ -200,11 +208,31 @@ async def clean_tables(settings: Settings) -> None:
 	await engine.dispose()
 
 
+async def _fake_queue(settings: Settings) -> FakeQueue:
+	return FakeQueue()
+
+
+class _FakeStoreFactory:
+	"""Stands in for S3ObjectStore at startup when only Postgres is configured."""
+
+	@staticmethod
+	def from_settings(settings: Settings) -> FakeObjectStore:
+		return FakeObjectStore()
+
+
 @pytest.fixture
-async def app(settings: Settings) -> AsyncIterator[FastAPI]:
+async def app(
+	settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> AsyncIterator[FastAPI]:
+	if DATABASE_ONLY:
+		# Startup would otherwise connect to Redis (the queue's pool) and to the
+		# object store (the bucket check).
+		monkeypatch.setattr("memo.main.make_queue", _fake_queue)
+		monkeypatch.setattr("memo.main.S3ObjectStore", _FakeStoreFactory)
 	application = create_app(settings)
 	async with LifespanManager(application):
-		# Jobs are recorded, not sent to Redis; the object store stays real (RustFS).
+		# Jobs are recorded, not sent to Redis; the object store stays real (RustFS)
+		# unless only Postgres is configured.
 		# Model calls are scripted: no network in tests.
 		application.state.queue = FakeQueue()
 		# Real Redis would carry rate-limit counters across tests within a minute;

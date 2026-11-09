@@ -384,6 +384,9 @@ class FakeObjectStore:
 		for key in keys:
 			await self.delete(key)
 
+	async def ensure_bucket(self) -> None:
+		"""Nothing to create: the dict is the bucket."""
+
 
 class FakeDescriber:
 	version = "describe-v1.1/fake"
@@ -482,6 +485,9 @@ class FakeQueue:
 		request_id: str | None,
 	) -> None:
 		self.embeds.append((derivation_id, user_id, fingerprint))
+
+	async def aclose(self) -> None:
+		"""Nothing to close: there is no pool behind it."""
 
 
 class FakeIdentityVerifier:

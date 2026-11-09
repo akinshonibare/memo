@@ -12,6 +12,7 @@ from memo.schemas.recordings import RecordingCreate
 from tests.fakes import FakeQueue
 
 
+@pytest.mark.services
 async def test_upload_then_capture(client: AsyncClient, queue: FakeQueue) -> None:
 	created = await client.post(
 		"/v1/recordings", json={"mime": "audio/m4a", "bytes": 10, "duration_ms": 1200}

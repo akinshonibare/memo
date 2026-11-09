@@ -23,6 +23,7 @@ class BrokenRedis:
 MemoryRedis = FakeRedis
 
 
+@pytest.mark.services
 async def test_the_real_redis_client_counts_and_expires(app: FastAPI) -> None:
 	key = f"integration:{uuid.uuid4()}"
 	first = await check(

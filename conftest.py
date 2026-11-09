@@ -1,9 +1,15 @@
-"""Lets the tests that need no services run in a checkout with nothing configured.
+"""Lets the tests run with whichever services this checkout has.
 
 Importing the app builds its settings, so with no .env the suite could not even be
-collected. When every required setting is absent, and this is not CI (which must
-always run everything), fill them with placeholders nothing listens on and tell
-tests/conftest.py to skip the tests that need Postgres, Redis or the object store.
+collected. Outside CI, which must always run everything:
+
+- Nothing configured: every required setting gets a placeholder nothing listens on,
+  and tests/conftest.py skips the tests that need Postgres, Redis or the object store.
+- Only Postgres configured (DATABASE_URL, DATABASE_ADMIN_URL and APP_DB_PASSWORD): the
+  object store's settings get placeholders, the app starts on fakes for Redis and the
+  store, and only the tests that need the real ones are skipped.
+
+Any other partial configuration fails loudly, as it always has.
 """
 
 import os
@@ -21,18 +27,24 @@ PLACEHOLDERS = {
 	"S3_ACCESS_KEY_ID": "unset",
 	"S3_SECRET_ACCESS_KEY": "unset",
 }
+STORE = {"S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"}
 
 
-def _nothing_configured() -> bool:
+def _missing_settings() -> set[str]:
+	"""The required settings this environment leaves unset, as variable names."""
 	try:
 		Settings()
 	except ValidationError as exc:
-		missing = {error["loc"][0] for error in exc.errors()}
-		required = {n for n, f in Settings.model_fields.items() if f.is_required()}
-		return missing == required
-	return False
+		return {str(error["loc"][0]).upper() for error in exc.errors()}
+	return set()
 
 
-if not os.environ.get("CI") and _nothing_configured():
-	os.environ.update(PLACEHOLDERS)
-	os.environ["MEMO_TESTS_WITHOUT_SERVICES"] = "1"
+if not os.environ.get("CI"):
+	missing = _missing_settings()
+	required = {n.upper() for n, f in Settings.model_fields.items() if f.is_required()}
+	if missing == required:
+		os.environ.update(PLACEHOLDERS)
+		os.environ["MEMO_TESTS_WITHOUT_SERVICES"] = "1"
+	elif missing == STORE:
+		os.environ.update({name: PLACEHOLDERS[name] for name in STORE})
+		os.environ["MEMO_TESTS_DATABASE_ONLY"] = "1"
