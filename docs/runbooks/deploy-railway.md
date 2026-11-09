@@ -21,6 +21,36 @@ shell, so a bare `$PORT` is passed literally and uvicorn refuses it.
 Provisioned 2026-09-28: project `memo` (id `bfce4149-…`), environment `production`,
 services `Postgres`, `Redis`, bucket `recordings` (ams), `api`, `worker`.
 
+## Deploy on merge (ADR 0046)
+
+`api` and `worker` follow `main` through Railway's GitHub integration and deploy once
+every GitHub Actions workflow on the commit has passed (**Wait for CI**). Both run
+`alembic upgrade head` before starting; `alembic/env.py` takes an advisory lock, so the
+second waits and finds nothing to do. App changes reach the phone through
+`apps/mobile/.eas/workflows/deploy-on-merge.yml` (an OTA update when a build with the
+same fingerprint exists).
+
+| Setting | api | worker |
+| --- | --- | --- |
+| Source | `akinshonibare/memo`, branch `main` | same |
+| Wait for CI | on | on |
+| Pre-deploy | `alembic upgrade head` | `alembic upgrade head` |
+| Watch paths | `src/**`, `alembic/**`, `alembic.ini`, `pyproject.toml`, `uv.lock`, `Dockerfile` | same |
+
+One-time, needs Akin (each grants a GitHub app read access to the repo):
+
+1. Railway: the Railway GitHub app must have access to `akinshonibare/memo`
+   (github.com/settings/installations). Then Claude connects both services and sets the
+   rest; **Wait for CI** is a toggle in each service's Settings → Source.
+2. Expo: expo.dev → `@akiin/memo` → Project settings → GitHub → install the Expo GitHub
+   app, pick `akinshonibare/memo`, base directory `apps/mobile`.
+
+Every merge now ships, so **migrations must be backward-compatible** (expand, then
+contract): the old worker may run against the new schema for a minute, or the reverse.
+
+`railway up` still works for an out-of-band deploy (a hotfix from a branch), but the
+next merge redeploys `main` over it.
+
 ## Managed resources
 
 - **Postgres**: Railway's `postgres-ssl:18` image ships pgvector and pgBackRest. Turn
