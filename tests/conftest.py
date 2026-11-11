@@ -1,6 +1,7 @@
 import asyncio
 import datetime as dt
 import os
+import tempfile
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any
@@ -39,6 +40,9 @@ WITHOUT_SERVICES = os.environ.get("MEMO_TESTS_WITHOUT_SERVICES") == "1"
 # Set by the root conftest.py when only Postgres is configured: the app starts on fakes
 # for Redis and the object store, and the tests that need the real ones are skipped.
 DATABASE_ONLY = os.environ.get("MEMO_TESTS_DATABASE_ONLY") == "1"
+# Set by the root conftest.py when nothing is configured and pgserver is installed:
+# the session starts its own Postgres, then runs as DATABASE_ONLY.
+EMBEDDED_POSTGRES = os.environ.get("MEMO_TESTS_EMBEDDED_POSTGRES") == "1"
 # Every fixture that reaches a service depends on one of these.
 SERVICE_FIXTURES = frozenset({"app", "admin_engine"})
 
@@ -69,8 +73,33 @@ def _with_database(url: str, database: str) -> str:
 
 
 @pytest.fixture(scope="session")
-def settings() -> Settings:
+def embedded_postgres() -> Iterator[str | None]:
+	"""The socket directory of a Postgres started for this session, or None when the
+	environment configures its own. pgserver bundles Postgres and pgvector, needs no
+	root, and listens only on a Unix socket; its data goes when the session ends."""
+	if not EMBEDDED_POSTGRES:
+		yield None
+		return
+	from pgserver.postgres_server import get_server
+
+	server = get_server(tempfile.mkdtemp(prefix="memo-pg-"), cleanup_mode="delete")
+	host = make_url(server.get_uri()).query["host"]
+	yield host if isinstance(host, str) else host[0]
+	server.cleanup()
+
+
+@pytest.fixture(scope="session")
+def settings(embedded_postgres: str | None) -> Settings:
 	base = Settings()
+	if embedded_postgres is not None:
+		socket = f"?host={embedded_postgres}"
+		password = base.app_db_password.get_secret_value()
+		base = base.model_copy(
+			update={
+				"database_url": f"postgresql+asyncpg://memo_app:{password}@/memo{socket}",
+				"database_admin_url": f"postgresql+asyncpg://postgres@/memo{socket}",
+			}
+		)
 	return base.model_copy(
 		update={
 			"app_env": "test",

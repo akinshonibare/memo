@@ -1,18 +1,21 @@
 """Lets the tests run with whichever services this checkout has.
 
 Importing the app builds its settings, so with no .env the suite could not even be
-collected. Outside CI, which must always run everything:
+collected. Outside CI, which must always run everything against real services:
 
-- Nothing configured: every required setting gets a placeholder nothing listens on,
-  and tests/conftest.py skips the tests that need Postgres, Redis or the object store.
+- Nothing configured: every required setting gets a placeholder. With the `pgserver`
+  dev dependency installed, tests/conftest.py starts an embedded Postgres (with
+  pgvector) for the session, and Redis and the object store are fakes: only the tests
+  that need the real Redis or object store are skipped. Without `pgserver`, every test
+  that needs a service is skipped.
 - Only Postgres configured (DATABASE_URL, DATABASE_ADMIN_URL and APP_DB_PASSWORD): the
-  object store's settings get placeholders, the app starts on fakes for Redis and the
-  store, and only the tests that need the real ones are skipped.
+  object store's settings get placeholders, and Redis and the store are fakes, as above.
 
 Any other partial configuration fails loudly, as it always has.
 """
 
 import os
+from importlib.util import find_spec
 
 from pydantic import ValidationError
 
@@ -44,7 +47,11 @@ if not os.environ.get("CI"):
 	required = {n.upper() for n, f in Settings.model_fields.items() if f.is_required()}
 	if missing == required:
 		os.environ.update(PLACEHOLDERS)
-		os.environ["MEMO_TESTS_WITHOUT_SERVICES"] = "1"
+		if find_spec("pgserver") is not None:
+			os.environ["MEMO_TESTS_EMBEDDED_POSTGRES"] = "1"
+			os.environ["MEMO_TESTS_DATABASE_ONLY"] = "1"
+		else:
+			os.environ["MEMO_TESTS_WITHOUT_SERVICES"] = "1"
 	elif missing == STORE:
 		os.environ.update({name: PLACEHOLDERS[name] for name in STORE})
 		os.environ["MEMO_TESTS_DATABASE_ONLY"] = "1"

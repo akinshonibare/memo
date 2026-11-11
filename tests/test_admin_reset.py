@@ -4,6 +4,7 @@ on from what it classifies."""
 
 import asyncio
 import io
+import os
 import threading
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -12,6 +13,7 @@ from urllib.parse import urlsplit
 
 import pytest
 from botocore.exceptions import ClientError
+from fakeredis import FakeAsyncRedis
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -37,8 +39,13 @@ OTHER_REDIS_KEYS = ("ratelimit:ask:someone:29000000", "memo:health-check")
 
 @pytest.fixture
 async def redis(settings: Settings) -> AsyncIterator[Redis]:
-	url = urlsplit(settings.redis_url)._replace(path=f"/{REDIS_TEST_DB}").geturl()
-	client = Redis.from_url(url)
+	client: Redis
+	if os.environ.get("MEMO_TESTS_DATABASE_ONLY") == "1":
+		# No Redis configured: the reset's own commands run against an in-memory one.
+		client = FakeAsyncRedis()
+	else:
+		url = urlsplit(settings.redis_url)._replace(path=f"/{REDIS_TEST_DB}").geturl()
+		client = Redis.from_url(url)
 	await client.flushdb()
 	yield client
 	await client.flushdb()
