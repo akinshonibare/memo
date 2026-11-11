@@ -83,6 +83,14 @@ def embedded_postgres() -> Iterator[str | None]:
 	from pgserver.postgres_server import get_server
 
 	server = get_server(tempfile.mkdtemp(prefix="memo-pg-"), cleanup_mode="delete")
+	# Its data is thrown away when the session ends, so a commit needn't wait for the
+	# disk. Each test commits several times, and on a slow disk that wait dominates.
+	server.psql(
+		"ALTER SYSTEM SET fsync = off;\n"
+		"ALTER SYSTEM SET synchronous_commit = off;\n"
+		"ALTER SYSTEM SET full_page_writes = off;\n"
+		"SELECT pg_reload_conf();\n"
+	)
 	host = make_url(server.get_uri()).query["host"]
 	yield host if isinstance(host, str) else host[0]
 	server.cleanup()
